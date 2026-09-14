@@ -1,0 +1,13 @@
+date: 2026-09-14T19:07:25Z
+pinned_sha: 6d7c49b2d03ca035704535a6ed5b5533ee1c8c19
+python3: Python 3.13.5
+git: git version 2.53.0
+uname: Darwin 25.6.0 arm64
+run_omitted_default:
+{
+  "count": "wrong"
+}
+run_explicit_string:
+exit_status: 1
+Variable validation failed:
+  - variable 'count': expected a number, got str

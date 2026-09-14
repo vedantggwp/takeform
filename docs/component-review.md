@@ -6,7 +6,7 @@ Reviewed 14 September 2026. This is a shortlist based on upstream documentation,
 
 A channel format defines the parts that remain fixed and the slots that vary. These include story beats, timing ranges, typography, recurring visuals, caption treatments, sound rules and export profiles. Each episode pins a format version and records its overrides. A format update must not silently rewrite an approved episode.
 
-HyperFrames already exposes typed composition variables and batch rendering. This is a useful rendering mechanism, but a channel format also needs script structure, shot requirements, context and revision rules.
+HyperFrames documents typed composition variables and batch rendering. This is a useful rendering mechanism, but a channel format also needs script structure, shot requirements, context and revision rules.
 
 ## HeyGen components
 
@@ -29,7 +29,7 @@ TransVLM's README explicitly separates its academic model from HeyGen's producti
 
 ## One verified issue in the Gemini example
 
-Read the complete [customize.py](https://github.com/heygen-com/hyperframes-gemini-agent/blob/main/workspace/scripts/customize.py). Its `build_variables` validates supplied values but copies omitted defaults without validation. A local synthetic probe returned `{'count': 'wrong'}` for a declared numeric slot with a string default. Supplying the same string explicitly was rejected.
+Read the complete [customize.py](https://github.com/heygen-com/hyperframes-gemini-agent/blob/main/workspace/scripts/customize.py). Its `build_variables` validates supplied values but copies omitted defaults without validation. A local synthetic probe returned `{'count': 'wrong'}` for a declared numeric slot with a string default. Supplying the same string explicitly was rejected. A captured run of [probes/hyperframes-customize-probe.sh](probes/hyperframes-customize-probe.sh) is in [probes/hyperframes-customize-probe.out.txt](probes/hyperframes-customize-probe.out.txt).
 
 This is a bounded finding in that example helper, not evidence of a defect in HyperFrames core. It means a reused validator must check the resolved values, including defaults. The helper also supports fewer variable types than the current HyperFrames documentation, which now lists font and image inputs.
 

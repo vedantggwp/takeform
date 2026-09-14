@@ -1,0 +1,1 @@
+The probe clones heygen-com/hyperframes-gemini-agent at 6d7c49b2d03ca035704535a6ed5b5533ee1c8c19 and runs workspace/scripts/customize.py against a synthetic composition. An omitted number default of "wrong" is copied into the resolved map. The same string supplied explicitly is rejected. From the repository root, run bash docs/probes/hyperframes-customize-probe.sh.

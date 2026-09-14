@@ -45,6 +45,46 @@
     {
       "repo": "mltframework/mlt",
       "sha": "4bd01257af8d770007cb3816b479312abf2d358d"
+    },
+    {
+      "repo": "heygen-com/heygen-stack",
+      "sha": "723efe953fcbf4f3b1974d3238b9d20030c5732f"
+    },
+    {
+      "repo": "heygen-com/hyperframes-launches",
+      "sha": "6259ea7aa45042fa6ebf941538cf7621cf6dad0f"
+    },
+    {
+      "repo": "heygen-com/hyperframes-vercel-template",
+      "sha": "e577e0a33ef4a9fde9bf6b51b8204392391d6871"
+    },
+    {
+      "repo": "heygen-com/hyperframes-cloudflare-template",
+      "sha": "310f06d47a783d3a73e54d0c6978ad8082ebdccc"
+    },
+    {
+      "repo": "heygen-com/hyperframes-modal-template",
+      "sha": "88bb269e19e7ac9acbf55941ac8c18e214a8de58"
+    },
+    {
+      "repo": "heygen-com/liveavatar-web-sdk",
+      "sha": "1e64e060c4e35b3274a7ccafc97e66053f506897"
+    },
+    {
+      "repo": "heygen-com/liveavatar-gpt-live-demos",
+      "sha": "daa8cc92ab34c75c0bbed201c94fb98360da2179"
+    },
+    {
+      "repo": "heygen-com/TAVR",
+      "sha": "42b9935ac502d1d5fb9be220fd1f9c0ff5ee2a9f"
+    },
+    {
+      "repo": "remotion-dev/remotion",
+      "sha": "9ca46edd6417b56cb10ae552f7a17027651d764c"
+    },
+    {
+      "repo": "OpenCut-app/opencut-classic",
+      "sha": "cf5e79e919144200294fb9fed22a222592a0aeea"
     }
   ]
 }
