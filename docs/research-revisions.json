@@ -1,6 +1,6 @@
 {
   "observed_date": "2026-09-14",
-  "note": "Upstream heads recorded for follow-up reproduction. Review depth varies as documented in component-review.md; this is not a dependency lockfile.",
+  "note": "Pins support the documented source review and follow-up reproduction. Review depth varies as documented in component-review.md; this is not a dependency lockfile.",
   "repositories": [
     {
       "repo": "heygen-com/hyperframes",
