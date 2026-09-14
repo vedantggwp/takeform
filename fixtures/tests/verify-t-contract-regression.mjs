@@ -191,6 +191,75 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
 {
   const dir = prepare();
   const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.alignment.acousticEvidence[0].ctcTokens[0].symbol = "Z";
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "retained CTC token does not match the pinned label dictionary");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.alignment.acousticEvidence[0].ctcTokens[0].token = 999;
+  words.words[0].tokens[0] = 999;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "retained CTC token does not match the pinned label dictionary");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  const evidence = words.alignment.acousticEvidence[0];
+  [evidence.ctcTokens[0], evidence.ctcTokens[1]] = [evidence.ctcTokens[1], evidence.ctcTokens[0]];
+  [words.words[0].tokens[0], words.words[0].tokens[1]] = [words.words[0].tokens[1], words.words[0].tokens[0]];
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "retained CTC rows are not chronological and non-overlapping");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.alignment.acousticEvidence[0].normalizedTranscript = "BOGUS";
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "normalized transcript differs from its utterance origin");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  const word = words.words[39];
+  const evidence = words.alignment.acousticEvidence.find((row) => row.utteranceId === word.utteranceId);
+  const utterance = JSON.parse(readFileSync(join(dir, "audio-take1.json"), "utf8")).utterances.find((row) => row.id === word.utteranceId);
+  word.ctcEmissionStart -= 1;
+  word.sourceStartSeconds = utterance.startFrame / words.sampleRate + word.ctcEmissionStart * evidence.secondsPerEmissionFrame;
+  word.rawStartSeconds = word.sourceStartSeconds;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word emission endpoints do not match its normalized token rows");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  const word = words.words[0];
+  const evidence = words.alignment.acousticEvidence[0];
+  const utterance = JSON.parse(readFileSync(join(dir, "audio-take1.json"), "utf8")).utterances[0];
+  word.ctcEmissionEnd += 1;
+  word.sourceEndSeconds = utterance.startFrame / words.sampleRate + word.ctcEmissionEnd * evidence.secondsPerEmissionFrame;
+  word.rawEndSeconds = word.sourceEndSeconds;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word emission endpoints do not match its normalized token rows");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.words[0].characterRange = structuredClone(words.words[4].characterRange);
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word character range does not select its original lexeme");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
   words.words[0].probability = -1;
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
   expectFail(dir, "word probability does not match retained CTC rows");
