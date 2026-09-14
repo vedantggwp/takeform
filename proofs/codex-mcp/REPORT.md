@@ -8,6 +8,10 @@ The event-repaired no-model preflight passed on Codex CLI 0.154.0. The app-serve
 
 The one permitted Terra turn completed in about 16 seconds. The repaired client observed and answered two `mcpServer/elicitation/request` events. Its conservative policy declined both, so no Takeform tool call reached the server and no proposal was created. The requested real model proposal round trip therefore remains failed. No second model turn ran.
 
+After independent review of the narrowed matcher, one separately authorized Terra acceptance attempt completed in about 14 seconds. It again produced two MCP elicitation requests and no Takeform tool events. Both requests failed the reviewed matcher and were declined. The receipt captured 27,034 total tokens, including 27,027 input tokens, 25,344 cached input tokens, and 7 output tokens. No retry ran.
+
+The acceptance receipt did not retain per-predicate rejection counters or allowlisted field-shape flags. It cannot distinguish a turn or thread correlation mismatch from an approval metadata or empty-schema mismatch. That exact boundary remains unresolved. The matcher was not relaxed after the run.
+
 The raw event-run receipt is retained unchanged. Its `processCategory: configuration` value is a classifier false positive: the same receipt shows successful initialization, `turn/completed`, and process exit code 0. The classifier now attaches a process category only to early process exits. The run also received token-usage notifications but the old failure path did not copy the final value into the receipt; that path is repaired, but the missing value cannot be reconstructed without another model run.
 
 The earlier blind run remains recorded in receipts/real-turn.json. It consumed 23,944 input tokens and exposed no Takeform tools. The earlier 90-second timeout remains recorded unchanged in receipts/real-turn-timeout.json. The new event trace does not prove that unanswered server requests caused that earlier timeout.
@@ -30,10 +34,11 @@ scripts/run-probe.mjs uses invocation-local `-c` overrides. Seven current config
 - Node 22.22.1 ran scripts/required-server-check.mjs without a model turn. The check passed.
 - Node 22.22.1 ran scripts/run-probe.mjs with invocation-only disable flags. The paginated no-model catalog and revision 1 preflight passed.
 - The same driver ran one low-effort Terra turn. It returned `turn/completed`, observed two MCP elicitations, declined both, and recorded no model tool event.
+- The reviewed driver ran one separately authorized Terra acceptance attempt. It returned `turn/completed`, observed two declined MCP elicitations, recorded no model tool event, and captured exact token usage. No retry ran.
 
 ## Boundaries
 
-The local tests prove the toy store mechanics and the client's request routing. The no-model receipt proves Codex app-server tool discovery and a live revision 1 read with explicit invocation configuration. The real receipt proves that this turn reached the MCP approval boundary. It does not prove the proposal-to-acceptance round trip, the new positive approval policy against a live turn, native Takeform authority, production persistence, creator UX, provider flexibility, or ChatGPT web connectivity.
+The local tests prove the toy store mechanics and the client's request routing. The no-model receipt proves Codex app-server tool discovery and a live revision 1 read with explicit invocation configuration. The real-turn receipts prove that both completed turns reached the MCP approval boundary. They do not prove the proposal-to-acceptance round trip, the positive approval policy against a live turn, native Takeform authority, production persistence, creator UX, provider flexibility, or ChatGPT web connectivity.
 
 One read-only diagnostic command unexpectedly printed an existing MCP environment credential while transport types were being investigated. The value was not copied into source, receipts, or reports. No further config dump or credential-bearing diagnostic ran.
 
