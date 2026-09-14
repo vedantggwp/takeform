@@ -45,7 +45,7 @@ Speech is written to AIFF first, then transcoded. `say -o` with `.m4a` is not us
 6. Confirms the talking-head word receipt names `AVSpeechSynthesizer` and is not human ground truth.
 7. Runs `hygiene-check.sh`.
 
-Run generate twice when you need the hash stability finding. Compare `hashes.json`. If container bytes differ, hash decoded frames with `ffmpeg -f framemd5` and audio samples, then set `hashKind` to `decoded-av` in `hashes.json`. Same machine, same pins is the only identity claim. Cross-machine byte identity is not promised.
+Run generate twice when you need the hash stability finding. Compare `hashes.json`. On this machine two consecutive runs matched container sha256 for every T and L file and for 14 of 16 M files. The two Live Photo MOV wrappers differed. Isolated ContentIdWriter copies of one encode matched. The MOV difference is the x264 encode of those clips. For those two files, compare decoded video with `ffmpeg -map 0:v -f md5`. Talking-head word-boundary receipts can jitter by tens of milliseconds across runs even when the AIFF bytes match. Same machine, same pins is the only identity claim. Cross-machine byte identity is not promised.
 
 ## How to read a manifest
 

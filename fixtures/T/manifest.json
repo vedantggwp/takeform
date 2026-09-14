@@ -939,7 +939,7 @@
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1277,
+            "ticks": 1289,
             "timescale": 1000
           }
         },
@@ -949,7 +949,7 @@
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1277,
+            "ticks": 1289,
             "timescale": 1000
           }
         },
@@ -985,21 +985,21 @@
         "text": "same sentence both takes share.",
         "sourceRange": {
           "start": {
-            "ticks": 36292,
+            "ticks": 36280,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 2020,
+            "ticks": 2032,
             "timescale": 1000
           }
         },
         "outputRange": {
           "start": {
-            "ticks": 60195,
+            "ticks": 60187,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1347,
+            "ticks": 1354,
             "timescale": 1000
           }
         },
@@ -1010,21 +1010,21 @@
         "text": "Chapter labels come from the author, not from every segment.",
         "sourceRange": {
           "start": {
-            "ticks": 21858,
+            "ticks": 21869,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 3564,
+            "ticks": 3553,
             "timescale": 1000
           }
         },
         "outputRange": {
           "start": {
-            "ticks": 23858,
+            "ticks": 23869,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 3564,
+            "ticks": 3553,
             "timescale": 1000
           }
         },

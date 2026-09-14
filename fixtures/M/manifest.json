@@ -289,7 +289,7 @@
     {
       "id": "lpMatchedVideo",
       "path": "media/lp-matched.mov",
-      "sha256": "1b00405d0ee15dbc1dc782b22a1616e9b35531bb889d4053e324e7b74e79e195",
+      "sha256": "dafdfa0f7ed20c9c54280b57bc8b252279dc631152b643bf9ff560ca4694e73f",
       "container": "mov",
       "codecs": [
         "h264"
@@ -338,7 +338,7 @@
     {
       "id": "lpMismatchVideo",
       "path": "media/lp-mismatch.mov",
-      "sha256": "c6e1515995a6e64b962cfa0120a22bd0b8406cef282732d8048228372f2ffee2",
+      "sha256": "b9727e08c120b61884e6e15fb6f512325dabbdc3e2d65162576342c5bc9a74f9",
       "container": "mov",
       "codecs": [
         "h264"

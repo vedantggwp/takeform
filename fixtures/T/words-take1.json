@@ -11,7 +11,7 @@
         "location" : 0
       },
       "index" : 0,
-      "sourceEndSeconds" : 0.30965986394557821,
+      "sourceEndSeconds" : 0.28643990929705215,
       "sourceStartSeconds" : 0.0078004535147392293,
       "text" : "Hold"
     },
@@ -22,7 +22,7 @@
       },
       "index" : 1,
       "sourceEndSeconds" : 0.37931972789115648,
-      "sourceStartSeconds" : 0.30965986394557821,
+      "sourceStartSeconds" : 0.28643990929705215,
       "text" : "the"
     },
     {
@@ -41,7 +41,7 @@
         "location" : 14
       },
       "index" : 3,
-      "sourceEndSeconds" : 1.2848979591836736,
+      "sourceEndSeconds" : 1.2965079365079366,
       "sourceStartSeconds" : 0.69278911564625856,
       "text" : "thought."
     },
@@ -52,7 +52,7 @@
       },
       "index" : 4,
       "sourceEndSeconds" : 1.5867573696145125,
-      "sourceStartSeconds" : 1.2848979591836736,
+      "sourceStartSeconds" : 1.2965079365079366,
       "text" : "Hold"
     },
     {
@@ -111,7 +111,7 @@
         "location" : 57
       },
       "index" : 10,
-      "sourceEndSeconds" : 3.4095238095238094,
+      "sourceEndSeconds" : 3.3979138321995466,
       "sourceStartSeconds" : 3.1192743764172337,
       "text" : "take"
     },
@@ -122,7 +122,7 @@
       },
       "index" : 11,
       "sourceEndSeconds" : 3.7346031746031745,
-      "sourceStartSeconds" : 3.4095238095238094,
+      "sourceStartSeconds" : 3.3979138321995466,
       "text" : "keeps"
     },
     {
@@ -171,7 +171,7 @@
         "location" : 89
       },
       "index" : 16,
-      "sourceEndSeconds" : 4.9420408163265304,
+      "sourceEndSeconds" : 4.930430839002268,
       "sourceStartSeconds" : 4.5821315192743768,
       "text" : "drops"
     },
@@ -181,8 +181,8 @@
         "location" : 95
       },
       "index" : 17,
-      "sourceEndSeconds" : 5.0697505668934237,
-      "sourceStartSeconds" : 4.9420408163265304,
+      "sourceEndSeconds" : 5.081360544217687,
+      "sourceStartSeconds" : 4.930430839002268,
       "text" : "the"
     },
     {
@@ -192,7 +192,7 @@
       },
       "index" : 18,
       "sourceEndSeconds" : 5.8243990929705216,
-      "sourceStartSeconds" : 5.0697505668934237,
+      "sourceStartSeconds" : 5.081360544217687,
       "text" : "repeat."
     },
     {
@@ -201,7 +201,7 @@
         "location" : 107
       },
       "index" : 19,
-      "sourceEndSeconds" : 6.1959183673469385,
+      "sourceEndSeconds" : 6.2075283446712017,
       "sourceStartSeconds" : 5.8243990929705216,
       "text" : "After"
     },
@@ -211,8 +211,8 @@
         "location" : 113
       },
       "index" : 20,
-      "sourceEndSeconds" : 6.4048979591836739,
-      "sourceStartSeconds" : 6.1959183673469385,
+      "sourceEndSeconds" : 6.4165079365079363,
+      "sourceStartSeconds" : 6.2075283446712017,
       "text" : "this"
     },
     {
@@ -221,8 +221,8 @@
         "location" : 118
       },
       "index" : 21,
-      "sourceEndSeconds" : 6.8809070294784584,
-      "sourceStartSeconds" : 6.4048979591836739,
+      "sourceEndSeconds" : 6.8576870748299319,
+      "sourceStartSeconds" : 6.4165079365079363,
       "text" : "sentence"
     },
     {
@@ -232,7 +232,7 @@
       },
       "index" : 22,
       "sourceEndSeconds" : 7.0318367346938775,
-      "sourceStartSeconds" : 6.8809070294784584,
+      "sourceStartSeconds" : 6.8576870748299319,
       "text" : "there"
     },
     {
@@ -251,7 +251,7 @@
         "location" : 136
       },
       "index" : 24,
-      "sourceEndSeconds" : 7.2292063492063496,
+      "sourceEndSeconds" : 7.2524263038548753,
       "sourceStartSeconds" : 7.1711564625850341,
       "text" : "a"
     },
@@ -262,7 +262,7 @@
       },
       "index" : 25,
       "sourceEndSeconds" : 7.4846258503401364,
-      "sourceStartSeconds" : 7.2292063492063496,
+      "sourceStartSeconds" : 7.2524263038548753,
       "text" : "two"
     },
     {
@@ -351,7 +351,7 @@
         "location" : 33
       },
       "index" : 34,
-      "sourceEndSeconds" : 14.55795918367347,
+      "sourceEndSeconds" : 14.569569160997732,
       "sourceStartSeconds" : 14.499909297052154,
       "text" : "a"
     },
@@ -361,8 +361,8 @@
         "location" : 35
       },
       "index" : 35,
-      "sourceEndSeconds" : 15.359047619047619,
-      "sourceStartSeconds" : 14.55795918367347,
+      "sourceEndSeconds" : 15.370657596371881,
+      "sourceStartSeconds" : 14.569569160997732,
       "text" : "notebook,"
     },
     {
@@ -372,7 +372,7 @@
       },
       "index" : 36,
       "sourceEndSeconds" : 15.498367346938776,
-      "sourceStartSeconds" : 15.359047619047619,
+      "sourceStartSeconds" : 15.370657596371881,
       "text" : "and"
     },
     {
@@ -411,7 +411,7 @@
         "location" : 60
       },
       "index" : 40,
-      "sourceEndSeconds" : 16.949614512471655,
+      "sourceEndSeconds" : 16.938004535147392,
       "sourceStartSeconds" : 16.369115646258503,
       "text" : "operator"
     },
@@ -422,7 +422,7 @@
       },
       "index" : 41,
       "sourceEndSeconds" : 17.286303854875282,
-      "sourceStartSeconds" : 16.949614512471655,
+      "sourceStartSeconds" : 16.938004535147392,
       "text" : "names"
     },
     {
@@ -461,7 +461,7 @@
         "location" : 90
       },
       "index" : 45,
-      "sourceEndSeconds" : 18.482131519274375,
+      "sourceEndSeconds" : 18.493741496598638,
       "sourceStartSeconds" : 18.389251700680273,
       "text" : "the"
     },
@@ -471,8 +471,8 @@
         "location" : 94
       },
       "index" : 46,
-      "sourceEndSeconds" : 19.201950113378686,
-      "sourceStartSeconds" : 18.482131519274375,
+      "sourceEndSeconds" : 19.19034013605442,
+      "sourceStartSeconds" : 18.493741496598638,
       "text" : "pause,"
     },
     {
@@ -482,7 +482,7 @@
       },
       "index" : 47,
       "sourceEndSeconds" : 19.318049886621314,
-      "sourceStartSeconds" : 19.201950113378686,
+      "sourceStartSeconds" : 19.19034013605442,
       "text" : "and"
     },
     {
@@ -551,7 +551,7 @@
         "location" : 145
       },
       "index" : 54,
-      "sourceEndSeconds" : 22.266984126984127,
+      "sourceEndSeconds" : 22.278594104308389,
       "sourceStartSeconds" : 21.860634920634922,
       "text" : "follow"
     },
@@ -562,7 +562,7 @@
       },
       "index" : 55,
       "sourceEndSeconds" : 22.383083900226758,
-      "sourceStartSeconds" : 22.266984126984127,
+      "sourceStartSeconds" : 22.278594104308389,
       "text" : "the"
     },
     {
@@ -581,7 +581,7 @@
         "location" : 165
       },
       "index" : 57,
-      "sourceEndSeconds" : 23.126122448979594,
+      "sourceEndSeconds" : 23.137732426303856,
       "sourceStartSeconds" : 22.812653061224491,
       "text" : "words"
     },
@@ -592,7 +592,7 @@
       },
       "index" : 58,
       "sourceEndSeconds" : 23.311882086167799,
-      "sourceStartSeconds" : 23.126122448979594,
+      "sourceStartSeconds" : 23.137732426303856,
       "text" : "through"
     },
     {
@@ -711,7 +711,7 @@
         "location" : 227
       },
       "index" : 70,
-      "sourceEndSeconds" : 25.982176870748301,
+      "sourceEndSeconds" : 25.970566893424035,
       "sourceStartSeconds" : 25.889297052154195,
       "text" : "the"
     },
@@ -722,7 +722,7 @@
       },
       "index" : 71,
       "sourceEndSeconds" : 26.284036281179137,
-      "sourceStartSeconds" : 25.982176870748301,
+      "sourceStartSeconds" : 25.970566893424035,
       "text" : "take"
     },
     {
@@ -741,7 +741,7 @@
         "location" : 241
       },
       "index" : 73,
-      "sourceEndSeconds" : 26.736825396825395,
+      "sourceEndSeconds" : 26.725215419501133,
       "sourceStartSeconds" : 26.446575963718821,
       "text" : "owns"
     },
@@ -752,7 +752,7 @@
       },
       "index" : 74,
       "sourceEndSeconds" : 27.131564625850341,
-      "sourceStartSeconds" : 26.736825396825395,
+      "sourceStartSeconds" : 26.725215419501133,
       "text" : "it."
     },
     {
@@ -791,7 +791,7 @@
         "location" : 270
       },
       "index" : 78,
-      "sourceEndSeconds" : 28.420272108843537,
+      "sourceEndSeconds" : 28.4318820861678,
       "sourceStartSeconds" : 28.234512471655329,
       "text" : "from"
     },
@@ -802,7 +802,7 @@
       },
       "index" : 79,
       "sourceEndSeconds" : 28.547981859410431,
-      "sourceStartSeconds" : 28.420272108843537,
+      "sourceStartSeconds" : 28.4318820861678,
       "text" : "the"
     },
     {
@@ -891,7 +891,7 @@
         "location" : 325
       },
       "index" : 88,
-      "sourceEndSeconds" : 31.798775510204081,
+      "sourceEndSeconds" : 31.787165532879818,
       "sourceStartSeconds" : 31.404036281179138,
       "text" : "stays"
     },
@@ -902,7 +902,7 @@
       },
       "index" : 89,
       "sourceEndSeconds" : 32.030975056689343,
-      "sourceStartSeconds" : 31.798775510204081,
+      "sourceStartSeconds" : 31.787165532879818,
       "text" : "under"
     },
     {
@@ -961,7 +961,7 @@
         "location" : 371
       },
       "index" : 95,
-      "sourceEndSeconds" : 34.213650793650793,
+      "sourceEndSeconds" : 34.20204081632653,
       "sourceStartSeconds" : 34.120770975056686,
       "text" : "the"
     },
@@ -972,7 +972,7 @@
       },
       "index" : 96,
       "sourceEndSeconds" : 34.678049886621316,
-      "sourceStartSeconds" : 34.213650793650793,
+      "sourceStartSeconds" : 34.20204081632653,
       "text" : "chapter"
     },
     {
@@ -1031,7 +1031,7 @@
         "location" : 408
       },
       "index" : 102,
-      "sourceEndSeconds" : 36.291836734693881,
+      "sourceEndSeconds" : 36.280226757369611,
       "sourceStartSeconds" : 36.198956916099775,
       "text" : "the"
     },
@@ -1041,8 +1041,8 @@
         "location" : 412
       },
       "index" : 103,
-      "sourceEndSeconds" : 36.616916099773242,
-      "sourceStartSeconds" : 36.291836734693881,
+      "sourceEndSeconds" : 36.60530612244898,
+      "sourceStartSeconds" : 36.280226757369611,
       "text" : "same"
     },
     {
@@ -1052,7 +1052,7 @@
       },
       "index" : 104,
       "sourceEndSeconds" : 37.104535147392291,
-      "sourceStartSeconds" : 36.616916099773242,
+      "sourceStartSeconds" : 36.60530612244898,
       "text" : "sentence"
     },
     {
@@ -1111,7 +1111,7 @@
         "location" : 457
       },
       "index" : 110,
-      "sourceEndSeconds" : 39.229160997732428,
+      "sourceEndSeconds" : 39.217551020408166,
       "sourceStartSeconds" : 38.892471655328798,
       "text" : "lists"
     },
@@ -1122,7 +1122,7 @@
       },
       "index" : 111,
       "sourceEndSeconds" : 39.310430839002265,
-      "sourceStartSeconds" : 39.229160997732428,
+      "sourceStartSeconds" : 39.217551020408166,
       "text" : "the"
     },
     {
@@ -1181,7 +1181,7 @@
         "location" : 497
       },
       "index" : 117,
-      "sourceEndSeconds" : 40.889387755102042,
+      "sourceEndSeconds" : 40.900997732426305,
       "sourceStartSeconds" : 40.633968253968256,
       "text" : "three"
     },
@@ -1192,7 +1192,7 @@
       },
       "index" : 118,
       "sourceEndSeconds" : 41.342176870748297,
-      "sourceStartSeconds" : 40.889387755102042,
+      "sourceStartSeconds" : 40.900997732426305,
       "text" : "chapter"
     },
     {
