@@ -10,7 +10,7 @@ function control(socketPath, message) {
     const connection = createConnection(socketPath);
     let body = "";
     const timer = setTimeout(() => { connection.destroy(); reject(new Error("Control timeout.")); }, 2_000);
-    connection.once("error", reject);
+    connection.once("error", (error) => { clearTimeout(timer); reject(error); });
     connection.on("data", (chunk) => { body += chunk.toString(); });
     connection.once("end", () => { clearTimeout(timer); resolve(JSON.parse(body)); });
     connection.once("connect", () => connection.end(`${JSON.stringify(message)}\n`));

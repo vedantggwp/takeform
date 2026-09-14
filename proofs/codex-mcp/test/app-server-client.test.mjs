@@ -113,3 +113,19 @@ test("Takeform approval rejects wrong scope, schema, arguments, and repeats", ()
   assert.deepEqual(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), { result: { action: "accept", content: {} } });
   assert.equal(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), null);
 });
+
+test("Takeform approval sequence resets only for a new active turn", () => {
+  let active = { threadId: "thread-1", turnId: "turn-1" };
+  const policy = mcpToolApprovalPolicy({
+    serverName: "takeform",
+    calls: [
+      { tool: "takeform_snapshot", arguments: {} },
+      { tool: "takeform_propose_edit", arguments: PROPOSAL }
+    ],
+    getActiveTurn: () => active
+  });
+  assert.ok(policy(approvalMessage("takeform_snapshot", {})));
+  assert.ok(policy(approvalMessage("takeform_propose_edit", PROPOSAL)));
+  active = { threadId: "thread-1", turnId: "turn-2" };
+  assert.ok(policy(approvalMessage("takeform_snapshot", {}, { turnId: "turn-2" })));
+});

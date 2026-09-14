@@ -16,7 +16,7 @@ The earlier blind run remains recorded in receipts/real-turn.json. It consumed 2
 
 ProposalStore rejects empty and whitespace-only replacement text. The server advertises snapshot and proposal tools. The private creator channel inspects and accepts proposals against the same in-memory store. Acceptance uses the existing compare-and-swap and idempotent command semantics.
 
-The Node 22.22.1 suite passed eleven tests. It proves revision 1 through MCP, a pending proposal without mutation, explicit creator acceptance through the private channel, and revision 2 through MCP. It also covers duplicate acceptance, conflicting command IDs, malformed proposals, whitespace replacement text, stale proposals, and creator-socket shutdown on stdio EOF.
+The Node 22.22.1 suite passed twelve tests. It proves revision 1 through MCP, a pending proposal without mutation, explicit creator acceptance through the private channel, and revision 2 through MCP. It also covers duplicate acceptance, conflicting command IDs, malformed proposals, whitespace replacement text, stale proposals, per-turn approval reset, and creator-socket shutdown on stdio EOF.
 
 The app-server client now distinguishes server requests from responses, gives unsupported requests an explicit JSON-RPC error, declines supported but unauthorized requests, bounds notification and method buffers, and waits for process exit after SIGKILL. A fake app-server blocks on both an elicitation and an unsupported request before sending a structured failed completion. Another fixture ignores SIGTERM so the test can prove that cleanup waits for SIGKILL reaping.
 
@@ -26,7 +26,7 @@ scripts/run-probe.mjs uses invocation-local `-c` overrides. Seven current config
 
 ## Verification
 
-- Node 22.22.1 ran node --test test/*.test.mjs. All eleven tests passed.
+- Node 22.22.1 ran node --test test/*.test.mjs. All twelve tests passed.
 - Node 22.22.1 ran scripts/required-server-check.mjs without a model turn. The check passed.
 - Node 22.22.1 ran scripts/run-probe.mjs with invocation-only disable flags. The paginated no-model catalog and revision 1 preflight passed.
 - The same driver ran one low-effort Terra turn. It returned `turn/completed`, observed two MCP elicitations, declined both, and recorded no model tool event.

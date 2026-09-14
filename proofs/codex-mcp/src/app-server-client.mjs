@@ -32,11 +32,19 @@ function isEmptyObjectSchema(schema) {
 
 export function mcpToolApprovalPolicy({ serverName, calls, getActiveTurn }) {
   let nextCall = 0;
+  let activeKey = null;
   return (message) => {
     const params = message.params;
     const meta = params?._meta;
     const toolName = meta?.tool_name;
     const activeTurn = getActiveTurn();
+    const key = typeof activeTurn?.threadId === "string" && typeof activeTurn?.turnId === "string"
+      ? `${activeTurn.threadId}\0${activeTurn.turnId}`
+      : null;
+    if (key && key !== activeKey) {
+      activeKey = key;
+      nextCall = 0;
+    }
     const expected = calls[nextCall];
     if (
       message.method !== "mcpServer/elicitation/request"
