@@ -4,6 +4,10 @@ import {extname, resolve, sep} from 'node:path';
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index], process.argv[index + 1]);
+if (Number(process.versions.node.split('.')[0]) !== 22) {
+  process.stdout.write(`${JSON.stringify({status: 'error', message: 'Node 22 is required for this comparison host.'})}\n`);
+  process.exit(1);
+}
 const port = Number(args.get('--port'));
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalidPort');
 

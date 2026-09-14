@@ -39,3 +39,10 @@ test('helper reports an unavailable explicit grant', async () => {
   assert.deepEqual(JSON.parse(line), {status: 'error', message: 'An explicitly granted local root is unavailable.'});
   assert.equal(await new Promise(resolve => child.once('exit', resolve)), 1);
 });
+
+test('helper rejects a non-Node-22 runtime', {skip: Number(process.versions.node.split('.')[0]) === 22}, async () => {
+  const child = spawn(process.execPath, [helper.pathname, '--port', '0'], {stdio: ['ignore', 'pipe', 'pipe']});
+  const line = await new Promise(resolve => child.stdout.once('data', data => resolve(String(data))));
+  assert.deepEqual(JSON.parse(line), {status: 'error', message: 'Node 22 is required for this comparison host.'});
+  assert.equal(await new Promise(resolve => child.once('exit', resolve)), 1);
+});
