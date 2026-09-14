@@ -1,0 +1,50 @@
+{
+  "observed_date": "2026-09-14",
+  "note": "Upstream heads recorded for follow-up reproduction. Review depth varies as documented in component-review.md; this is not a dependency lockfile.",
+  "repositories": [
+    {
+      "repo": "heygen-com/hyperframes",
+      "sha": "d13a89b6707203a2efe2cfcd4e996e0ad0aa4573"
+    },
+    {
+      "repo": "heygen-com/hyperframes-gemini-agent",
+      "sha": "6d7c49b2d03ca035704535a6ed5b5533ee1c8c19"
+    },
+    {
+      "repo": "heygen-com/heygen-cli",
+      "sha": "b791cef1e188d793d3b6ba892de046a073002886"
+    },
+    {
+      "repo": "heygen-com/skills",
+      "sha": "1bd5e4d33a028dfed3abf504c5e3dd644fb9ea8a"
+    },
+    {
+      "repo": "heygen-com/TransVLM",
+      "sha": "7880c9066d8ae548cc270c843a530c8e60c6d513"
+    },
+    {
+      "repo": "OpenCut-app/OpenCut",
+      "sha": "400f097becba5db0fbc305d5a65348cb81c20356"
+    },
+    {
+      "repo": "diffusionstudio/core",
+      "sha": "4e784a7136b3b08e7b9b0c69504085897bf18647"
+    },
+    {
+      "repo": "WyattBlue/auto-editor",
+      "sha": "1647365ff14fc60b04b872c8c2d658fc51235aee"
+    },
+    {
+      "repo": "argmaxinc/argmax-oss-swift",
+      "sha": "ea872ffd35705aa757f33033500b9b0d40bd38df"
+    },
+    {
+      "repo": "ronak-create/FableCut",
+      "sha": "bb69572f34a986e831401379ee3868f51605abb2"
+    },
+    {
+      "repo": "mltframework/mlt",
+      "sha": "4bd01257af8d770007cb3816b479312abf2d358d"
+    }
+  ]
+}
