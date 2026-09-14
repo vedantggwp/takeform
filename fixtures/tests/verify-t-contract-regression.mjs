@@ -59,8 +59,10 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
 {
   const dir = prepare();
   const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
-  words.words[1].sourceStartSeconds = words.words[0].sourceStartSeconds;
-  words.words[1].rawStartSeconds = words.words[0].sourceStartSeconds;
+  words.words[2].sourceStartSeconds = words.words[1].sourceEndSeconds - 0.01;
+  words.words[2].rawStartSeconds = words.words[2].sourceStartSeconds;
+  words.words[1].acousticTailEndFrame = Math.round(words.words[2].sourceStartSeconds * words.sampleRate);
+  words.words[1].acousticTailEndSeconds = words.words[1].acousticTailEndFrame / words.sampleRate;
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
   expectFail(dir, "word crosses its utterance origin or overlaps");
 }
@@ -68,9 +70,10 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
 {
   const dir = prepare();
   const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
-  words.words[0].acousticTailEndFrame = Math.round(words.words[0].sourceStartSeconds * words.sampleRate);
+  words.words[0].acousticTailEndFrame = Math.round(words.words[0].sourceStartSeconds * words.sampleRate) - 1;
+  words.words[0].acousticTailEndSeconds = words.words[0].acousticTailEndFrame / words.sampleRate;
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
-  expectFail(dir, "word has no active waveform support");
+  expectFail(dir, "word has an invalid acoustic-tail estimate");
 }
 
 {
@@ -135,6 +138,94 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
   manifest.expected.sourceToOutput[0].sourceRange.start.ticks += 1;
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
   expectFail(dir, "source-to-output mapping does not preserve occurrence");
+}
+
+{
+  const dir = prepare();
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  manifest.canonicalPlan.occurrences.find((row) => row.id === "oDlg2A").retimeFactor = { num: 9, den: 1 };
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
+  expectFail(dir, "occurrence oDlg2A output duration contradicts its retime factor");
+}
+
+{
+  const dir = prepare();
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  manifest.canonicalPlan.cutList.find((row) => row.occurrenceId === "oDlg2A").retimeFactor = { num: 9, den: 1 };
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
+  expectFail(dir, "cut list retime factor does not preserve occurrence oDlg2A");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.alignment.modelSha256 = "0".repeat(64);
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "receipt lacks a concrete CTC aligner identity");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.alignment.acousticEvidence = [];
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "acoustic evidence does not identify each utterance exactly once");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.words[0].tokens = [999];
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word tokens do not match retained CTC rows");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.words[0].characterRange.location = 99999;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word character range does not select its original lexeme");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.words[0].probability = -1;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "word probability does not match retained CTC rows");
+}
+
+{
+  const dir = prepare();
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.words[0].acousticTailEndSeconds = 40;
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "acoustic tail seconds");
+}
+
+{
+  const dir = prepare();
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  manifest.expected.captions[0].text = "Hold the last thought. final";
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
+  expectFail(dir, "caption text does not reconstruct from its source words");
+}
+
+{
+  const dir = prepare();
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  manifest.expected.captions.shift();
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
+  expectFail(dir, "correction must apply exactly once in selected output captions");
+}
+
+{
+  const dir = prepare();
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  manifest.expected.captions.push(structuredClone(manifest.expected.captions[0]));
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
+  expectFail(dir, "correction must apply exactly once in selected output captions");
 }
 
 console.log("ok T contract negative mutations");
