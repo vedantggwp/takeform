@@ -1,0 +1,203 @@
+{
+  "appPid" : 78657,
+  "appProcessStart" : "2026-09-14T21:01:51.595Z",
+  "approvals" : [
+
+  ],
+  "auto" : true,
+  "bundleIdentifier" : "com.takeform.proof.app",
+  "bundlePath" : "\/tmp\/takeform-proof.xMjUHz\/Takeform Proof.app",
+  "errors" : [
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s",
+    "service socket not ready within 10 s"
+  ],
+  "pairingSecondDecisions" : [
+
+  ],
+  "relaunches" : [
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78667,
+      "spawnedAt" : "2026-09-14T21:01:52.070Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78672,
+      "spawnedAt" : "2026-09-14T21:01:52.271Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78675,
+      "spawnedAt" : "2026-09-14T21:01:52.471Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78679,
+      "spawnedAt" : "2026-09-14T21:01:52.670Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78683,
+      "spawnedAt" : "2026-09-14T21:01:52.871Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78689,
+      "spawnedAt" : "2026-09-14T21:01:53.071Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78693,
+      "spawnedAt" : "2026-09-14T21:01:53.271Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78701,
+      "spawnedAt" : "2026-09-14T21:01:53.470Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78705,
+      "spawnedAt" : "2026-09-14T21:01:53.670Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78709,
+      "spawnedAt" : "2026-09-14T21:01:53.870Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78713,
+      "spawnedAt" : "2026-09-14T21:01:54.070Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78716,
+      "spawnedAt" : "2026-09-14T21:01:54.270Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78721,
+      "spawnedAt" : "2026-09-14T21:01:54.470Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78724,
+      "spawnedAt" : "2026-09-14T21:01:54.670Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78729,
+      "spawnedAt" : "2026-09-14T21:01:54.870Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78734,
+      "spawnedAt" : "2026-09-14T21:01:55.070Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78739,
+      "spawnedAt" : "2026-09-14T21:01:55.270Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78742,
+      "spawnedAt" : "2026-09-14T21:01:55.470Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78746,
+      "spawnedAt" : "2026-09-14T21:01:55.670Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78750,
+      "spawnedAt" : "2026-09-14T21:01:55.870Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78754,
+      "spawnedAt" : "2026-09-14T21:01:56.070Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78758,
+      "spawnedAt" : "2026-09-14T21:01:56.270Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78761,
+      "spawnedAt" : "2026-09-14T21:01:56.470Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78766,
+      "spawnedAt" : "2026-09-14T21:01:56.670Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78769,
+      "spawnedAt" : "2026-09-14T21:01:56.870Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78774,
+      "spawnedAt" : "2026-09-14T21:01:57.070Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78777,
+      "spawnedAt" : "2026-09-14T21:01:57.270Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78812,
+      "spawnedAt" : "2026-09-14T21:01:57.470Z"
+    },
+    {
+      "reason" : "relaunch after connection failure",
+      "servicePid" : 78822,
+      "spawnedAt" : "2026-09-14T21:01:57.670Z"
+    }
+  ],
+  "revocations" : [
+
+  ],
+  "sandboxed" : true,
+  "serviceSpawns" : [
+    {
+      "reason" : "startup",
+      "servicePid" : 78664,
+      "spawnedAt" : "2026-09-14T21:01:51.878Z"
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "history" : [
+    {
+      "handshake" : {
+        "lease" : "24BD57A4-51AD-41BE-9A0E-AEC136A0BC3A",
+        "stamp" : {
+          "pid" : 80449,
+          "startSec" : 1789419852,
+          "startUsec" : 697934
+        },
+        "verifiedAt" : "2026-09-14T21:04:12.703Z"
+      },
+      "helperEvents" : [
+        "{\"at\":\"2026-09-14T21:04:12.702Z\",\"event\":\"started\",\"lease\":\"24BD57A4-51AD-41BE-9A0E-AEC136A0BC3A\",\"pid\":\"80449\",\"seconds\":\"30\",\"startSec\":\"1789419852\",\"startUsec\":\"697934\"}",
+        "{\"at\":\"2026-09-14T21:04:12.709Z\",\"bytes\":\"32662\",\"durationSeconds\":\"2.000\",\"event\":\"probed\",\"lease\":\"24BD57A4-51AD-41BE-9A0E-AEC136A0BC3A\",\"pid\":\"80449\",\"readable\":\"true\",\"tracks\":\"vide,soun\"}"
+      ],
+      "lease" : "24BD57A4-51AD-41BE-9A0E-AEC136A0BC3A",
+      "notes" : [
+        "helper launched pid 80449 start 1789419852.697934",
+        "reconcile: interrupted-helper-alive-same-start-time, signalled true"
+      ],
+      "seconds" : 30,
+      "stamp" : {
+        "pid" : 80449,
+        "startSec" : 1789419852,
+        "startUsec" : 697934
+      },
+      "startedAt" : "2026-09-14T21:04:12.698Z",
+      "state" : "interrupted"
+    },
+    {
+      "handshake" : {
+        "lease" : "6BED1D4A-7A06-4A3E-95C1-CF0299093447",
+        "stamp" : {
+          "pid" : 80483,
+          "startSec" : 1789419854,
+          "startUsec" : 91682
+        },
+        "verifiedAt" : "2026-09-14T21:04:14.097Z"
+      },
+      "helperEvents" : [
+        "{\"at\":\"2026-09-14T21:04:14.097Z\",\"event\":\"started\",\"lease\":\"6BED1D4A-7A06-4A3E-95C1-CF0299093447\",\"pid\":\"80483\",\"seconds\":\"30\",\"startSec\":\"1789419854\",\"startUsec\":\"91682\"}",
+        "{\"at\":\"2026-09-14T21:04:14.105Z\",\"bytes\":\"32662\",\"durationSeconds\":\"2.000\",\"event\":\"probed\",\"lease\":\"6BED1D4A-7A06-4A3E-95C1-CF0299093447\",\"pid\":\"80483\",\"readable\":\"true\",\"tracks\":\"vide,soun\"}"
+      ],
+      "lease" : "6BED1D4A-7A06-4A3E-95C1-CF0299093447",
+      "notes" : [
+        "helper launched pid 80483 start 1789419854.91682",
+        "reconcile: interrupted-helper-alive-same-start-time, signalled true"
+      ],
+      "seconds" : 30,
+      "stamp" : {
+        "pid" : 80483,
+        "startSec" : 1789419854,
+        "startUsec" : 91682
+      },
+      "startedAt" : "2026-09-14T21:04:14.092Z",
+      "state" : "interrupted"
+    },
+    {
+      "handshake" : {
+        "lease" : "A4942A6E-F1CD-4C5A-9CF0-B2842BFA22C6",
+        "stamp" : {
+          "pid" : 80521,
+          "startSec" : 1789419855,
+          "startUsec" : 494993
+        },
+        "verifiedAt" : "2026-09-14T21:04:15.501Z"
+      },
+      "helperEvents" : [
+        "{\"at\":\"2026-09-14T21:04:15.501Z\",\"event\":\"started\",\"lease\":\"A4942A6E-F1CD-4C5A-9CF0-B2842BFA22C6\",\"pid\":\"80521\",\"seconds\":\"30\",\"startSec\":\"1789419855\",\"startUsec\":\"494993\"}",
+        "{\"at\":\"2026-09-14T21:04:15.509Z\",\"bytes\":\"32662\",\"durationSeconds\":\"2.000\",\"event\":\"probed\",\"lease\":\"A4942A6E-F1CD-4C5A-9CF0-B2842BFA22C6\",\"pid\":\"80521\",\"readable\":\"true\",\"tracks\":\"vide,soun\"}"
+      ],
+      "lease" : "A4942A6E-F1CD-4C5A-9CF0-B2842BFA22C6",
+      "notes" : [
+        "helper launched pid 80521 start 1789419855.494993",
+        "reconcile: interrupted-helper-alive-same-start-time, signalled true"
+      ],
+      "seconds" : 30,
+      "stamp" : {
+        "pid" : 80521,
+        "startSec" : 1789419855,
+        "startUsec" : 494993
+      },
+      "startedAt" : "2026-09-14T21:04:15.495Z",
+      "state" : "interrupted"
+    }
+  ],
+  "reconciles" : [
+    {
+      "at" : "2026-09-14T21:04:13.425Z",
+      "classification" : "interrupted-helper-alive-same-start-time",
+      "lease" : "24BD57A4-51AD-41BE-9A0E-AEC136A0BC3A",
+      "liveStamp" : {
+        "pid" : 80449,
+        "startSec" : 1789419852,
+        "startUsec" : 697934
+      },
+      "method" : "lease+pid+start-time",
+      "msSinceServiceProcessStart" : 25.64406394958496,
+      "recordedStamp" : {
+        "pid" : 80449,
+        "startSec" : 1789419852,
+        "startUsec" : 697934
+      },
+      "signalled" : true
+    },
+    {
+      "at" : "2026-09-14T21:04:14.831Z",
+      "classification" : "interrupted-helper-alive-same-start-time",
+      "lease" : "6BED1D4A-7A06-4A3E-95C1-CF0299093447",
+      "liveStamp" : {
+        "pid" : 80483,
+        "startSec" : 1789419854,
+        "startUsec" : 91682
+      },
+      "method" : "lease+pid+start-time",
+      "msSinceServiceProcessStart" : 33.49506855010986,
+      "recordedStamp" : {
+        "pid" : 80483,
+        "startSec" : 1789419854,
+        "startUsec" : 91682
+      },
+      "signalled" : true
+    },
+    {
+      "at" : "2026-09-14T21:04:16.233Z",
+      "classification" : "interrupted-helper-alive-same-start-time",
+      "lease" : "A4942A6E-F1CD-4C5A-9CF0-B2842BFA22C6",
+      "liveStamp" : {
+        "pid" : 80521,
+        "startSec" : 1789419855,
+        "startUsec" : 494993
+      },
+      "method" : "lease+pid+start-time",
+      "msSinceServiceProcessStart" : 33.280014991760254,
+      "recordedStamp" : {
+        "pid" : 80521,
+        "startSec" : 1789419855,
+        "startUsec" : 494993
+      },
+      "signalled" : true
+    }
+  ]
+}

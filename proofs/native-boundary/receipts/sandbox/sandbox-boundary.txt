@@ -1,0 +1,7 @@
+status: measured limit
+app process after third launch: running
+expected app-group state directory: present
+service process: running
+Unix socket: absent
+result: no first receipt became observable within the three bounded observation windows
+downstream checks: not run because the required app-to-service transport did not exist

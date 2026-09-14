@@ -4,6 +4,7 @@ import ProofWire
 
 var cancelled = false
 signal(SIGTERM) { _ in cancelled = true }
+signal(SIGPIPE, SIG_IGN)
 
 let args = Array(CommandLine.arguments.dropFirst())
 func option(_ name: String) -> String? {
@@ -21,9 +22,9 @@ func emit(_ fields: [String: String]) {
     f["lease"] = lease
     f["pid"] = "\(getpid())"
     f["at"] = Codec.iso.string(from: Date())
-    let data = (try? Codec.encoder.encode(f)) ?? Data()
-    FileHandle.standardOutput.write(data)
-    FileHandle.standardOutput.write(Data("\n".utf8))
+    var data = (try? Codec.encoder.encode(f)) ?? Data()
+    data.append(0x0A)
+    _ = data.withUnsafeBytes { Darwin.write(1, $0.baseAddress, $0.count) }
 }
 
 let stamp = ProcessProbe.stamp(pid: getpid())

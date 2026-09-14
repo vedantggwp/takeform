@@ -4,6 +4,7 @@ import ProofWire
 
 let keychainService = "com.takeform.proof.cli"
 let args = Array(CommandLine.arguments.dropFirst())
+let valueOptions = ["--claim", "--id", "--repeat", "--expect", "--label"]
 
 func option(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
@@ -15,7 +16,7 @@ var skip = false
 for (i, a) in args.enumerated() {
     if skip { skip = false; continue }
     if a.hasPrefix("--") {
-        if ["--claim", "--id", "--repeat", "--expect", "--label"].contains(a), i + 1 < args.count { skip = true }
+        if valueOptions.contains(a), i + 1 < args.count { skip = true }
         continue
     }
     positional.append(a)
@@ -31,10 +32,49 @@ struct Outcome: Codable {
     var sentAt: Date
     var receivedAt: Date
     var roundTripMs: Double
-    var response: Response?
+    var response: ObservableResponse?
     var transportError: String?
     var expect: String?
     var pass: Bool?
+    var pairingRequestToApprovalMs: Double?
+    var approvalToFirstReceiptMs: Double?
+    var keychainStoreStatus: Int32?
+}
+
+enum ObservableResponse: Codable {
+    case receipt(Receipt)
+    case paired(requestID: String, sessionID: String, role: CLIRole, requestedAt: Date, approvedAt: Date)
+    case rejected(reason: Rejection, detail: String, peer: PeerIdentity?)
+
+    init(_ response: Response) {
+        switch response {
+        case .receipt(let receipt):
+            self = .receipt(receipt)
+        case .paired(let grant):
+            self = .paired(
+                requestID: grant.requestID,
+                sessionID: grant.sessionID,
+                role: grant.role,
+                requestedAt: grant.requestedAt,
+                approvedAt: grant.approvedAt
+            )
+        case .rejected(let reason, let detail, let peer):
+            self = .rejected(reason: reason, detail: detail, peer: peer)
+        }
+    }
+
+    var kind: String {
+        switch self {
+        case .receipt: return "receipt"
+        case .paired: return "paired"
+        case .rejected(let reason, _, _): return "rejected:\(reason.rawValue)"
+        }
+    }
+}
+
+struct Performed {
+    var outcome: Outcome
+    var pairingGrant: PairingGrant?
 }
 
 func keychainQuery() -> [String: Any] {
@@ -64,34 +104,41 @@ func emit<T: Encodable>(_ v: T) {
     FileHandle.standardOutput.write(Data("\n".utf8))
 }
 
-func send(_ sub: String, _ command: Command, token: String?, claim: String?, id: String?, expect: String?) -> Int32 {
+func perform(_ sub: String, _ command: Command, token: String?, claim: String?, id: String?, expect: String?) -> Performed {
     let req = Request(commandID: id ?? UUID().uuidString, token: token, claimedActor: claim, command: command)
     let sentAt = Date()
     var outcome = Outcome(subcommand: sub, commandID: req.commandID, tokenPresented: token != nil, claimedActor: claim, sentAt: sentAt, receivedAt: sentAt, roundTripMs: 0, expect: expect)
-    var code: Int32 = 0
     do {
         let resp = try UnixSocket.request(req)
         outcome.receivedAt = Date()
         outcome.roundTripMs = outcome.receivedAt.timeIntervalSince(sentAt) * 1000
-        outcome.response = resp
+        outcome.response = ObservableResponse(resp)
         if case .paired(let g) = resp {
-            let st = storeToken(g.token)
-            FileHandle.standardError.write(Data("keychain store status \(st)\n".utf8))
+            outcome.keychainStoreStatus = storeToken(g.token)
+            outcome.pairingRequestToApprovalMs = g.approvedAt.timeIntervalSince(g.requestedAt) * 1000
         }
-        if case .rejected = resp { code = 2 }
-        if let e = expect { outcome.pass = (resp.kind == e); if outcome.pass == false { code = 4 } }
+        if let e = expect { outcome.pass = (resp.kind == e) }
+        return Performed(outcome: outcome, pairingGrant: {
+            if case .paired(let grant) = resp { return grant }
+            return nil
+        }())
     } catch {
         outcome.receivedAt = Date()
         outcome.transportError = "\(error)"
-        code = 3
-        if let e = expect { outcome.pass = (e == "transport-error"); if outcome.pass == true { code = 0 } }
+        if let e = expect { outcome.pass = (e == "transport-error") }
     }
-    emit(outcome)
-    return code
+    return Performed(outcome: outcome, pairingGrant: nil)
+}
+
+func exitCode(for o: Outcome) -> Int32 {
+    if let p = o.pass { return p ? 0 : 4 }
+    if o.transportError != nil { return 3 }
+    if case .rejected? = o.response { return 2 }
+    return 0
 }
 
 guard let sub = positional.first else {
-    FileHandle.standardError.write(Data("usage: proofctl <pair|describe|start|cancel|write|status|approve|revoke|shutdown|forget|wait-socket|inject-stale-attempt> [--claim X] [--id X] [--no-token] [--repeat N] [--expect kind] [--label L]\n".utf8))
+    FileHandle.standardError.write(Data("usage: proofctl <pair|describe|start|cancel|write|status|approve|revoke|shutdown|forget|wait-socket|inject-stale-attempt|receipts|audit-token-absence> [--claim X] [--id X] [--no-token] [--repeat N] [--expect kind] [--label L] [--then-describe]\n".utf8))
     exit(64)
 }
 
@@ -100,30 +147,45 @@ let id = option("--id")
 let expect = option("--expect")
 let repeatCount = Int(option("--repeat") ?? "1") ?? 1
 let token: String? = has("--no-token") ? nil : loadToken()
-var exitCode: Int32 = 0
+var code: Int32 = 0
+
+func run(_ sub: String, _ command: Command, token: String?) {
+    let o = perform(sub, command, token: token, claim: claim, id: id, expect: expect).outcome
+    emit(o)
+    let c = exitCode(for: o)
+    if c != 0 { code = c }
+}
 
 switch sub {
 case "pair":
-    exitCode = send(sub, .requestPairing(label: option("--label") ?? "proofctl"), token: nil, claim: claim, id: id, expect: expect)
-case "describe":
-    for _ in 0..<repeatCount {
-        let c = send(sub, .describeFixture, token: token, claim: claim, id: id, expect: expect)
-        if c != 0 { exitCode = c }
+    let performed = perform(sub, .requestPairing(label: option("--label") ?? "proofctl"), token: nil, claim: claim, id: id, expect: expect)
+    var o = performed.outcome
+    if has("--then-describe"), let grant = performed.pairingGrant {
+        let d = perform("describe-after-pair", .describeFixture, token: grant.token, claim: nil, id: nil, expect: "receipt").outcome
+        if case .receipt(let r)? = d.response { o.approvalToFirstReceiptMs = r.issuedAt.timeIntervalSince(grant.approvedAt) * 1000 }
+        emit(o)
+        emit(d)
+        code = max(exitCode(for: o), exitCode(for: d))
+    } else {
+        emit(o)
+        code = exitCode(for: o)
     }
+case "describe":
+    for _ in 0..<repeatCount { run(sub, .describeFixture, token: token) }
 case "start":
-    exitCode = send(sub, .startAttempt(seconds: Int(positional.dropFirst().first ?? "5") ?? 5), token: token, claim: claim, id: id, expect: expect)
+    run(sub, .startAttempt(seconds: Int(positional.dropFirst().first ?? "5") ?? 5), token: token)
 case "cancel":
-    exitCode = send(sub, .cancelAttempt(lease: positional.dropFirst().first ?? ""), token: token, claim: claim, id: id, expect: expect)
+    run(sub, .cancelAttempt(lease: positional.dropFirst().first ?? ""), token: token)
 case "write":
-    exitCode = send(sub, .attemptWrite(lease: positional.dropFirst().first ?? "", note: positional.dropFirst(2).joined(separator: " ")), token: token, claim: claim, id: id, expect: expect)
+    run(sub, .attemptWrite(lease: positional.dropFirst().first ?? "", note: positional.dropFirst(2).joined(separator: " ")), token: token)
 case "status":
-    exitCode = send(sub, .status, token: token, claim: claim, id: id, expect: expect)
+    run(sub, .status, token: token)
 case "approve":
-    exitCode = send(sub, .approvePairing(requestID: positional.dropFirst().first ?? "none", role: .creatorDelegate), token: token, claim: claim, id: id, expect: expect)
+    run(sub, .approvePairing(requestID: positional.dropFirst().first ?? "none", role: .creatorDelegate), token: token)
 case "revoke":
-    exitCode = send(sub, .revokeSession(sessionID: positional.dropFirst().first ?? "none"), token: token, claim: claim, id: id, expect: expect)
+    run(sub, .revokeSession(sessionID: positional.dropFirst().first ?? "none"), token: token)
 case "shutdown":
-    exitCode = send(sub, .shutdown, token: token, claim: claim, id: id, expect: expect)
+    run(sub, .shutdown, token: token)
 case "forget":
     let st = SecItemDelete(keychainQuery() as CFDictionary)
     emit(["subcommand": "forget", "status": "\(st)"])
@@ -136,18 +198,33 @@ case "wait-socket":
         usleep(5000)
     }
     emit(["subcommand": "wait-socket", "connected": "\(ok)", "waitedMs": String(format: "%.1f", Date().timeIntervalSince(t0) * 1000)])
-    exitCode = ok ? 0 : 3
+    code = ok ? 0 : 3
 case "inject-stale-attempt":
     guard let pidText = positional.dropFirst().first, let pid = Int32(pidText) else { exit(64) }
     var store = AttemptStore()
     var a = AttemptRecord(lease: "stale-" + UUID().uuidString, stamp: ProcessStamp(pid: pid, startSec: 1_000_000_000, startUsec: 1), state: "running", seconds: 300, startedAt: Date())
+    a.handshake = HelperHandshake(lease: a.lease, stamp: a.stamp, verifiedAt: Date())
     a.notes.append("injected by proofctl to simulate a helper record whose pid was reused by an unrelated process")
     store.current = a
     try ProofPaths.ensureStateDir()
     try Codec.prettyEncoder.encode(store).write(to: ProofPaths.stateDir.appendingPathComponent("attempts.json"))
     emit(["subcommand": "inject-stale-attempt", "pid": "\(pid)", "lease": a.lease, "liveStamp": ProcessProbe.stamp(pid: pid).map { "\($0.startSec).\($0.startUsec)" } ?? "none"])
+case "receipts":
+    struct StateFile: Codable { var receipts: [String: Receipt] }
+    let url = ProofPaths.stateDir.appendingPathComponent("service-state.json")
+    guard let d = try? Data(contentsOf: url), let s = try? Codec.decoder.decode(StateFile.self, from: d) else { exit(3) }
+    let wanted = positional.dropFirst().first ?? "describeFixture"
+    for r in s.receipts.values.filter({ $0.command == wanted }).sorted(by: { $0.issuedAt < $1.issuedAt }) { emit(r) }
+case "audit-token-absence":
+    guard let issuedToken = loadToken(), let directory = positional.dropFirst().first else { exit(3) }
+    let root = URL(fileURLWithPath: directory)
+    let files = (FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])?.allObjects as? [URL] ?? [])
+        .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
+    let matches = files.filter { (try? Data(contentsOf: $0).range(of: Data(issuedToken.utf8))) != nil }
+    emit(["subcommand": "audit-token-absence", "keychainItemRead": "true", "filesScanned": "\(files.count)", "issuedTokenPresent": matches.isEmpty ? "false" : "true", "pass": matches.isEmpty ? "true" : "false"])
+    code = matches.isEmpty ? 0 : 5
 default:
     FileHandle.standardError.write(Data("unknown subcommand \(sub)\n".utf8))
-    exitCode = 64
+    code = 64
 }
-exit(exitCode)
+exit(code)

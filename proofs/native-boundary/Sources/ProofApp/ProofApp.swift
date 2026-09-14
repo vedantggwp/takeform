@@ -16,9 +16,11 @@ struct Metrics: Codable {
     var bookmarkKind: String?
     var grantResult: String?
     var approvals: [Approval] = []
+    var pairingSecondDecisions: [String] = []
     var revocations: [String] = []
     var relaunches: [ServiceSpawn] = []
     var agent: AgentResult?
+    var windowNumber: Int?
     var errors: [String] = []
 }
 
@@ -206,9 +208,27 @@ final class AppModel: ObservableObject {
                 try? fm.removeItem(at: path)
                 NSApp.terminate(nil)
             default:
-                break
+                if name.hasPrefix("shot-") {
+                    screenshot(name: String(name.dropFirst(5)))
+                    try? fm.removeItem(at: path)
+                }
             }
         }
+    }
+
+    func screenshot(name: String) {
+        guard let w = NSApp.windows.first(where: { $0.isVisible }) else { fail("screenshot \(name): no visible window"); return }
+        record { $0.windowNumber = w.windowNumber }
+        let id = CGWindowID(w.windowNumber)
+        guard let img = CGWindowListCreateImage(.null, .optionIncludingWindow, id, [.boundsIgnoreFraming, .bestResolution]) else {
+            fail("screenshot \(name): CGWindowListCreateImage returned nil")
+            return
+        }
+        let rep = NSBitmapImageRep(cgImage: img)
+        guard let png = rep.representation(using: .png, properties: [:]) else { fail("screenshot \(name): png encode failed"); return }
+        let dir = ProofPaths.stateDir.appendingPathComponent("screens")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        do { try png.write(to: dir.appendingPathComponent("\(name).png")) } catch { fail("screenshot \(name): \(error.localizedDescription)") }
     }
 
     func approve(_ p: PendingSummary, role: CLIRole) async {
@@ -217,6 +237,10 @@ final class AppModel: ObservableObject {
         let text: String
         if case .receipt(let rc)? = r { text = rc.result } else { text = r?.kind ?? "no response" }
         record { $0.approvals.append(Approval(requestID: p.id, seenAt: seen, approvedAt: Date(), role: role, result: text)) }
+        if env["PROOF_DOUBLE_APPROVE"] == "1" {
+            let second = await send(.approvePairing(requestID: p.id, role: role))
+            record { $0.pairingSecondDecisions.append("\(p.id): \(second?.kind ?? "no response")") }
+        }
     }
 
     func revoke(_ s: SessionSummary) async {
@@ -345,7 +369,7 @@ struct ContentView: View {
                 if let sessions = model.status?.sessions, !sessions.isEmpty {
                     ForEach(sessions) { s in
                         HStack {
-                            Text("\(s.id.prefix(8)) \(s.role.rawValue) token \(s.tokenPrefix)… \(s.revokedAt == nil ? "active" : "revoked")").font(.caption).monospaced()
+                            Text("\(s.id.prefix(8)) \(s.role.rawValue) \(s.revokedAt == nil ? "active" : "revoked")").font(.caption).monospaced()
                             Spacer()
                             if s.revokedAt == nil { Button("Revoke") { Task { await model.revoke(s) } } }
                         }

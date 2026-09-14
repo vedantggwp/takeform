@@ -91,7 +91,7 @@ public enum Principal: Codable, Sendable, Equatable {
 
 public enum Rejection: String, Codable, Sendable {
     case unauthenticated, unauthorized, unknownSession, revokedSession, staleLease, unknownLease
-    case attemptRunning, noFixture, pairingTimeout, invalidRequest, helperFailed
+    case attemptRunning, noFixture, pairingTimeout, pairingAlreadyDecided, invalidRequest, helperFailed
 }
 
 public struct Receipt: Codable, Sendable, Equatable {
@@ -154,11 +154,10 @@ public struct SessionSummary: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var label: String
     public var role: CLIRole
-    public var tokenPrefix: String
     public var createdAt: Date
     public var revokedAt: Date?
-    public init(id: String, label: String, role: CLIRole, tokenPrefix: String, createdAt: Date, revokedAt: Date?) {
-        self.id = id; self.label = label; self.role = role; self.tokenPrefix = tokenPrefix; self.createdAt = createdAt; self.revokedAt = revokedAt
+    public init(id: String, label: String, role: CLIRole, createdAt: Date, revokedAt: Date?) {
+        self.id = id; self.label = label; self.role = role; self.createdAt = createdAt; self.revokedAt = revokedAt
     }
 }
 
@@ -192,9 +191,19 @@ public struct AttemptRecord: Codable, Sendable, Equatable {
     public var cancelToExitMs: Double?
     public var notes: [String]
     public var helperEvents: [String]
+    public var handshake: HelperHandshake?
     public init(lease: String, stamp: ProcessStamp, state: String, seconds: Int, startedAt: Date) {
         self.lease = lease; self.stamp = stamp; self.state = state; self.seconds = seconds; self.startedAt = startedAt
         self.notes = []; self.helperEvents = []
+    }
+}
+
+public struct HelperHandshake: Codable, Sendable, Equatable {
+    public var lease: String
+    public var stamp: ProcessStamp
+    public var verifiedAt: Date
+    public init(lease: String, stamp: ProcessStamp, verifiedAt: Date) {
+        self.lease = lease; self.stamp = stamp; self.verifiedAt = verifiedAt
     }
 }
 
@@ -312,6 +321,9 @@ public enum ProofPaths {
         if let p = env["PROOF_STATE_DIR"], !p.isEmpty { return URL(fileURLWithPath: p) }
         let home = FileManager.default.homeDirectoryForCurrentUser
         if let group = env["PROOF_APP_GROUP"], !group.isEmpty {
+            if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
+                return container.appendingPathComponent("TakeformProof")
+            }
             return home.appendingPathComponent("Library/Group Containers/\(group)/TakeformProof")
         }
         return home.appendingPathComponent("Library/Application Support/TakeformProof")

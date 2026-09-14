@@ -1,4 +1,6 @@
 import Foundation
+import CryptoKit
+import Darwin
 import ProofWire
 
 let serviceStartedAt = Date()
@@ -6,21 +8,30 @@ let servicePid = getpid()
 let serviceStamp = ProcessProbe.stamp(pid: servicePid)
 let env = ProcessInfo.processInfo.environment
 let idleSeconds = Double(env["PROOF_IDLE_SECONDS"] ?? "") ?? 90
+let pairGrantDelayMs = Int(env["PROOF_PAIR_GRANT_DELAY_MS"] ?? "0") ?? 0
 
 func log(_ s: String) { ProofLog.append("service.log", "[service \(servicePid)] \(s)") }
 
 func sibling(_ name: String) -> String {
-    let me = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+    var path = [CChar](repeating: 0, count: Int(MAXPATHLEN * 4))
+    let length = proc_pidpath(getpid(), &path, UInt32(path.count))
+    let me = length > 0
+        ? URL(fileURLWithPath: String(cString: path)).resolvingSymlinksInPath()
+        : URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
     return me.deletingLastPathComponent().appendingPathComponent(name).path
 }
 
 struct Session: Codable {
     var id: String
-    var token: String
+    var tokenDigest: String
     var role: CLIRole
     var label: String
     var createdAt: Date
     var revokedAt: Date?
+}
+
+func tokenDigest(_ token: String) -> String {
+    SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
 }
 
 final class PendingPairing {
@@ -74,7 +85,6 @@ final class Service {
     func load() {
         if let d = try? Data(contentsOf: stateFile), let p = try? Codec.decoder.decode(Persisted.self, from: d) { persisted = p }
         if let d = try? Data(contentsOf: attemptsFile), let a = try? Codec.decoder.decode(AttemptStore.self, from: d) { attempts = a }
-        if let b = persisted.bookmark, let name = persisted.fixtureName { fixture = resolveFixture(bookmark: b, name: name) }
         log("loaded \(persisted.sessions.count) sessions, \(persisted.receipts.count) receipts, attempt \(attempts.current?.lease ?? "none") state \(attempts.current?.state ?? "none")")
     }
 
@@ -90,7 +100,10 @@ final class Service {
         let live = ProcessProbe.stamp(pid: a.stamp.pid)
         let classification: String
         var signalled = false
-        if let live, live == a.stamp {
+        let verified = a.handshake?.lease == a.lease && a.handshake?.stamp == a.stamp
+        if !verified {
+            classification = "interrupted-unverified-helper-handshake"
+        } else if let live, live == a.stamp {
             classification = "interrupted-helper-alive-same-start-time"
             kill(a.stamp.pid, SIGTERM)
             signalled = true
@@ -158,7 +171,7 @@ final class Service {
 
     func status() -> StatusReport {
         let sessions = persisted.sessions.values.sorted { $0.createdAt < $1.createdAt }.map {
-            SessionSummary(id: $0.id, label: $0.label, role: $0.role, tokenPrefix: String($0.token.prefix(4)), createdAt: $0.createdAt, revokedAt: $0.revokedAt)
+            SessionSummary(id: $0.id, label: $0.label, role: $0.role, createdAt: $0.createdAt, revokedAt: $0.revokedAt)
         }
         let pendingList = pending.values.sorted { $0.requestedAt < $1.requestedAt }.map {
             PendingSummary(id: $0.id, label: $0.label, peerPid: $0.peer.pid, peerIdentifier: $0.peer.codeIdentifier, requestedAt: $0.requestedAt)
@@ -175,7 +188,8 @@ final class Service {
         if peer.matchesAppRequirement {
             principal = .creator(pid: peer.pid, codeIdentifier: peer.codeIdentifier ?? "unknown")
         } else if let t = req.token {
-            guard let s = persisted.sessions.values.first(where: { $0.token == t }) else {
+            let digest = tokenDigest(t)
+            guard let s = persisted.sessions.values.first(where: { $0.tokenDigest == digest }) else {
                 return .rejected(reason: .unknownSession, detail: "token does not match any session", peer: peer)
             }
             if let r = s.revokedAt {
@@ -232,13 +246,20 @@ final class Service {
             return .failure(Failure(reason: .invalidRequest, detail: "unreachable"))
         case .approvePairing(let requestID, let role):
             guard let p = pending[requestID] else { return .failure(Failure(reason: .invalidRequest, detail: "no pending request \(requestID)")) }
+            guard p.grant == nil else {
+                return .failure(Failure(reason: .pairingAlreadyDecided, detail: "pairing request \(requestID) already has a decision"))
+            }
             var tokenBytes = [UInt8](repeating: 0, count: 32)
             _ = SecRandomCopyBytes(kSecRandomDefault, tokenBytes.count, &tokenBytes)
             let token = tokenBytes.map { String(format: "%02x", $0) }.joined()
-            let s = Session(id: UUID().uuidString, token: token, role: role, label: p.label, createdAt: Date())
+            let s = Session(id: UUID().uuidString, tokenDigest: tokenDigest(token), role: role, label: p.label, createdAt: Date())
             persisted.sessions[s.id] = s
             p.grant = PairingGrant(requestID: p.id, sessionID: s.id, token: token, role: role, requestedAt: p.requestedAt, approvedAt: s.createdAt)
-            p.sem.signal()
+            if pairGrantDelayMs > 0 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(pairGrantDelayMs)) { p.sem.signal() }
+            } else {
+                p.sem.signal()
+            }
             return .success("approved request \(requestID) as session \(s.id) role \(role.rawValue) for peer pid \(p.peer.pid) \(p.peer.codeIdentifier ?? "unsigned"); request to approval \(Int(s.createdAt.timeIntervalSince(p.requestedAt) * 1000)) ms")
         case .revokeSession(let id):
             guard var s = persisted.sessions[id] else { return .failure(Failure(reason: .unknownSession, detail: "no session \(id)")) }
@@ -251,8 +272,10 @@ final class Service {
             fixture = resolveFixture(bookmark: bookmark, name: name)
             return .success("granted fixture \(name); " + Codec.prettyString(fixture))
         case .describeFixture:
-            guard let f = fixture else { return .failure(Failure(reason: .noFixture, detail: "no fixture granted by the creator")) }
-            let fresh = resolveFixture(bookmark: persisted.bookmark ?? Data(), name: f.name)
+            guard let bookmark = persisted.bookmark, let name = persisted.fixtureName else {
+                return .failure(Failure(reason: .noFixture, detail: "no fixture granted by the creator"))
+            }
+            let fresh = resolveFixture(bookmark: bookmark, name: name)
             fixture = fresh
             return .success("fixture \(fresh.name) size \(fresh.size.map(String.init) ?? "unknown") bytes head \(fresh.headHex ?? "none") readOK \(fresh.readOK) via \(fresh.resolvedWith) startAccessing \(fresh.startAccessing) sandboxed \(fresh.sandboxed)")
         case .startAttempt(let seconds):
@@ -294,14 +317,33 @@ final class Service {
         guard let stamp = ProcessProbe.stamp(pid: pid) else {
             return .failure(Failure(reason: .helperFailed, detail: "no kinfo_proc for pid \(pid)"))
         }
+        let handshakeData: Data
+        do {
+            handshakeData = try readHelperLine(from: pipe.fileHandleForReading.fileDescriptor)
+        } catch {
+            kill(pid, SIGTERM)
+            return .failure(Failure(reason: .helperFailed, detail: "helper handshake read failed: \(error)"))
+        }
+        guard let event = try? Codec.decoder.decode([String: String].self, from: handshakeData),
+              event["event"] == "started",
+              event["lease"] == lease,
+              event["pid"] == "\(pid)",
+              event["startSec"] == "\(stamp.startSec)",
+              event["startUsec"] == "\(stamp.startUsec)" else {
+            kill(pid, SIGTERM)
+            return .failure(Failure(reason: .helperFailed, detail: "helper handshake did not match lease, pid and process start time"))
+        }
         var a = AttemptRecord(lease: lease, stamp: stamp, state: "running", seconds: seconds, startedAt: startedAt)
+        a.handshake = HelperHandshake(lease: lease, stamp: stamp, verifiedAt: Date())
+        a.helperEvents.append(ProofPaths.redactHome(String(decoding: handshakeData, as: UTF8.self)))
         a.notes.append("helper launched pid \(pid) start \(stamp.startSec).\(stamp.startUsec)")
         attempts.current = a
         helper = p
         persist()
         pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let d = h.availableData
-            guard let self, !d.isEmpty else { return }
+            if d.isEmpty { h.readabilityHandler = nil; return }
+            guard let self else { return }
             let text = String(decoding: d, as: UTF8.self)
             self.lock.lock()
             if var cur = self.attempts.current, cur.lease == lease {
@@ -336,6 +378,9 @@ final class Service {
         guard var a = attempts.current else { return .failure(Failure(reason: .unknownLease, detail: "no attempt")) }
         guard a.lease == lease else { return .failure(Failure(reason: .staleLease, detail: "lease \(lease) is not current (\(a.lease))")) }
         guard a.state == "running" else { return .failure(Failure(reason: .staleLease, detail: "attempt \(lease) already \(a.state)")) }
+        guard a.handshake?.lease == a.lease, a.handshake?.stamp == a.stamp else {
+            return .failure(Failure(reason: .helperFailed, detail: "attempt \(lease) has no verified helper lease and start-time handshake; no signal sent"))
+        }
         let live = ProcessProbe.stamp(pid: a.stamp.pid)
         guard live == a.stamp else {
             a.state = "interrupted"
@@ -377,6 +422,22 @@ final class Service {
             }
         }.start()
     }
+}
+
+func readHelperLine(from fd: Int32) throws -> Data {
+    var data = Data()
+    var byte: UInt8 = 0
+    while data.count < 4096 {
+        let count = Darwin.read(fd, &byte, 1)
+        if count == 0 { throw WireError.closed }
+        if count < 0 {
+            if errno == EINTR { continue }
+            throw WireError.io("helper handshake read", errno)
+        }
+        if byte == 0x0A { return data }
+        data.append(byte)
+    }
+    throw WireError.tooLarge
 }
 
 signal(SIGPIPE, SIG_IGN)

@@ -1,0 +1,63 @@
+{
+  "agent" : {
+    "action" : "unregister",
+    "at" : "2026-09-14T21:04:29.429Z",
+    "statusAfter" : "notRegistered",
+    "statusBefore" : "enabled"
+  },
+  "appPid" : 80668,
+  "appProcessStart" : "2026-09-14T21:04:29.149Z",
+  "approvals" : [
+
+  ],
+  "auto" : true,
+  "bundleIdentifier" : "com.takeform.proof.app",
+  "bundlePath" : "\/tmp\/takeform-proof.IymtQm\/Takeform Proof.app",
+  "coldStartMs" : 269.197940826416,
+  "errors" : [
+
+  ],
+  "firstReceipt" : {
+    "command" : "describeFixture",
+    "commandID" : "EDAE6AF2-0B93-4A7F-B96A-01733EF2C622",
+    "issuedAt" : "2026-09-14T21:04:29.418Z",
+    "peer" : {
+      "appRequirement" : "identifier \"com.takeform.proof.app\" and cdhash H\"c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd8\"",
+      "auditTokenObtained" : true,
+      "cdhash" : "c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd8",
+      "codeIdentifier" : "com.takeform.proof.app",
+      "guestSource" : "audit",
+      "matchesAppRequirement" : true,
+      "matchesDeveloperIDAnchor" : false,
+      "pid" : 80668
+    },
+    "principal" : {
+      "creator" : {
+        "codeIdentifier" : "com.takeform.proof.app",
+        "pid" : 80668
+      }
+    },
+    "result" : "fixture fixture.mp4 size 32662 bytes head 000000206674797069736f6d00000200 readOK true via plain startAccessing true sandboxed false",
+    "servicePid" : 80670,
+    "serviceStartedAt" : "2026-09-14T21:04:29.397Z"
+  },
+  "pairingSecondDecisions" : [
+
+  ],
+  "relaunches" : [
+
+  ],
+  "revocations" : [
+
+  ],
+  "sandboxed" : false,
+  "serviceSpawns" : [
+    {
+      "reason" : "startup",
+      "servicePid" : 80670,
+      "socketReadyAt" : "2026-09-14T21:04:29.412Z",
+      "spawnToSocketMs" : 18.571019172668457,
+      "spawnedAt" : "2026-09-14T21:04:29.394Z"
+    }
+  ]
+}
