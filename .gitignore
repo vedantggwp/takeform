@@ -8,3 +8,4 @@ DerivedData/
 dist/
 renders/
 *.log
+fixtures/**/media/
