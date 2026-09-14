@@ -41,6 +41,18 @@ The doctor imports `@hyperframes/producer` and `@remotion/renderer`. It creates 
 
 HyperFrames documents `chromePath`, `PRODUCER_HEADLESS_SHELL_PATH`, and `HYPERFRAMES_BROWSER_PATH` as override routes. Remotion exposes `ensureBrowser({browserExecutable})` and `openBrowser('chrome', {browserExecutable})`. The pinned HyperFrames and Remotion launch implementations both add sandbox-disabling flags. This workspace does not call either launch API, so no BeginFrame or screenshot capability is claimed and no browser is shared. The custom executable bootstrap only confirms Remotion accepts the provided executable path.
 
+## Browser launch proof
+
+`browser/secure-browser-launcher.sh` is a caller-configured executable wrapper. Its target is provided through `TAKEFORM_BROWSER_EXECUTABLE`; the wrapper removes `--no-sandbox` and `--disable-setuid-sandbox`, rejects known web-security and site-isolation disabling flags, preserves other arguments, and replaces itself with the target process. It does not print the target path or unrestricted arguments.
+
+Run the bounded probe with an explicit existing runtime and browser executable:
+
+```sh
+node comparisons/runtime/browser/probe.mjs --runtime RUNTIME_WORKSPACE --browser BROWSER_EXECUTABLE
+```
+
+The probe runs each SDK's documented executable override in a separate process, with a bounded timeout and owned temporary scratch space. It requests Remotion's isolated temporary profile and uses HyperFrames' exported capture-session route. Any successful path would capture a blank `data:` page and close it before cleanup. At the pinned versions, the wrapper safely rejects additional upstream web-security or site-isolation defaults before the real browser is executed. That result proves the override route and policy boundary only; it does not claim a browser launch, capture, OS-level sandbox attestation, or renderer capability.
+
 No final licence determination is made here. Font availability, helper redistribution, browser distribution, and any production licensing decision remain open.
 
 ## Verification
