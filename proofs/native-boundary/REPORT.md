@@ -6,7 +6,7 @@ Issue: Refs #18. This proof does not close the parent work packages.
 
 ## Decision
 
-Go for the developer topology: a native SwiftUI client, one app-owned Swift service over a Unix domain socket, and leased helper processes. The default variant passed all 69 scripted checks. The app and CLI used the same command contract. The service derived principals from the peer audit token and code identity. Pairing, revocation, receipt replay, cancellation, service recovery and reused-PID protection behaved as designed.
+Go for the developer topology: a native SwiftUI client, one app-owned Swift service over a Unix domain socket, and leased helper processes. The default variant passed all 73 scripted checks. The app and CLI used the same command contract. The service derived principals from the peer audit token and code identity. Pairing, local credential storage failure, revocation, receipt replay, cancellation, service recovery and reused-PID protection behaved as designed.
 
 No-go for distribution from this evidence. The sandbox variant launched the app but did not establish the app-to-service socket. `SMAppService` registration succeeded in the default variant, but launchd refused the ad-hoc nested service with `OS_REASON_CODESIGNING`. No Developer ID identity is installed, so Developer ID signing and notarization were not attempted.
 
@@ -18,14 +18,14 @@ The values below are measured on a Mac16,12 with Apple M4, 24 GiB memory, macOS 
 
 | Metric | Raw values in ms | Median in ms |
 |---|---:|---:|
-| App process start to first receipt | 403.249, 242.467, 213.963 | 242.467 |
-| Service spawn to socket ready | 10.157, 9.388, 8.891 | 9.388 |
-| Warm paired CLI round trip | 4.430, 1.492, 1.425, 1.320, 1.539 | 1.492 |
-| Pair request to app approval | 192.000, 41.000, 53.000 | 53.000 |
-| Approval to first authenticated receipt, including deliberate 250 ms delayed delivery | 291.000, 290.000, 288.000 | 290.000 |
-| Cancel signal to helper exit | 0.9, 0.9, 0.8 | 0.9 |
-| Service kill to socket restored | 181, 208, 204 | 204 |
-| Relaunched service start to reconcile | 25.644, 33.495, 33.280 | 33.280 |
+| App process start to first receipt | 384.628, 221.865, 211.983 | 221.865 |
+| Service spawn to socket ready | 8.689, 10.922, 8.238 | 8.689 |
+| Warm paired CLI round trip | 6.352, 2.163, 2.124, 1.909, 1.729 | 2.124 |
+| Pair request to app approval | 18.000, 52.000, 69.000 | 52.000 |
+| Approval to first authenticated receipt, including deliberate 250 ms delayed delivery | 286.000, 279.000, 283.000 | 283.000 |
+| Cancel signal to helper exit | 0.8, 0.8, 0.8 | 0.8 |
+| Service kill to socket restored | 120, 220, 214 | 214 |
+| Relaunched service start to reconcile | 25.464, 35.327, 31.719 | 31.719 |
 | Bundle size from `du -sk` | 3,604 KiB | n/a |
 
 Raw values and checks are in `receipts/default/measurements-default.md`.
@@ -34,7 +34,7 @@ Raw values and checks are in `receipts/default/measurements-default.md`.
 
 Status: measured.
 
-The app-owned process reached a Unix domain socket in the proof state directory, accepted commands and restarted after a forced service kill. Three spawn-to-socket runs measured 10.157, 9.388 and 8.891 ms. Three kill-to-restored-socket runs measured 181, 208 and 204 ms. `receipts/default/app-metrics.json`, `receipts/default/kill-*-wait.json` and `receipts/default/attempts.json` hold the evidence.
+The app-owned process reached a Unix domain socket in the proof state directory, accepted commands and restarted after a forced service kill. Three spawn-to-socket runs measured 8.689, 10.922 and 8.238 ms. Three kill-to-restored-socket runs measured 120, 220 and 214 ms. `receipts/default/app-metrics.json`, `receipts/default/kill-*-wait.json` and `receipts/default/attempts.json` hold the evidence.
 
 The alternative registered with `SMAppService` and reached status `enabled`. A launchd kickstart did not open the socket. `launchctl print` reported `last exit reason = OS_REASON_CODESIGNING` and `job state = spawn failed`. This is a measured ad-hoc-signing limit, not evidence that the topology fails with Developer ID signing. See `receipts/default/smappservice.txt`.
 
@@ -52,15 +52,17 @@ The Developer ID requirement check returned false because the binaries were ad-h
 
 Status: measured.
 
-An unauthenticated CLI could request pairing and could not submit or approve. The app approved three requests as `proposer`. Median request-to-approval time was 53.000 ms. Median approval-to-first-receipt time was 290.000 ms because the regression deliberately delayed grant delivery by 250 ms. During that delay, an immediate second approval with a different command ID was rejected as `pairingAlreadyDecided`; it could not mint or overwrite a session. Revoking sessions in the app made the next CLI call fail with `revokedSession`.
+An unauthenticated CLI could request pairing and could not submit or approve. The app approved three requests as `proposer`. Median request-to-approval time was 52.000 ms. Median approval-to-first-receipt time was 283.000 ms because the regression deliberately delayed grant delivery by 250 ms. During that delay, an immediate second approval with a different command ID was rejected as `pairingAlreadyDecided`; it could not mint or overwrite a session. Revoking sessions in the app made the next CLI call fail with `revokedSession`.
 
 The raw `PairingGrant` exists only in process memory long enough for `proofctl` to put the token into its `com.takeform.proof.cli` login Keychain item. Observable CLI output uses a separate token-free response type. The service persists only the token SHA-256 digest. `proofctl audit-token-absence` reads its own Keychain item, searches receipt bytes for the issued value without printing it, and reports `issuedTokenPresent: false`. The runner repeats that audit after collecting the final receipt set. See `receipts/default/pair-*.json`, `receipts/default/keychain-item.txt`, `receipts/default/token-absence-final.json` and `receipts/default/neg-8-revoked.json`.
+
+The focused local-storage negative forced Keychain status 100001 after server approval. The CLI kept the token-free `paired` response, recorded `serverExpectationMet: true`, `localCredentialStored: false` and a clear local credential error, set overall `pass: false`, skipped the transient-token follow-up, and exited 5. A normal recovery pair then stored its credential and completed the authenticated call. See `receipts/default/neg-keychain-store.json` and `receipts/default/keychain-recovery-pair.json`.
 
 ## D4. File access
 
 Status: measured in the default variant; not run in the sandbox variant after its transport prerequisite failed.
 
-The app generated a bookmark for a cleared two-second video fixture. The default service resolved it through the plain bookmark fallback, called `startAccessingSecurityScopedResource`, read 32,662 bytes and recorded the first 16 bytes. The helper opened the same file with AVFoundation and recorded two seconds with video and sound tracks. See `receipts/default/app-metrics.json`, `receipts/default/service-state.json` and `receipts/default/attempts.json`.
+The app generated a bookmark for a cleared two-second video fixture. The default service resolved it through the plain bookmark fallback, called `startAccessingSecurityScopedResource`, obtained the 32,662-byte size from file attributes and read the first 16 bytes. The helper opened the same file with AVFoundation and recorded two seconds with video and sound tracks. See `receipts/default/app-metrics.json`, `receipts/default/service-state.json` and `receipts/default/attempts.json`.
 
 The sandbox bundle signed and passed local code verification. After the third bounded attempt, the app and service processes were running and the app-group state directory existed, but the Unix socket was absent. No first receipt appeared in any of the three 25-second observation windows. File access was therefore not run under the sandbox. The failure is before bookmark transfer. The sandbox receipt records the exact observable boundary in `receipts/sandbox/sandbox-boundary.txt` and `receipts/sandbox/app-metrics.json`.
 
@@ -68,7 +70,7 @@ The sandbox bundle signed and passed local code verification. After the third bo
 
 Status: measured in the default variant.
 
-The service launched a separately signed nested helper. Before recording it as running, the service read the helper's first event and required the exact lease, PID and process start-time stamp to match its own launch observation. Three CLI cancellations stopped the helper in 0.9, 0.9 and 0.8 ms. App cancellation also reached `cancelled`. Writes under each finished lease failed with `staleLease`.
+The service launched a separately signed nested helper. Before recording it as running, the service read the helper's first event and required the exact lease, PID and process start-time stamp to match its own launch observation. Three CLI cancellations stopped the helper in 0.8, 0.8 and 0.8 ms. App cancellation also reached `cancelled`. Writes under each finished lease failed with `staleLease`.
 
 After three forced service kills, the relaunched service first required the persisted helper handshake to match the persisted lease and stamp. It then matched each live orphan by PID and start time, classified it `interrupted-helper-alive-same-start-time`, and signalled it. The reused-PID negative injected a live unrelated process with a trusted historical handshake but deliberately different live start time. Reconcile classified `interrupted-pid-reused-start-time-mismatch`, recorded `signalled: false` and left the process alive. See `receipts/default/attempt-*-cancel.json`, `receipts/default/attempt-*-stale-write.json` and `receipts/default/attempts-verified-handshakes.json`.
 
@@ -92,7 +94,7 @@ Status: measured.
 
 `swift build -c debug` and `swift build -c release` passed. The only compiler warnings are deprecated AVFoundation synchronous inspection and the complementary `CGWindowListCreateImage` screenshot path. The screenshot path is not root UX acceptance. Build tails are in `receipts/default/build-debug.txt` and `receipts/default/build-release.txt`.
 
-`./run-proof.sh` rebuilt, bundled, signed, copied and drove the default experiment. Its final run reported 69 passes and zero failures. An injected failure-mode run exited 1, proving aggregate failures propagate to the process status. `VARIANT=sandbox ./run-proof.sh` stopped at the measured transport limit and labelled all dependent cases not run.
+`./run-proof.sh` rebuilt, bundled, signed, copied and drove the default experiment. Its final run reported 73 passes and zero failures. An injected failure-mode run exited 1, proving aggregate failures propagate to the process status. `VARIANT=sandbox ./run-proof.sh` stopped at the measured transport limit and labelled all dependent cases not run.
 
 ## Distribution
 

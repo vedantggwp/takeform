@@ -2,46 +2,46 @@
   "history" : [
     {
       "handshake" : {
-        "lease" : "stale-270DC09D-A372-4EC1-99F1-8166D49E4969",
+        "lease" : "stale-E2E0BBE5-CA69-44F7-9F93-7513C439587A",
         "stamp" : {
-          "pid" : 80564,
+          "pid" : 86909,
           "startSec" : 1000000000,
           "startUsec" : 1
         },
-        "verifiedAt" : "2026-09-14T21:04:18.487Z"
+        "verifiedAt" : "2026-09-14T21:33:27.161Z"
       },
       "helperEvents" : [
 
       ],
-      "lease" : "stale-270DC09D-A372-4EC1-99F1-8166D49E4969",
+      "lease" : "stale-E2E0BBE5-CA69-44F7-9F93-7513C439587A",
       "notes" : [
         "injected by proofctl to simulate a helper record whose pid was reused by an unrelated process",
         "reconcile: interrupted-pid-reused-start-time-mismatch, signalled false"
       ],
       "seconds" : 300,
       "stamp" : {
-        "pid" : 80564,
+        "pid" : 86909,
         "startSec" : 1000000000,
         "startUsec" : 1
       },
-      "startedAt" : "2026-09-14T21:04:18.487Z",
+      "startedAt" : "2026-09-14T21:33:27.161Z",
       "state" : "interrupted"
     }
   ],
   "reconciles" : [
     {
-      "at" : "2026-09-14T21:04:18.732Z",
+      "at" : "2026-09-14T21:33:27.346Z",
       "classification" : "interrupted-pid-reused-start-time-mismatch",
-      "lease" : "stale-270DC09D-A372-4EC1-99F1-8166D49E4969",
+      "lease" : "stale-E2E0BBE5-CA69-44F7-9F93-7513C439587A",
       "liveStamp" : {
-        "pid" : 80564,
-        "startSec" : 1789419858,
-        "startUsec" : 458720
+        "pid" : 86909,
+        "startSec" : 1789421607,
+        "startUsec" : 133216
       },
       "method" : "lease+pid+start-time",
-      "msSinceServiceProcessStart" : 14.598965644836426,
+      "msSinceServiceProcessStart" : 14.77205753326416,
       "recordedStamp" : {
-        "pid" : 80564,
+        "pid" : 86909,
         "startSec" : 1000000000,
         "startUsec" : 1
       },

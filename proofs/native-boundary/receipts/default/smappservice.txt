@@ -1,17 +1,17 @@
 $ app-metrics agent (register)
   "agent" : {
     "action" : "register",
-    "at" : "2026-09-14T21:04:21.562Z",
+    "at" : "2026-09-14T21:33:30.088Z",
     "statusAfter" : "enabled",
     "statusBefore" : "notRegistered"
   },
-  "appPid" : 80620,
-  "appProcessStart" : "2026-09-14T21:04:21.307Z",
+  "appPid" : 86968,
+  "appProcessStart" : "2026-09-14T21:33:29.902Z",
 
 $ launchctl print gui/501/com.takeform.proof.agent
 gui/501/com.takeform.proof.agent = {
 	active count = 0
-	path = (submitted by smd.50629)
+	path = (submitted by smd.84821)
 	type = Submitted
 	managed_by = com.apple.xpc.ServiceManagement
 	state = not running
@@ -45,7 +45,7 @@ $ launchctl kickstart gui/501/com.takeform.proof.agent
 $ launchctl print after kickstart
 gui/501/com.takeform.proof.agent = {
 	active count = 0
-	path = (submitted by smd.50629)
+	path = (submitted by smd.84821)
 	type = Submitted
 	managed_by = com.apple.xpc.ServiceManagement
 	state = not running
@@ -75,7 +75,7 @@ gui/501/com.takeform.proof.agent = {
 	last exit reason = OS_REASON_CODESIGNING
 
 	resource coalition = {
-		ID = 38232
+		ID = 38604
 		type = resource
 		state = active
 		active count = 1
@@ -83,7 +83,7 @@ gui/501/com.takeform.proof.agent = {
 	}
 
 	jetsam coalition = {
-		ID = 38233
+		ID = 38605
 		type = jetsam
 		state = active
 		active count = 1
@@ -106,9 +106,9 @@ gui/501/com.takeform.proof.agent = {
 $ app-metrics agent (unregister)
   "agent" : {
     "action" : "unregister",
-    "at" : "2026-09-14T21:04:29.429Z",
+    "at" : "2026-09-14T21:33:37.861Z",
     "statusAfter" : "notRegistered",
     "statusBefore" : "enabled"
   },
-  "appPid" : 80668,
-  "appProcessStart" : "2026-09-14T21:04:29.149Z",
+  "appPid" : 87012,
+  "appProcessStart" : "2026-09-14T21:33:37.639Z",

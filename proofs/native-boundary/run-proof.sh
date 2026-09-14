@@ -185,6 +185,29 @@ else
   failc "issued pairing token leaked to CLI stdout or receipts"
 fi
 security find-generic-password -s com.takeform.proof.cli 2>&1 | grep -v "^password" | redact > "$R/keychain-item.txt"
+
+ctl forget > /dev/null
+if ctl pair --label "forced Keychain failure" --then-describe --expect paired --simulate-keychain-status 100001 > "$R/neg-keychain-store.json"; then
+  KEYCHAIN_FAILURE_EXIT=0
+else
+  KEYCHAIN_FAILURE_EXIT=$?
+fi
+if [ "$KEYCHAIN_FAILURE_EXIT" -eq 5 ]; then
+  pass "approved pairing with Keychain store failure exits 5"
+else
+  failc "approved pairing with Keychain store failure exited $KEYCHAIN_FAILURE_EXIT instead of 5"
+fi
+if grep -q '"paired"' "$R/neg-keychain-store.json" && grep -q '"serverExpectationMet":true' "$R/neg-keychain-store.json" && grep -q '"pass":false' "$R/neg-keychain-store.json" && grep -q '"keychainStoreStatus":100001' "$R/neg-keychain-store.json" && grep -q '"localCredentialStored":false' "$R/neg-keychain-store.json" && grep -q 'local authenticated commands are unavailable' "$R/neg-keychain-store.json"; then
+  pass "Keychain failure keeps the server approval observable and reports a token-free local credential error"
+else
+  failc "Keychain failure outcome was not truthful and explicit"
+fi
+if [ "$(wc -l < "$R/neg-keychain-store.json" | tr -d ' ')" -eq 1 ] && ! grep -q 'describe-after-pair' "$R/neg-keychain-store.json"; then
+  pass "Keychain failure does not use the transient grant for an authenticated follow-up"
+else
+  failc "Keychain failure used the transient grant after local storage failed"
+fi
+run_ctl "pairing recovered after the focused Keychain failure" keychain-recovery-pair.json pair --label "proofctl recovery" --then-describe --expect paired
 shot 02-paired
 
 say "phase 8 warm round trips"

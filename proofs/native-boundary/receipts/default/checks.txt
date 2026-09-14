@@ -8,7 +8,7 @@ PASS spctl -a -vv refuses the ad-hoc bundle (expected distribution gap)
 PASS cold start 1 produced a first receipt
 PASS cold start 2 produced a first receipt
 PASS cold start 3 produced a first receipt
-PASS bundle launched from /tmp/takeform-proof.IymtQm with PATH=/usr/bin:/bin:/usr/sbin:/sbin
+PASS bundle launched from /tmp/takeform-proof.Gm4PCd with PATH=/usr/bin:/bin:/usr/sbin:/sbin
 PASS service read the creator-granted fixture through the bookmark
 PASS unauthenticated CLI cannot submit describeFixture
 PASS forged payload actor=creator does not elevate an unauthenticated connection
@@ -24,10 +24,14 @@ PASS grant 3 carries role proposer
 PASS token stored in login Keychain (SecItemAdd status 0)
 PASS a second approval with a different command id cannot mint another session
 PASS issued pairing token is absent from CLI stdout and receipts
+PASS approved pairing with Keychain store failure exits 5
+PASS Keychain failure keeps the server approval observable and reports a token-free local credential error
+PASS Keychain failure does not use the transient grant for an authenticated follow-up
+PASS pairing recovered after the focused Keychain failure
 PASS warm describe x5 from paired CLI
 PASS CLI describe with fixed command id
 PASS CLI replay of the same command id
-PASS replayed command id returned the first receipt (issuedAt 2026-09-14T21:04:05.506Z)
+PASS replayed command id returned the first receipt (issuedAt 2026-09-14T21:33:14.113Z)
 PASS describeFixture receipts exist from both doors (creator and pairedCLI) with one shape
 PASS paired CLI cannot approve pairing
 PASS paired CLI cannot revoke a session
@@ -37,28 +41,28 @@ PASS start attempt 1
 PASS write with live lease 1 accepted
 PASS cancel from CLI 1
 PASS stale lease write 1 rejected
-PASS helper 80274 exited after cancel
+PASS helper 86589 exited after cancel
 PASS start attempt 2
 PASS write with live lease 2 accepted
 PASS cancel from CLI 2
 PASS stale lease write 2 rejected
-PASS helper 80327 exited after cancel
+PASS helper 86644 exited after cancel
 PASS start attempt 3
 PASS write with live lease 3 accepted
 PASS cancel from CLI 3
 PASS stale lease write 3 rejected
-PASS helper 80378 exited after cancel
+PASS helper 86693 exited after cancel
 PASS start attempt for app cancel
 PASS cancel from the app
 PASS start attempt for kill 1
 PASS reconcile 1 classified the attempt interrupted by lease plus start time and signalled the orphan helper
-PASS orphan helper 80449 stopped after reconcile
+PASS orphan helper 86770 stopped after reconcile
 PASS start attempt for kill 2
 PASS reconcile 2 classified the attempt interrupted by lease plus start time and signalled the orphan helper
-PASS orphan helper 80483 stopped after reconcile
+PASS orphan helper 86805 stopped after reconcile
 PASS start attempt for kill 3
 PASS reconcile 3 classified the attempt interrupted by lease plus start time and signalled the orphan helper
-PASS orphan helper 80521 stopped after reconcile
+PASS orphan helper 86839 stopped after reconcile
 PASS three reconciled helpers had verified lease, pid and start-time handshakes
 PASS reconcile classified the reused pid by start-time mismatch
 PASS reconcile did not signal the reused pid

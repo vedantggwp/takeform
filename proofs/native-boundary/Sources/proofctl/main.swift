@@ -4,7 +4,7 @@ import ProofWire
 
 let keychainService = "com.takeform.proof.cli"
 let args = Array(CommandLine.arguments.dropFirst())
-let valueOptions = ["--claim", "--id", "--repeat", "--expect", "--label"]
+let valueOptions = ["--claim", "--id", "--repeat", "--expect", "--label", "--simulate-keychain-status"]
 
 func option(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
@@ -35,10 +35,13 @@ struct Outcome: Codable {
     var response: ObservableResponse?
     var transportError: String?
     var expect: String?
+    var serverExpectationMet: Bool?
     var pass: Bool?
     var pairingRequestToApprovalMs: Double?
     var approvalToFirstReceiptMs: Double?
     var keychainStoreStatus: Int32?
+    var localCredentialStored: Bool?
+    var localCredentialError: String?
 }
 
 enum ObservableResponse: Codable {
@@ -83,6 +86,7 @@ func keychainQuery() -> [String: Any] {
 
 func storeToken(_ token: String) -> OSStatus {
     SecItemDelete(keychainQuery() as CFDictionary)
+    if let forced = option("--simulate-keychain-status").flatMap(Int32.init) { return forced }
     var add = keychainQuery()
     add[kSecValueData as String] = Data(token.utf8)
     add[kSecAttrLabel as String] = "Takeform Proof CLI session"
@@ -114,10 +118,18 @@ func perform(_ sub: String, _ command: Command, token: String?, claim: String?, 
         outcome.roundTripMs = outcome.receivedAt.timeIntervalSince(sentAt) * 1000
         outcome.response = ObservableResponse(resp)
         if case .paired(let g) = resp {
-            outcome.keychainStoreStatus = storeToken(g.token)
+            let status = storeToken(g.token)
+            outcome.keychainStoreStatus = status
+            outcome.localCredentialStored = status == errSecSuccess
+            if status != errSecSuccess {
+                outcome.localCredentialError = "pairing was approved, but proofctl could not store the new session credential in its Keychain item (OSStatus \(status)); local authenticated commands are unavailable"
+            }
             outcome.pairingRequestToApprovalMs = g.approvedAt.timeIntervalSince(g.requestedAt) * 1000
         }
-        if let e = expect { outcome.pass = (resp.kind == e) }
+        if let e = expect {
+            outcome.serverExpectationMet = resp.kind == e
+            outcome.pass = outcome.serverExpectationMet == true && (outcome.keychainStoreStatus == nil || outcome.keychainStoreStatus == errSecSuccess)
+        }
         return Performed(outcome: outcome, pairingGrant: {
             if case .paired(let grant) = resp { return grant }
             return nil
@@ -125,12 +137,16 @@ func perform(_ sub: String, _ command: Command, token: String?, claim: String?, 
     } catch {
         outcome.receivedAt = Date()
         outcome.transportError = "\(error)"
-        if let e = expect { outcome.pass = (e == "transport-error") }
+        if let e = expect {
+            outcome.serverExpectationMet = e == "transport-error"
+            outcome.pass = outcome.serverExpectationMet
+        }
     }
     return Performed(outcome: outcome, pairingGrant: nil)
 }
 
 func exitCode(for o: Outcome) -> Int32 {
+    if let status = o.keychainStoreStatus, status != errSecSuccess { return 5 }
     if let p = o.pass { return p ? 0 : 4 }
     if o.transportError != nil { return 3 }
     if case .rejected? = o.response { return 2 }
@@ -138,7 +154,7 @@ func exitCode(for o: Outcome) -> Int32 {
 }
 
 guard let sub = positional.first else {
-    FileHandle.standardError.write(Data("usage: proofctl <pair|describe|start|cancel|write|status|approve|revoke|shutdown|forget|wait-socket|inject-stale-attempt|receipts|audit-token-absence> [--claim X] [--id X] [--no-token] [--repeat N] [--expect kind] [--label L] [--then-describe]\n".utf8))
+    FileHandle.standardError.write(Data("usage: proofctl <pair|describe|start|cancel|write|status|approve|revoke|shutdown|forget|wait-socket|inject-stale-attempt|receipts|audit-token-absence> [--claim X] [--id X] [--no-token] [--repeat N] [--expect kind] [--label L] [--then-describe] [--simulate-keychain-status N]\n".utf8))
     exit(64)
 }
 
@@ -160,7 +176,7 @@ switch sub {
 case "pair":
     let performed = perform(sub, .requestPairing(label: option("--label") ?? "proofctl"), token: nil, claim: claim, id: id, expect: expect)
     var o = performed.outcome
-    if has("--then-describe"), let grant = performed.pairingGrant {
+    if has("--then-describe"), let grant = performed.pairingGrant, o.keychainStoreStatus == errSecSuccess {
         let d = perform("describe-after-pair", .describeFixture, token: grant.token, claim: nil, id: nil, expect: "receipt").outcome
         if case .receipt(let r)? = d.response { o.approvalToFirstReceiptMs = r.issuedAt.timeIntervalSince(grant.approvedAt) * 1000 }
         emit(o)

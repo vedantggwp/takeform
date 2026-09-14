@@ -24,12 +24,12 @@ Identifier=com.takeform.proof.cli
 Format=Mach-O thin (arm64)
 CodeDirectory v=20500 size=1943 flags=0x10002(adhoc,runtime) hashes=55+2 location=embedded
 Hash type=sha256 size=32
-CandidateCDHash sha256=c6f6a1ff4c716179ccd4e970b9223dc25150e13b
-CandidateCDHashFull sha256=c6f6a1ff4c716179ccd4e970b9223dc25150e13b51f4ee4a813070078d26c91b
+CandidateCDHash sha256=5fac05c6f1fa36b3aa84763552e8259a7f06f690
+CandidateCDHashFull sha256=5fac05c6f1fa36b3aa84763552e8259a7f06f6905d0d3d1f08c1bb6a88f014b8
 Hash choices=sha256
-CMSDigest=c6f6a1ff4c716179ccd4e970b9223dc25150e13b51f4ee4a813070078d26c91b
+CMSDigest=5fac05c6f1fa36b3aa84763552e8259a7f06f6905d0d3d1f08c1bb6a88f014b8
 CMSDigestType=2
-CDHash=c6f6a1ff4c716179ccd4e970b9223dc25150e13b
+CDHash=5fac05c6f1fa36b3aa84763552e8259a7f06f690
 Signature=adhoc
 Info.plist=not bound
 TeamIdentifier=not set
@@ -62,12 +62,12 @@ Identifier=com.takeform.proof.app
 Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=2327 flags=0x10002(adhoc,runtime) hashes=66+3 location=embedded
 Hash type=sha256 size=32
-CandidateCDHash sha256=c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd8
-CandidateCDHashFull sha256=c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd83b6355f898cd8217d016ff2d
+CandidateCDHash sha256=a9655d64bb66caa626228f9be8b47b9732ce14a8
+CandidateCDHashFull sha256=a9655d64bb66caa626228f9be8b47b9732ce14a8e8114fbe5814748fcf7fd704
 Hash choices=sha256
-CMSDigest=c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd83b6355f898cd8217d016ff2d
+CMSDigest=a9655d64bb66caa626228f9be8b47b9732ce14a8e8114fbe5814748fcf7fd704
 CMSDigestType=2
-CDHash=c6d2883b2f031b345fc5cb7ffe7c75d97f5d2dd8
+CDHash=a9655d64bb66caa626228f9be8b47b9732ce14a8
 Signature=adhoc
 Info.plist entries=12
 TeamIdentifier=not set
