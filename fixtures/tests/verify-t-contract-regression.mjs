@@ -196,6 +196,16 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
 
 {
   const dir = prepare();
+  const scriptPath = join(dir, "script-take1.txt");
+  writeFileSync(scriptPath, readFileSync(scriptPath, "utf8").replace("[PAUSE:2]", "[PAUSE:3]"));
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.inputText.sha256 = createHash("sha256").update(readFileSync(scriptPath)).digest("hex");
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "audio sample bounds do not match the input script");
+}
+
+{
+  const dir = prepare();
   const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
   words.alignment.acousticEvidence = [];
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
