@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Takeform Preview Diagnostic</title>
+  <style>body{background:#171717;color:#f4f4f4;font:16px -apple-system,sans-serif;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center}output{font:700 72px ui-monospace,monospace;display:block;margin:16px}p{color:#b8b8b8}</style>
+</head>
+<body>
+  <main><p>Diagnostic page only. It is not renderer proof.</p><output id="frame">—</output><p id="status">Awaiting a typed native command.</p></main>
+  <script>
+    window.takeformPreviewCommand = (command) => new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        const frame = Number.isInteger(command.frame) ? command.frame : Number(document.querySelector('#frame').textContent) || 0;
+        const playback = command.type === 'play' ? 'playing' : command.type === 'pause' ? 'paused' : 'paused';
+        document.querySelector('#frame').textContent = frame + 1;
+        document.querySelector('#status').textContent = `${command.type} acknowledged after web paint`;
+        window.webkit.messageHandlers.takeformPreview.postMessage({sessionID: command.sessionID, snapshotID: command.snapshotID, displayedFrame: frame, playback, status: 'painted'});
+        resolve();
+      });
+    });
+  </script>
+</body>
+</html>
