@@ -3,8 +3,8 @@ import {isAbsolute, join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createAttempt, frameState, reserveStorage} from '../common/index.mjs';
 
-const rendererModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/renderer/dist/index.mjs')).href;
-const bundlerModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/bundler/dist/index.mjs')).href;
+const rendererModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/renderer/dist/esm/index.mjs')).href;
+const bundlerModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/bundler/dist/index.js')).href;
 
 export function prepareAttempt({attemptId, attemptRoot, snapshot, fixtureId, runtime, expectedOutputBytes, decodeCacheBytes, pipelineBufferBytes, runtimeFreeFloorBytes, freeBytes}) {
   if (!isAbsolute(runtime)) throw new Error('runtime must be a caller-supplied absolute path');
@@ -13,7 +13,7 @@ export function prepareAttempt({attemptId, attemptRoot, snapshot, fixtureId, run
   const expected = manifest.expected;
   const rate = manifest.canonicalPlan.outputFrameRate;
   const storage = reserveStorage({route: 'streaming', width: manifest.canonicalPlan.width, height: manifest.canonicalPlan.height, frameCount: expected.frameCount, expectedOutputBytes, decodeCacheBytes, pipelineBufferBytes, runtimeFreeFloorBytes, freeBytes});
-  const attempt = createAttempt({id: attemptId, snapshot, backend: {kind: 'renderer', identity: 'remotion', version: '4.0.524'}, attemptRoot, scratchPaths: [join(attemptRoot, 'bundle'), join(attemptRoot, 'profile')], outputPath: join(attemptRoot, 'output.mp4')});
+  const attempt = createAttempt({id: attemptId, snapshot, backend: {kind: 'renderer', identity: 'remotion', version: '4.0.524'}, attemptRoot, scratchPaths: [join(attemptRoot, 'bundle')], outputPath: join(attemptRoot, 'output.mp4')});
   return Object.freeze({attempt, fixtureId, rate: rate.num / rate.den, frameCount: expected.frameCount, dimensions: {width: manifest.canonicalPlan.width, height: manifest.canonicalPlan.height}, storage});
 }
 
@@ -31,7 +31,6 @@ export async function bundleAndRender({prepared, runtime, entryPoint, props, bro
     outputLocation: prepared.attempt.outputPath,
     browserExecutable,
     chromeMode: 'chrome-for-testing',
-    chromiumOptions: {userDataDir: prepared.attempt.scratchPaths[1]},
     concurrency: 1,
   });
 }
