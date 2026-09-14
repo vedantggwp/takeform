@@ -19,7 +19,11 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line
             mode: "form",
             message: "fake",
             requestedSchema: { type: "object", properties: {} },
-            _meta: { codex_approval_kind: "mcp_tool_call", tool_name: "takeform_snapshot", tool_params: {} }
+            _meta: {
+              codex_approval_kind: "mcp_tool_call",
+              tool_params: {},
+              tool_params_display: []
+            }
           }
         }
       : { id: "server-1", method: "mcpServer/elicitation/request", params: { message: "fake" } });

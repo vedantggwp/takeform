@@ -30,13 +30,37 @@ function isEmptyObjectSchema(schema) {
   return Object.keys(schema).every((key) => ["$schema", "type", "properties", "required"].includes(key));
 }
 
+const PARAM_KEYS = new Set(["_meta", "message", "mode", "requestedSchema", "serverName", "threadId", "turnId"]);
+const META_KEYS = new Set([
+  "codex_approval_kind", "persist", "tool_description", "tool_params", "tool_params_display", "tool_title"
+]);
+const SCHEMA_KEYS = new Set(["$schema", "properties", "required", "type"]);
+const SAFE_OPERATIONS = new Set(["takeform_snapshot", "takeform_propose_edit"]);
+
+function valueType(value) {
+  if (value === undefined) return "missing";
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "object") return "object";
+  return ["boolean", "number", "string"].includes(typeof value) ? typeof value : "other";
+}
+
+function fieldShape(value, allowed) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { keys: [], otherKeyCount: 0 };
+  const keys = Object.keys(value);
+  return {
+    keys: keys.filter((key) => allowed.has(key)).sort(),
+    otherKeyCount: keys.filter((key) => !allowed.has(key)).length
+  };
+}
+
 export function mcpToolApprovalPolicy({ serverName, calls, getActiveTurn }) {
   let nextCall = 0;
   let activeKey = null;
-  return (message) => {
+  const evaluations = [];
+  const policy = (message) => {
     const params = message.params;
     const meta = params?._meta;
-    const toolName = meta?.tool_name;
     const activeTurn = getActiveTurn();
     const key = typeof activeTurn?.threadId === "string" && typeof activeTurn?.turnId === "string"
       ? `${activeTurn.threadId}\0${activeTurn.turnId}`
@@ -46,25 +70,50 @@ export function mcpToolApprovalPolicy({ serverName, calls, getActiveTurn }) {
       nextCall = 0;
     }
     const expected = calls[nextCall];
-    if (
-      message.method !== "mcpServer/elicitation/request"
-      || params?.serverName !== serverName
-      || typeof activeTurn?.threadId !== "string"
-      || activeTurn.threadId.length === 0
-      || typeof activeTurn?.turnId !== "string"
-      || activeTurn.turnId.length === 0
-      || params?.threadId !== activeTurn.threadId
-      || params?.turnId !== activeTurn.turnId
-      || params?.mode !== "form"
-      || meta?.codex_approval_kind !== "mcp_tool_call"
-      || toolName !== expected?.tool
-      || !Object.hasOwn(meta, "tool_params")
-      || !isDeepStrictEqual(meta.tool_params, expected.arguments)
-      || !isEmptyObjectSchema(params.requestedSchema)
-    ) return null;
+    const checks = {
+      method: message.method === "mcpServer/elicitation/request",
+      serverName: params?.serverName === serverName,
+      activeThread: typeof activeTurn?.threadId === "string" && activeTurn.threadId.length > 0,
+      activeTurn: typeof activeTurn?.turnId === "string" && activeTurn.turnId.length > 0,
+      threadIdMatches: params?.threadId === activeTurn?.threadId,
+      turnIdMatches: params?.turnId === activeTurn?.turnId,
+      modeForm: params?.mode === "form",
+      approvalKind: meta?.codex_approval_kind === "mcp_tool_call",
+      expectedOperation: Boolean(expected),
+      toolNameAbsent: !Object.hasOwn(meta ?? {}, "tool_name"),
+      toolParamsPresent: Object.hasOwn(meta ?? {}, "tool_params"),
+      toolParamsExact: isDeepStrictEqual(meta?.tool_params, expected?.arguments),
+      emptyObjectSchema: isEmptyObjectSchema(params?.requestedSchema)
+    };
+    const approved = Object.values(checks).every(Boolean);
+    evaluations.push({
+      sequence: evaluations.length + 1,
+      expectedOperation: SAFE_OPERATIONS.has(expected?.tool) ? expected.tool : expected ? "other" : "none",
+      decision: approved ? "approve" : "decline",
+      checks,
+      types: {
+        params: valueType(params),
+        serverName: valueType(params?.serverName),
+        threadId: valueType(params?.threadId),
+        turnId: valueType(params?.turnId),
+        mode: valueType(params?.mode),
+        meta: valueType(meta),
+        toolParams: valueType(meta?.tool_params),
+        requestedSchema: valueType(params?.requestedSchema)
+      },
+      fields: {
+        params: fieldShape(params, PARAM_KEYS),
+        meta: fieldShape(meta, META_KEYS),
+        requestedSchema: fieldShape(params?.requestedSchema, SCHEMA_KEYS)
+      }
+    });
+    if (evaluations.length > 8) evaluations.shift();
+    if (!approved) return null;
     nextCall += 1;
     return { result: { action: "accept", content: {} } };
   };
+  policy.diagnostics = () => ({ approvalEvaluations: structuredClone(evaluations) });
+  return policy;
 }
 
 export class AppServer {
@@ -222,7 +271,8 @@ export class AppServer {
     return {
       receivedMethodCounts: Object.fromEntries([...this.#methodCounts].sort()),
       pendingRequestKinds: [...new Set(this.#inbound.values())].sort(),
-      requestOutcomes: Object.fromEntries([...this.#requestOutcomes].sort())
+      requestOutcomes: Object.fromEntries([...this.#requestOutcomes].sort()),
+      ...(this.#serverRequestPolicy?.diagnostics?.() ?? {})
     };
   }
 

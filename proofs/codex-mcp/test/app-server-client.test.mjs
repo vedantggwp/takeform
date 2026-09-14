@@ -17,7 +17,7 @@ function approvalMessage(tool, toolParams, overrides = {}) {
     turnId: "turn-1",
     mode: "form",
     requestedSchema: { type: "object", properties: {} },
-    _meta: { codex_approval_kind: "mcp_tool_call", tool_name: tool, tool_params: toolParams },
+    _meta: { codex_approval_kind: "mcp_tool_call", tool_params: toolParams },
     ...overrides
   };
   return { method: "mcpServer/elicitation/request", params };
@@ -85,6 +85,13 @@ test("only an exact Takeform tool approval is accepted", async () => {
     const completed = await app.waitFor((message) => message.method === "turn/completed");
     assert.equal(completed.params.turn.status, "failed");
     assert.equal(app.diagnostics().requestOutcomes.approved, 1);
+    const [evaluation] = app.diagnostics().approvalEvaluations;
+    assert.equal(evaluation.decision, "approve");
+    assert.ok(Object.values(evaluation.checks).every(Boolean));
+    assert.deepEqual(evaluation.fields.meta, {
+      keys: ["codex_approval_kind", "tool_params", "tool_params_display"],
+      otherKeyCount: 0
+    });
   } finally {
     await app.close();
   }
@@ -106,12 +113,31 @@ test("Takeform approval rejects wrong scope, schema, arguments, and repeats", ()
     requestedSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] }
   })), null);
   assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", { extra: true })), null);
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", {}, {
+    _meta: { codex_approval_kind: "mcp_tool_call", tool_name: "takeform_snapshot", tool_params: {} }
+  })), null);
 
   const repeated = orderedPolicy();
   assert.deepEqual(repeated(approvalMessage("takeform_snapshot", {})), { result: { action: "accept", content: {} } });
   assert.equal(repeated(approvalMessage("takeform_snapshot", {})), null);
   assert.deepEqual(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), { result: { action: "accept", content: {} } });
   assert.equal(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), null);
+});
+
+test("Takeform approval diagnostics expose predicate booleans and field shapes only", () => {
+  const policy = orderedPolicy();
+  assert.equal(policy(approvalMessage("takeform_snapshot", {}, { turnId: null })), null);
+  const [evaluation] = policy.diagnostics().approvalEvaluations;
+  assert.equal(evaluation.decision, "decline");
+  assert.equal(evaluation.checks.turnIdMatches, false);
+  assert.equal(evaluation.checks.toolNameAbsent, true);
+  assert.equal(evaluation.types.turnId, "null");
+  assert.deepEqual(evaluation.fields.requestedSchema, {
+    keys: ["properties", "type"],
+    otherKeyCount: 0
+  });
+  assert.equal(JSON.stringify(evaluation).includes("thread-1"), false);
+  assert.equal(JSON.stringify(evaluation).includes(PROPOSAL.replacementText), false);
 });
 
 test("Takeform approval sequence resets only for a new active turn", () => {
