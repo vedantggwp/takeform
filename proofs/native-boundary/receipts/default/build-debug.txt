@@ -1,0 +1,11 @@
+$ swift build -c debug
+[0/1] Planning build
+Building for debugging...
+[0/10] Write sources
+[1/10] Write swift-version--58304C5D6DBC2206.txt
+[3/6] Emitting module proofctl
+[4/6] Compiling proofctl main.swift
+[4/7] Write Objects.LinkFileList
+[5/7] Linking proofctl
+[6/7] Applying proofctl
+Build complete! (0.79s)

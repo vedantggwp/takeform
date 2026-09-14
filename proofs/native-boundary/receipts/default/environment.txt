@@ -1,0 +1,14 @@
+date: 2026-09-14T21:33:04Z
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+Xcode 26.4
+Build version 17E192
+swift-driver version: 1.148.6 Apple Swift version 6.3 (swiftlang-6.3.0.123.5 clang-2100.0.123.102)
+hw.model: Mac16,12
+hw.ncpu: 10
+hw.memsize: 25769803776
+machdep.cpu.brand_string: Apple M4
+ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers
+codesigning identities:      0 valid identities found
+variant: default

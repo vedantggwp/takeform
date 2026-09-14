@@ -1,0 +1,77 @@
+variant: default
+=== ProofHelper
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofHelper
+Identifier=com.takeform.proof.helper
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1658 flags=0x10002(adhoc,runtime) hashes=46+2 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=e6b6ae7f31150b45594dc92b98993d6cece2b27f
+CandidateCDHashFull sha256=e6b6ae7f31150b45594dc92b98993d6cece2b27f155d432f630eb13e2047eff9
+Hash choices=sha256
+CMSDigest=e6b6ae7f31150b45594dc92b98993d6cece2b27f155d432f630eb13e2047eff9
+CMSDigestType=2
+CDHash=e6b6ae7f31150b45594dc92b98993d6cece2b27f
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+=== proofctl
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/proofctl
+Identifier=com.takeform.proof.cli
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1943 flags=0x10002(adhoc,runtime) hashes=55+2 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=5fac05c6f1fa36b3aa84763552e8259a7f06f690
+CandidateCDHashFull sha256=5fac05c6f1fa36b3aa84763552e8259a7f06f6905d0d3d1f08c1bb6a88f014b8
+Hash choices=sha256
+CMSDigest=5fac05c6f1fa36b3aa84763552e8259a7f06f6905d0d3d1f08c1bb6a88f014b8
+CMSDigestType=2
+CDHash=5fac05c6f1fa36b3aa84763552e8259a7f06f690
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+=== ProofService
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofService
+Identifier=com.takeform.proof.service
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1947 flags=0x10002(adhoc,runtime) hashes=55+2 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=beda1c1ffdf9796b3e174dfdc8ddfb06570f80ba
+CandidateCDHashFull sha256=beda1c1ffdf9796b3e174dfdc8ddfb06570f80baf528990c39faaf6389e68406
+Hash choices=sha256
+CMSDigest=beda1c1ffdf9796b3e174dfdc8ddfb06570f80baf528990c39faaf6389e68406
+CMSDigestType=2
+CDHash=beda1c1ffdf9796b3e174dfdc8ddfb06570f80ba
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+=== Takeform Proof.app
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofApp
+Identifier=com.takeform.proof.app
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=2327 flags=0x10002(adhoc,runtime) hashes=66+3 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=a9655d64bb66caa626228f9be8b47b9732ce14a8
+CandidateCDHashFull sha256=a9655d64bb66caa626228f9be8b47b9732ce14a8e8114fbe5814748fcf7fd704
+Hash choices=sha256
+CMSDigest=a9655d64bb66caa626228f9be8b47b9732ce14a8e8114fbe5814748fcf7fd704
+CMSDigestType=2
+CDHash=a9655d64bb66caa626228f9be8b47b9732ce14a8
+Signature=adhoc
+Info.plist entries=12
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources version=2 rules=13 files=4
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release

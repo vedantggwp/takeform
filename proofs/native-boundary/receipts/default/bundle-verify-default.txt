@@ -1,0 +1,26 @@
+$ codesign --verify --deep --strict --verbose=2
+--prepared:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofHelper
+--validated:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofHelper
+--prepared:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofService
+--prepared:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/proofctl
+--validated:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofService
+--validated:$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/proofctl
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app: valid on disk
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app: satisfies its Designated Requirement
+verify exit 0
+
+$ spctl -a -vv
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app: rejected
+spctl exit 3
+
+$ du -sk
+3604	$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app
+
+$ find bundle
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/Info.plist
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/Library/LaunchAgents/com.takeform.proof.agent.plist
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofApp
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofHelper
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofService
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/proofctl
+$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/_CodeSignature/CodeResources

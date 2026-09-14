@@ -1,0 +1,80 @@
+variant: sandbox
+=== ProofHelper
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofHelper
+Identifier=com.takeform.proof.helper
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1818 flags=0x10002(adhoc,runtime) hashes=46+7 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=2743b2f26a57aa6be827deeb1efdeb9efbb8a74d
+CandidateCDHashFull sha256=2743b2f26a57aa6be827deeb1efdeb9efbb8a74def6335d29e03edd6f4f9a0df
+Hash choices=sha256
+CMSDigest=2743b2f26a57aa6be827deeb1efdeb9efbb8a74def6335d29e03edd6f4f9a0df
+CMSDigestType=2
+CDHash=2743b2f26a57aa6be827deeb1efdeb9efbb8a74d
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/><key>com.apple.security.application-groups</key><array><string>group.com.takeform.proof</string></array><key>com.apple.security.files.bookmarks.app-scope</key><true/></dict></plist>
+=== proofctl
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/proofctl
+Identifier=com.takeform.proof.cli
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1943 flags=0x10002(adhoc,runtime) hashes=55+2 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=c6f6a1ff4c716179ccd4e970b9223dc25150e13b
+CandidateCDHashFull sha256=c6f6a1ff4c716179ccd4e970b9223dc25150e13b51f4ee4a813070078d26c91b
+Hash choices=sha256
+CMSDigest=c6f6a1ff4c716179ccd4e970b9223dc25150e13b51f4ee4a813070078d26c91b
+CMSDigestType=2
+CDHash=c6f6a1ff4c716179ccd4e970b9223dc25150e13b
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+=== ProofService
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofService
+Identifier=com.takeform.proof.service
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=2107 flags=0x10002(adhoc,runtime) hashes=55+7 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=e376fda0140746a7dd57951a0f6c2fadda3f4632
+CandidateCDHashFull sha256=e376fda0140746a7dd57951a0f6c2fadda3f4632e66999a6e5bf575ee5310c35
+Hash choices=sha256
+CMSDigest=e376fda0140746a7dd57951a0f6c2fadda3f4632e66999a6e5bf575ee5310c35
+CMSDigestType=2
+CDHash=e376fda0140746a7dd57951a0f6c2fadda3f4632
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources=none
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/><key>com.apple.security.application-groups</key><array><string>group.com.takeform.proof</string></array><key>com.apple.security.files.bookmarks.app-scope</key><true/></dict></plist>
+=== Takeform Proof.app
+Executable=$HOME/Documents/Codex/projects/takeform-wt/proof-18/proofs/native-boundary/.build/bundle/Takeform Proof.app/Contents/MacOS/ProofApp
+Identifier=com.takeform.proof.app
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=2455 flags=0x10002(adhoc,runtime) hashes=66+7 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=fbd8cdb82a9b2973bd2ab84b074a148df9a0a148
+CandidateCDHashFull sha256=fbd8cdb82a9b2973bd2ab84b074a148df9a0a1485651a022b47426312b1de582
+Hash choices=sha256
+CMSDigest=fbd8cdb82a9b2973bd2ab84b074a148df9a0a1485651a022b47426312b1de582
+CMSDigestType=2
+CDHash=fbd8cdb82a9b2973bd2ab84b074a148df9a0a148
+Signature=adhoc
+Info.plist entries=12
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources version=2 rules=13 files=4
+Internal requirements count=0 size=12
+warning: Specifying ':' in the path is deprecated and will not work in a future release
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/><key>com.apple.security.application-groups</key><array><string>group.com.takeform.proof</string></array><key>com.apple.security.files.bookmarks.app-scope</key><true/><key>com.apple.security.files.user-selected.read-only</key><true/></dict></plist>

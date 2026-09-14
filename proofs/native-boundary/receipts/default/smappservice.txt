@@ -1,0 +1,114 @@
+$ app-metrics agent (register)
+  "agent" : {
+    "action" : "register",
+    "at" : "2026-09-14T21:33:30.088Z",
+    "statusAfter" : "enabled",
+    "statusBefore" : "notRegistered"
+  },
+  "appPid" : 86968,
+  "appProcessStart" : "2026-09-14T21:33:29.902Z",
+
+$ launchctl print gui/501/com.takeform.proof.agent
+gui/501/com.takeform.proof.agent = {
+	active count = 0
+	path = (submitted by smd.84821)
+	type = Submitted
+	managed_by = com.apple.xpc.ServiceManagement
+	state = not running
+
+	program identifier = Contents/MacOS/ProofService (mode: 2)
+	parent bundle identifier = com.takeform.proof.app
+	parent bundle version = 1
+	BTM uuid = 1234F1CB-11A4-45CF-9EA7-A759A790A19C
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.7sRXyWyGKy/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		XPC_SERVICE_NAME => com.takeform.proof.agent
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+$ launchctl kickstart gui/501/com.takeform.proof.agent
+
+$ launchctl print after kickstart
+gui/501/com.takeform.proof.agent = {
+	active count = 0
+	path = (submitted by smd.84821)
+	type = Submitted
+	managed_by = com.apple.xpc.ServiceManagement
+	state = not running
+
+	program identifier = Contents/MacOS/ProofService (mode: 2)
+	parent bundle identifier = com.takeform.proof.app
+	parent bundle version = 1
+	BTM uuid = 1234F1CB-11A4-45CF-9EA7-A759A790A19C
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.7sRXyWyGKy/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		XPC_SERVICE_NAME => com.takeform.proof.agent
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 1
+	last exit reason = OS_REASON_CODESIGNING
+
+	resource coalition = {
+		ID = 38604
+		type = resource
+		state = active
+		active count = 1
+		name = com.takeform.proof.agent
+	}
+
+	jetsam coalition = {
+		ID = 38605
+		type = jetsam
+		state = active
+		active count = 1
+		name = com.takeform.proof.agent
+	}
+
+	spawn type = interactive (4)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	submitted job. ignore execute allowed
+	jetsam thread limit = 32
+	cpumon = default
+	job state = spawn failed
+
+	properties = partial import | resolve program | needs LWCR update | has LWCR
+}
+
+$ app-metrics agent (unregister)
+  "agent" : {
+    "action" : "unregister",
+    "at" : "2026-09-14T21:33:37.861Z",
+    "statusAfter" : "notRegistered",
+    "statusBefore" : "enabled"
+  },
+  "appPid" : 87012,
+  "appProcessStart" : "2026-09-14T21:33:37.639Z",
