@@ -4,6 +4,8 @@
 
 Takeform is a Mac-first workspace for making repeatable videos with agents. A creator defines a channel recipe, supplies an idea, script or footage, and reviews the resulting film. The recipe preserves the channel's structure, typography, motion, sound and caption treatment while allowing declared episode variations.
 
+The [architecture evaluation record](architecture-evaluation.md) records the completed design comparison, correction, artifact fingerprints, and open proof obligations.
+
 The product is a production harness: it assembles the right approved context, records decisions, coordinates tools and makes edits reproducible. Models propose creative choices. Typed commands and media tools perform verifiable operations. Creative quality still requires judgement and inspection of the actual film.
 
 ## Creator flow
