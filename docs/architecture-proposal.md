@@ -58,6 +58,17 @@ SQLite is the writable authority. Immutable content-addressed objects hold media
 
 Swift is the proposed owner because the first audience is Mac users and native document access, process lifecycle and distribution matter. A TypeScript service can also maintain one authoritative database with generated wire types. It remains a viable comparison; it is not rejected as inherently inconsistent. The signed service and helper proof must establish whether Swift's integration benefits justify its costs.
 
+
+## Alternatives considered
+
+| Shape | Decision and reason |
+|---|---|
+| Linked Swift library with an elected owner | Viable, but transfers ownership between client processes and needs a reliable forwarding/liveness protocol. The proposed service makes ownership explicit across app and CLI lifetimes |
+| Per-episode native document kernel | Useful document semantics, but separate recipe/series storage complicates portable channel context. Prefer one self-contained channel package for this product |
+| Native UI with a TypeScript authority | Viable with generated wire contracts and one database. Compare actual bridge, packaging and maintenance costs; revisit if the Swift service proof fails |
+| Browser-first or hybrid UI | Deferred in favour of the Mac-first product preference. Cross-platform UI benefits do not settle native file access or helper distribution |
+| Fully native rendering engine | Deferred while existing renderers are measured. Building motion typography, captions and compositing from scratch would add an unproven subsystem |
+
 ## Editing and reliability contracts
 
 | Concern | Proposed contract | Evidence required before claiming it works |
