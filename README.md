@@ -10,7 +10,7 @@ The project is planned around reviewable issues and evidence from working protot
 
 ## Development
 
-The application stack and renderer are not selected yet. Setup instructions will accompany the first runnable prototype. Do not install dependencies based on this README.
+The [architecture proposal](docs/architecture-proposal.md) recommends a native SwiftUI app with an on-demand Swift service. That direction awaits design approval and a signed helper experiment. The renderer remains undecided until identical fixtures have been measured. Setup instructions will accompany the first runnable prototype. Do not install dependencies based on this README.
 
 ## Project management
 

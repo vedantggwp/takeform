@@ -11,7 +11,10 @@ flowchart TD
     A[01 Product charter and feature map] --> B[02 Source and dependency review]
     A --> C[03 Architecture arena]
     B --> C
-    C --> D[04 Renderer and native preview comparison]
+    C --> NP[18 Signed native boundary probe]
+    C --> FC[19 Canonical fixture contract]
+    NP --> D[04 Renderer and native preview comparison]
+    FC --> D
     D --> E[05 Reproducible project foundation]
     E --> F[06 Project state and versioned channel formats]
     F --> G[07 Native project workspace]
@@ -124,6 +127,15 @@ Acceptance: durable progress, bounded concurrency, cancellation, stale-result re
 Outcome: a new user can install or clone and complete the documented workflows.
 
 Acceptance: accepted talking-head, montage, story-first short and chaptered long video. Measure time to accepted output including human correction. Complete fresh-machine setup, privacy and redistribution audit, signed distribution checks where applicable, documentation and known limitations. Public examples contain cleared assets only. Release notes claim only demonstrated behaviour.
+
+## First architecture proof issues
+
+These bounded research tasks precede production scaffolding after the architecture checkpoint is approved:
+
+- [18. Signed native app, authority and helper boundary](https://github.com/vedantggwp/takeform/issues/18): paired CLI authentication, file access, process lifecycle, cancellation and actual distribution evidence. Feeds work packages 04 and 05.
+- [19. Canonical acceptance fixtures](https://github.com/vedantggwp/takeform/issues/19): cleared montage, speech and thirty-minute film inputs, expected results and a measurement protocol before renderer comparison.
+
+The [architecture proposal](architecture-proposal.md) explains the proposed flow, ownership, open decisions and evidence limits. These issues do not authorise skipping the design checkpoint or count as completed experiments.
 
 ## Review rules
 
