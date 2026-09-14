@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { normalizeCtcText } from "../lib/verify-t-contract.mjs";
 
 const fixture = process.argv[2];
 if (!fixture) throw new Error("usage: verify-t-contract-regression.mjs <T fixture dir>");
@@ -31,6 +32,24 @@ function expectFail(dir, label) {
 }
 
 execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
+
+{
+  const normalized = normalizeCtcText("Hold, hold! Don't cut two-second words.");
+  if (normalized.symbols.join("") !== "HOLD|HOLD|DON'T|CUT|TWO|SECOND|WORDS") throw new Error("CTC normalizer changed its symbol contract");
+  if (JSON.stringify(normalized.parts.map((part) => [part.text, part.location, part.length, part.charStart, part.charEnd])) !== JSON.stringify([
+    ["Hold,", 0, 5, 0, 4], ["hold!", 6, 5, 5, 9], ["Don't", 12, 5, 10, 15],
+    ["cut", 18, 3, 16, 19], ["two-second", 22, 10, 20, 30], ["words.", 33, 6, 31, 36]
+  ])) throw new Error("CTC normalizer changed its positional word mapping");
+  if (JSON.stringify(normalized.events.map((event) => event.character)) !== JSON.stringify([",", "!", "-", "."])) throw new Error("CTC normalizer changed punctuation handling");
+  for (const text of ["H0ld", "Hold🙂", "Hold | thought", "--", ""]) {
+    try {
+      normalizeCtcText(text);
+    } catch {
+      continue;
+    }
+    throw new Error("CTC normalizer accepted unsupported input: " + JSON.stringify(text));
+  }
+}
 
 {
   const dir = prepare();
