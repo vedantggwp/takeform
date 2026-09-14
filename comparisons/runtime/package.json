@@ -1,0 +1,23 @@
+{
+  "name": "@takeform/renderer-runtime",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "doctor": "node ./doctor.mjs",
+    "test": "node --test ./test/doctor.test.mjs"
+  },
+  "dependencies": {
+    "@hyperframes/engine": "0.8.39",
+    "@hyperframes/player": "0.8.39",
+    "@hyperframes/producer": "0.8.39",
+    "@remotion/player": "4.0.524",
+    "@remotion/renderer": "4.0.524",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "remotion": "4.0.524"
+  }
+}
