@@ -14,6 +14,9 @@ struct ContentView: View {
             status
         }
         .onDisappear { store.stopHelper() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            store.stopHelperForApplicationTermination()
+        }
     }
 
     private var controls: some View {
@@ -60,6 +63,10 @@ struct ContentView: View {
                     Text("Displayed \(acknowledged + 1)")
                 } else {
                     Text("Awaiting page acknowledgement").foregroundStyle(.secondary)
+                }
+                if let latency = store.state.lastLatency {
+                    Text(String(format: "%@ #%llu %.2f ms %@", latency.kind.rawValue, latency.requestID, latency.milliseconds, store.state.acknowledgementStatus?.rawValue ?? "unknown"))
+                        .monospacedDigit()
                 }
             }
             .font(.caption)

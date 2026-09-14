@@ -15,7 +15,7 @@
         const playback = command.type === 'play' ? 'playing' : command.type === 'pause' ? 'paused' : 'paused';
         document.querySelector('#frame').textContent = frame + 1;
         document.querySelector('#status').textContent = `${command.type} acknowledged after web paint`;
-        window.webkit.messageHandlers.takeformPreview.postMessage({sessionID: command.sessionID, snapshotID: command.snapshotID, displayedFrame: frame, playback, status: 'painted'});
+        window.webkit.messageHandlers.takeformPreview.postMessage({requestID: command.requestID, sessionID: command.sessionID, snapshotID: command.snapshotID, displayedFrame: frame, playback, status: 'painted'});
         resolve();
       });
     });

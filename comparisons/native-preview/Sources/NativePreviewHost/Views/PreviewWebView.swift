@@ -35,6 +35,7 @@ struct PreviewWebView: NSViewRepresentable {
                   message.frameInfo.securityOrigin.protocol == origin.scheme,
                   message.frameInfo.securityOrigin.host == origin.host,
                   message.frameInfo.securityOrigin.port == origin.port,
+                  store.isExpectedMainDocument(message.frameInfo.request.url),
                   let data = try? JSONSerialization.data(withJSONObject: message.body),
                   let response = try? JSONDecoder().decode(PreviewResponse.self, from: data) else {
                 store.state.fail(PreviewFailure.malformedResponse)
@@ -45,7 +46,9 @@ struct PreviewWebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url, let origin = store.origin,
-                  url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port else {
+                  let targetFrame = navigationAction.targetFrame,
+                  url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port,
+                  !targetFrame.isMainFrame || store.isExpectedMainDocument(url) else {
                 decisionHandler(.cancel)
                 return
             }
@@ -53,8 +56,14 @@ struct PreviewWebView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard store.isExpectedMainDocument(webView.url) else { return }
             store.markSent(store.commandForRequestedFrame(load: true))
             dispatchPendingCommand(to: webView)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            store.state.fail(error)
+            store.helperStatus = "The selected page failed to load."
         }
 
         func dispatchPendingCommand(to webView: WKWebView) {

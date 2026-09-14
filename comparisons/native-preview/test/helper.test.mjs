@@ -40,6 +40,34 @@ test('helper reports an unavailable explicit grant', async () => {
   assert.equal(await new Promise(resolve => child.once('exit', resolve)), 1);
 });
 
+test('helper streams closed, open, and suffix byte ranges', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-preview-range-'));
+  await writeFile(join(root, 'clip.mp4'), Buffer.from('0123456789'));
+  const {child, port} = await openHelper(root);
+  const request = range => fetch(`http://127.0.0.1:${port}/bundle/clip.mp4`, {headers: {Range: range}});
+  const closed = await request('bytes=2-4');
+  assert.equal(closed.status, 206);
+  assert.equal(closed.headers.get('content-range'), 'bytes 2-4/10');
+  assert.equal(await closed.text(), '234');
+  const open = await request('bytes=7-');
+  assert.equal(open.status, 206);
+  assert.equal(await open.text(), '789');
+  const suffix = await request('bytes=-4');
+  assert.equal(suffix.status, 206);
+  assert.equal(await suffix.text(), '6789');
+  for (const range of ['bytes=10-', 'bytes=5-4', 'bytes=-0', 'bytes=0-1,4-5']) {
+    const invalid = await request(range);
+    assert.equal(invalid.status, 416);
+    assert.equal(invalid.headers.get('content-range'), 'bytes */10');
+  }
+  const head = await fetch(`http://127.0.0.1:${port}/bundle/clip.mp4`, {method: 'HEAD', headers: {Range: 'bytes=1-3'}});
+  assert.equal(head.status, 206);
+  assert.equal(head.headers.get('content-length'), '3');
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
+  child.kill('SIGTERM');
+  await new Promise(resolve => child.once('exit', resolve));
+});
+
 test('helper rejects a non-Node-22 runtime', {skip: Number(process.versions.node.split('.')[0]) === 22}, async () => {
   const child = spawn(process.execPath, [helper.pathname, '--port', '0'], {stdio: ['ignore', 'pipe', 'pipe']});
   const line = await new Promise(resolve => child.stdout.once('data', data => resolve(String(data))));

@@ -1,5 +1,6 @@
 import {createServer} from 'node:http';
-import {readFile, realpath, stat} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
+import {realpath, stat} from 'node:fs/promises';
 import {extname, resolve, sep} from 'node:path';
 
 const args = new Map();
@@ -30,6 +31,21 @@ function reject(response, status) {
   response.end(status === 404 ? 'Not found' : 'Rejected');
 }
 
+function byteRange(value, size) {
+  if (!value) return undefined;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value);
+  if (!match || size < 1) return null;
+  if (match[1] === '') {
+    const suffix = Number(match[2]);
+    if (!Number.isSafeInteger(suffix) || suffix < 1) return null;
+    return {start: Math.max(0, size - suffix), end: size - 1};
+  }
+  const start = Number(match[1]);
+  const requestedEnd = match[2] === '' ? size - 1 : Number(match[2]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= size || requestedEnd < start) return null;
+  return {start, end: Math.min(requestedEnd, size - 1)};
+}
+
 async function servedPath(requestURL) {
   const decoded = decodeURIComponent(requestURL.pathname);
   if (decoded === '/' || decoded === '/diagnostic.html') return new URL('./diagnostic.html', import.meta.url);
@@ -53,10 +69,19 @@ const server = createServer(async (request, response) => {
     if (!info.isFile()) return reject(response, 404);
     const type = types.get(extname(location).toLowerCase());
     if (!type) return reject(response, 404);
-    response.writeHead(200, {'Content-Type': type, 'Content-Length': info.size, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'});
+    const range = byteRange(request.headers.range, info.size);
+    if (range === null) {
+      response.writeHead(416, {'Content-Range': `bytes */${info.size}`, 'Cache-Control': 'no-store'});
+      return response.end();
+    }
+    const headers = {'Content-Type': type, 'Content-Length': range ? range.end - range.start + 1 : info.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'};
+    if (range) headers['Content-Range'] = `bytes ${range.start}-${range.end}/${info.size}`;
+    response.writeHead(range ? 206 : 200, headers);
     if (request.method === 'HEAD') return response.end();
-    const bytes = await readFile(location);
-    response.end(bytes);
+    const input = createReadStream(location, range ?? {});
+    input.on('error', () => response.destroy());
+    response.on('close', () => input.destroy());
+    input.pipe(response);
   } catch {
     reject(response, 404);
   }
