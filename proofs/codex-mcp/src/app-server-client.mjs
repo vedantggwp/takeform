@@ -24,24 +24,37 @@ function refusal(method) {
   return { error: { code: -32601, message: "This proof client does not support the requested operation." } };
 }
 
-export function mcpToolApprovalPolicy({ serverName, calls, getTurnId }) {
+function isEmptyObjectSchema(schema) {
+  if (!schema || schema.type !== "object" || !isDeepStrictEqual(schema.properties, {})) return false;
+  if (schema.required && (!Array.isArray(schema.required) || schema.required.length !== 0)) return false;
+  return Object.keys(schema).every((key) => ["$schema", "type", "properties", "required"].includes(key));
+}
+
+export function mcpToolApprovalPolicy({ serverName, calls, getActiveTurn }) {
+  let nextCall = 0;
   return (message) => {
     const params = message.params;
     const meta = params?._meta;
     const toolName = meta?.tool_name;
-    const expectedArguments = calls[toolName];
-    const properties = params?.requestedSchema?.properties;
+    const activeTurn = getActiveTurn();
+    const expected = calls[nextCall];
     if (
       message.method !== "mcpServer/elicitation/request"
       || params?.serverName !== serverName
-      || params?.turnId !== getTurnId()
+      || typeof activeTurn?.threadId !== "string"
+      || activeTurn.threadId.length === 0
+      || typeof activeTurn?.turnId !== "string"
+      || activeTurn.turnId.length === 0
+      || params?.threadId !== activeTurn.threadId
+      || params?.turnId !== activeTurn.turnId
       || params?.mode !== "form"
       || meta?.codex_approval_kind !== "mcp_tool_call"
-      || !Object.hasOwn(calls, toolName)
-      || !isDeepStrictEqual(meta?.tool_params ?? {}, expectedArguments)
-      || !properties
-      || Object.keys(properties).length !== 0
+      || toolName !== expected?.tool
+      || !Object.hasOwn(meta, "tool_params")
+      || !isDeepStrictEqual(meta.tool_params, expected.arguments)
+      || !isEmptyObjectSchema(params.requestedSchema)
     ) return null;
+    nextCall += 1;
     return { result: { action: "accept", content: {} } };
   };
 }

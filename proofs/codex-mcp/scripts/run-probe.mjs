@@ -111,14 +111,15 @@ const appServerArgs = [
   "--stdio"
 ];
 let turnId = null;
+let threadId = null;
 const app = new AppServer(codexCommand, appServerArgs, {
   serverRequestPolicy: mcpToolApprovalPolicy({
     serverName: "takeform",
-    calls: {
-      takeform_snapshot: {},
-      takeform_propose_edit: PROPOSAL
-    },
-    getTurnId: () => turnId
+    calls: [
+      { tool: "takeform_snapshot", arguments: {} },
+      { tool: "takeform_propose_edit", arguments: PROPOSAL }
+    ],
+    getActiveTurn: () => ({ threadId, turnId })
   })
 });
 const phases = { processStartedAt: new Date().toISOString() };
@@ -162,7 +163,7 @@ try {
     developerInstructions: "Read the generated Takeform snapshot, submit the specified proposal, and make no direct mutation."
   });
   const thread = started.thread ?? started;
-  const threadId = thread.id;
+  threadId = thread.id;
   assert.ok(threadId, "thread/start did not return a thread id.");
 
   const firstSnapshot = parseTextResult(await app.request("mcpServer/tool/call", {
@@ -210,8 +211,11 @@ try {
     assert.equal(completed.params.turn.status, "completed", completed.params.turn.error?.message);
 
     const events = readEvents(eventPath).slice(modelEventCursor);
-    assert.ok(events.some((event) => event.type === "snapshot_read"), "The model did not read the snapshot.");
-    assert.ok(events.some((event) => event.type === "proposal_submitted" && event.commandID === PROPOSAL.commandID), "The model did not submit the specified proposal.");
+    assert.deepEqual(events.map((event) => ({ origin: "model", type: event.type, tool: event.tool })), [
+      { origin: "model", type: "snapshot_read", tool: "takeform_snapshot" },
+      { origin: "model", type: "proposal_submitted", tool: "takeform_propose_edit" }
+    ], "The model must issue exactly one snapshot followed by exactly one proposal.");
+    assert.equal(events[1].commandID, PROPOSAL.commandID, "The model did not submit the specified proposal.");
 
     const inspected = await control(controlSocket, { action: "inspect" });
     assert.equal(inspected.ok, true);
@@ -266,7 +270,7 @@ try {
       duplicateAcceptance: duplicate.result,
       staleRejection: staleResult.error.code,
       malformedRejection: malformedCode,
-      modelToolEvents: events.filter((event) => ["snapshot_read", "proposal_submitted"].includes(event.type))
+      modelToolEvents: events.map((event) => ({ origin: "model", ...event }))
     };
     receipt.tokenUsage = usage;
     receipt.diagnostics = app.diagnostics();

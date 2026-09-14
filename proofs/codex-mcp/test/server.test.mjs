@@ -63,3 +63,31 @@ test("one server store spans MCP proposal and creator acceptance", async () => {
     rmSync(attemptDir, { recursive: true, force: true });
   }
 });
+
+test("stdio EOF shuts down the owned creator socket", async () => {
+  const attemptDir = mkdtempSync("/private/tmp/tfmcp-eof-");
+  const socketPath = `${attemptDir}/creator.sock`;
+  const server = spawn(process.execPath, ["src/server.mjs", "--control-socket", socketPath], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
+  const response = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Initialization timeout.")), 2_000);
+    readline.createInterface({ input: server.stdout, crlfDelay: Infinity }).once("line", (line) => {
+      clearTimeout(timer);
+      resolve(JSON.parse(line));
+    });
+  });
+  const exited = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Server did not exit after stdio EOF.")), 2_000);
+    server.once("exit", (code, signal) => { clearTimeout(timer); resolve({ code, signal }); });
+  });
+
+  try {
+    server.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })}\n`);
+    assert.equal((await response).result.serverInfo.name, "takeform-proof");
+    server.stdin.end();
+    assert.deepEqual(await exited, { code: 0, signal: null });
+    await assert.rejects(control(socketPath, { action: "inspect" }));
+  } finally {
+    if (server.exitCode === null && server.signalCode === null) server.kill("SIGKILL");
+    rmSync(attemptDir, { recursive: true, force: true });
+  }
+});

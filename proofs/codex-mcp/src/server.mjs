@@ -55,12 +55,12 @@ function handle(request) {
   }
   if (request.method === "tools/call") {
     if (request.params?.name === "takeform_snapshot") {
-      record("snapshot_read", { revision: store.getSnapshot().revision });
+      record("snapshot_read", { tool: "takeform_snapshot", revision: store.getSnapshot().revision });
       return text(store.getSnapshot());
     }
     if (request.params?.name === "takeform_propose_edit") {
       const result = store.submit(request.params.arguments);
-      record("proposal_submitted", { commandID: result.proposal.commandID, expectedRevision: result.proposal.expectedRevision, sceneID: result.proposal.sceneID });
+      record("proposal_submitted", { tool: "takeform_propose_edit", commandID: result.proposal.commandID, expectedRevision: result.proposal.expectedRevision, sceneID: result.proposal.sceneID });
       return text(result);
     }
     throw new ProtocolError("unknown_tool", "Tool is not advertised by this proof server.");
@@ -68,7 +68,8 @@ function handle(request) {
   throw new ProtocolError("method_not_found", "Method is not supported by this proof server.");
 }
 
-readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
+const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+input.on("line", (line) => {
   try {
     const request = JSON.parse(line);
     if (!Object.hasOwn(request, "id")) return;
@@ -87,6 +88,8 @@ function argument(name) {
 const controlSocket = argument("--control-socket") ?? process.env.TAKEFORM_PROOF_CONTROL_SOCKET;
 const eventPath = argument("--events") ?? process.env.TAKEFORM_PROOF_EVENTS;
 let controlServer;
+const controlConnections = new Set();
+let stopping = false;
 record("server_started", { nodeVersion: process.version });
 
 function controlResult(request) {
@@ -101,6 +104,8 @@ function controlResult(request) {
 
 if (controlSocket) {
   controlServer = createServer((connection) => {
+    controlConnections.add(connection);
+    connection.once("close", () => controlConnections.delete(connection));
     const lines = readline.createInterface({ input: connection, crlfDelay: Infinity });
     lines.once("line", (line) => {
       try {
@@ -114,9 +119,13 @@ if (controlSocket) {
 }
 
 function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  for (const connection of controlConnections) connection.destroy();
   if (controlServer) controlServer.close(() => process.exit(0));
   else process.exit(0);
 }
 
+input.once("close", shutdown);
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);

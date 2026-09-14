@@ -3,6 +3,37 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { AppServer, mcpToolApprovalPolicy } from "../src/app-server-client.mjs";
 
+const PROPOSAL = {
+  expectedRevision: 1,
+  sceneID: "scene-2",
+  replacementText: "Show the decision that changes the result.",
+  commandID: "proposal-live-20260914"
+};
+
+function approvalMessage(tool, toolParams, overrides = {}) {
+  const params = {
+    serverName: "takeform",
+    threadId: "thread-1",
+    turnId: "turn-1",
+    mode: "form",
+    requestedSchema: { type: "object", properties: {} },
+    _meta: { codex_approval_kind: "mcp_tool_call", tool_name: tool, tool_params: toolParams },
+    ...overrides
+  };
+  return { method: "mcpServer/elicitation/request", params };
+}
+
+function orderedPolicy(active = { threadId: "thread-1", turnId: "turn-1" }) {
+  return mcpToolApprovalPolicy({
+    serverName: "takeform",
+    calls: [
+      { tool: "takeform_snapshot", arguments: {} },
+      { tool: "takeform_propose_edit", arguments: PROPOSAL }
+    ],
+    getActiveTurn: () => active
+  });
+}
+
 test("server requests are declined and a structured completion remains observable", async () => {
   const fixture = fileURLToPath(new URL("fixtures/fake-app-server.mjs", import.meta.url));
   const app = new AppServer(process.execPath, [fixture]);
@@ -43,8 +74,8 @@ test("only an exact Takeform tool approval is accepted", async () => {
   const app = new AppServer(process.execPath, [fixture, "--takeform-approval"], {
     serverRequestPolicy: mcpToolApprovalPolicy({
       serverName: "takeform",
-      calls: { takeform_snapshot: {} },
-      getTurnId: () => "fake-turn"
+      calls: [{ tool: "takeform_snapshot", arguments: {} }],
+      getActiveTurn: () => ({ threadId: "fake-thread", turnId: "fake-turn" })
     })
   });
   try {
@@ -59,24 +90,26 @@ test("only an exact Takeform tool approval is accepted", async () => {
   }
 });
 
-test("Takeform approval rejects a different tool or arguments", () => {
-  const policy = mcpToolApprovalPolicy({
-    serverName: "takeform",
-    calls: { takeform_snapshot: {} },
-    getTurnId: () => "turn-1"
-  });
-  const base = {
-    method: "mcpServer/elicitation/request",
-    params: {
-      serverName: "takeform",
-      threadId: "thread-1",
-      turnId: "turn-1",
-      mode: "form",
-      requestedSchema: { type: "object", properties: {} },
-      _meta: { codex_approval_kind: "mcp_tool_call", tool_name: "takeform_snapshot", tool_params: {} }
-    }
-  };
-  assert.equal(policy({ ...base, params: { ...base.params, turnId: "turn-2" } }), null);
-  assert.equal(policy({ ...base, params: { ...base.params, _meta: { ...base.params._meta, tool_name: "other" } } }), null);
-  assert.equal(policy({ ...base, params: { ...base.params, _meta: { ...base.params._meta, tool_params: { extra: true } } } }), null);
+test("Takeform approval accepts one ordered snapshot and the fixed proposal", () => {
+  const policy = orderedPolicy();
+  assert.deepEqual(policy(approvalMessage("takeform_snapshot", {})), { result: { action: "accept", content: {} } });
+  assert.deepEqual(policy(approvalMessage("takeform_propose_edit", PROPOSAL)), { result: { action: "accept", content: {} } });
+});
+
+test("Takeform approval rejects wrong scope, schema, arguments, and repeats", () => {
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", {}, { serverName: "other" })), null);
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", {}, { threadId: "thread-2" })), null);
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", {}, { turnId: "turn-2" })), null);
+  assert.equal(orderedPolicy({ threadId: "", turnId: "" })(approvalMessage("takeform_snapshot", {})), null);
+  assert.equal(orderedPolicy(null)(approvalMessage("takeform_snapshot", {})), null);
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", {}, {
+    requestedSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] }
+  })), null);
+  assert.equal(orderedPolicy()(approvalMessage("takeform_snapshot", { extra: true })), null);
+
+  const repeated = orderedPolicy();
+  assert.deepEqual(repeated(approvalMessage("takeform_snapshot", {})), { result: { action: "accept", content: {} } });
+  assert.equal(repeated(approvalMessage("takeform_snapshot", {})), null);
+  assert.deepEqual(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), { result: { action: "accept", content: {} } });
+  assert.equal(repeated(approvalMessage("takeform_propose_edit", PROPOSAL)), null);
 });
