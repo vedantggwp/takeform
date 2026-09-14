@@ -32,6 +32,13 @@ test('rejects an unsupported Node version before a future adapter runs', () => {
   assert.match(result.output.node.error, /Node 22/);
 });
 
+test('validates the exact public bundle API needed before renderMedia', () => {
+  const result = run();
+  assert.equal(result.code, 0);
+  assert.equal(result.output.packages['@remotion/bundler'].version, '4.0.524');
+  assert.deepEqual(result.output.imports.remotion.bundlerPublicApis, ['bundle']);
+});
+
 test('surfaces a missing runtime import as a doctor error', async (t) => {
   const emptyRuntime = await mkdtemp(join(tmpdir(), 'takeform-empty-runtime-'));
   t.after(() => rm(emptyRuntime, {force: true, recursive: true}));
