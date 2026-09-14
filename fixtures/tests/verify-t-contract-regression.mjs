@@ -2,6 +2,7 @@
 "use strict";
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -181,6 +182,16 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
   words.alignment.modelSha256 = "0".repeat(64);
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
   expectFail(dir, "receipt lacks a concrete CTC aligner identity");
+}
+
+{
+  const dir = prepare();
+  const scriptPath = join(dir, "script-take1.txt");
+  writeFileSync(scriptPath, readFileSync(scriptPath, "utf8").replace("Hold the last thought.", "Keep the last thought."));
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.inputText.sha256 = createHash("sha256").update(readFileSync(scriptPath)).digest("hex");
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "audio utterances do not match the input script");
 }
 
 {
