@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import readline from "node:readline";
+import { fileURLToPath } from "node:url";
+import { AppServer, mcpToolApprovalPolicy } from "../src/app-server-client.mjs";
 
 const REQUIRED_TOOLS = ["takeform_propose_edit", "takeform_snapshot"];
 const PROPOSAL = Object.freeze({
@@ -20,108 +20,6 @@ function option(name) {
 
 function options(name) {
   return process.argv.flatMap((value, index) => value === name ? [process.argv[index + 1]] : []);
-}
-
-class AppServer {
-  #child;
-  #nextID = 0;
-  #pending = new Map();
-  #notifications = [];
-  #waiters = [];
-  stderr = "";
-
-  constructor(command, args) {
-    this.#child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
-    this.#child.stderr.on("data", (chunk) => { this.stderr += chunk.toString(); });
-    const lines = readline.createInterface({ input: this.#child.stdout, crlfDelay: Infinity });
-    lines.on("line", (line) => this.#receive(line));
-    this.#child.once("error", (error) => this.#rejectAll(error));
-    this.#child.once("exit", (code, signal) => {
-      this.#rejectAll(new Error(`Codex app-server exited before the request completed (${code ?? signal}).`));
-    });
-  }
-
-  #receive(line) {
-    let message;
-    try { message = JSON.parse(line); }
-    catch (error) { this.#rejectAll(new Error(`Codex app-server emitted invalid JSON: ${error.message}`)); return; }
-    if (Object.hasOwn(message, "id")) {
-      const pending = this.#pending.get(message.id);
-      if (!pending) return;
-      this.#pending.delete(message.id);
-      clearTimeout(pending.timer);
-      if (message.error) {
-        const error = new Error(message.error.message ?? "App-server request failed.");
-        error.rpcError = message.error;
-        pending.reject(error);
-      } else pending.resolve(message.result);
-      return;
-    }
-    this.#notifications.push(message);
-    for (const waiter of [...this.#waiters]) {
-      if (waiter.predicate(message)) {
-        this.#waiters.splice(this.#waiters.indexOf(waiter), 1);
-        clearTimeout(waiter.timer);
-        waiter.resolve(message);
-      }
-    }
-  }
-
-  #rejectAll(error) {
-    for (const pending of this.#pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
-    }
-    this.#pending.clear();
-    for (const waiter of this.#waiters) {
-      clearTimeout(waiter.timer);
-      waiter.reject(error);
-    }
-    this.#waiters = [];
-  }
-
-  request(method, params, timeoutMs = 15_000) {
-    const id = this.#nextID++;
-    return new Promise((resolveRequest, reject) => {
-      const timer = setTimeout(() => {
-        this.#pending.delete(id);
-        reject(new Error(`Timed out waiting for ${method}.`));
-      }, timeoutMs);
-      this.#pending.set(id, { resolve: resolveRequest, reject, timer });
-      this.#child.stdin.write(`${JSON.stringify({ method, id, params })}\n`);
-    });
-  }
-
-  notify(method, params = {}) {
-    this.#child.stdin.write(`${JSON.stringify({ method, params })}\n`);
-  }
-
-  waitFor(predicate, timeoutMs = 60_000) {
-    const prior = this.#notifications.find(predicate);
-    if (prior) return Promise.resolve(prior);
-    return new Promise((resolveWait, reject) => {
-      const waiter = { predicate, resolve: resolveWait, reject };
-      waiter.timer = setTimeout(() => {
-        this.#waiters.splice(this.#waiters.indexOf(waiter), 1);
-        reject(new Error("Timed out waiting for app-server notification."));
-      }, timeoutMs);
-      this.#waiters.push(waiter);
-    });
-  }
-
-  notifications(method) {
-    return this.#notifications.filter((message) => message.method === method);
-  }
-
-  async close() {
-    if (this.#child.exitCode !== null || this.#child.signalCode !== null) return;
-    this.#child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolveExit) => this.#child.once("exit", resolveExit)),
-      new Promise((resolveTimeout) => setTimeout(resolveTimeout, 2_000))
-    ]);
-    if (this.#child.exitCode === null && this.#child.signalCode === null) this.#child.kill("SIGKILL");
-  }
 }
 
 function parseTextResult(result) {
@@ -161,43 +59,95 @@ function readEvents(path) {
   return readFileSync(path, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
+function errorSummary(error, stderr) {
+  const message = String(error?.message ?? "unknown failure");
+  return {
+    category: message.includes("Timed out") ? "timeout" : error?.rpcError ? "rpc_error" : "assertion_or_runtime_error",
+    code: error?.rpcError?.code ?? error?.code ?? null,
+    processCategory: !message.includes("exited before") ? null
+      : /config|toml/i.test(stderr) ? "configuration"
+        : /permission|operation not permitted/i.test(stderr) ? "filesystem_permission" : null
+  };
+}
+
+async function listAll(app, method, params) {
+  const data = [];
+  let cursor;
+  do {
+    const page = await app.request(method, { ...params, ...(cursor ? { cursor } : {}) });
+    data.push(...page.data);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return data;
+}
+
 const runTurn = process.argv.includes("--turn");
 const receiptPath = option("--receipt");
 const codexCommand = option("--codex") ?? process.env.CODEX_BIN ?? "codex";
 const disabledServers = options("--disable-server");
 const disabledHTTPServers = options("--disable-http-server");
-const allDisabledServers = [...disabledServers, ...disabledHTTPServers];
+const maskedServers = options("--mask-server");
+const allDisabledServers = [...disabledServers, ...disabledHTTPServers, ...maskedServers];
 assert.ok(allDisabledServers.every((name) => /^[a-zA-Z0-9_.-]+$/.test(name)), "Invalid MCP server name supplied for disablement.");
 assert.equal(new Set(allDisabledServers).size, allDisabledServers.length, "Each disabled MCP server must be listed once.");
 assert.ok(!allDisabledServers.includes("takeform"), "The Takeform proof server cannot be disabled.");
-const proofRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const proofRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const serverPath = join(proofRoot, "src", "server.mjs");
 const attemptDir = mkdtempSync("/private/tmp/tfmcp-");
 const controlSocket = join(attemptDir, "creator.sock");
 const eventPath = join(attemptDir, "mcp-events.jsonl");
-const disabledConfig = [
-  ...disabledServers.map((name) => `${JSON.stringify(name)}={command="false",enabled=false}`),
-  ...disabledHTTPServers.map((name) => `${JSON.stringify(name)}={url="http://127.0.0.1",enabled=false}`)
+const appServerArgs = [
+  "app-server",
+  ...[...disabledServers, ...disabledHTTPServers].flatMap((name) => ["-c", `mcp_servers.${name}.enabled=false`]),
+  ...maskedServers.flatMap((name) => ["-c", `mcp_servers.${name}={command="false",enabled=false}`]),
+  "-c", `mcp_servers.takeform.command=${JSON.stringify(process.execPath)}`,
+  "-c", `mcp_servers.takeform.args=[${[
+    serverPath, "--control-socket", controlSocket, "--events", eventPath
+  ].map((value) => JSON.stringify(value)).join(",")}]`,
+  "-c", "mcp_servers.takeform.enabled=true",
+  "-c", "mcp_servers.takeform.required=true",
+  "-c", "mcp_servers.takeform.startup_timeout_sec=10",
+  "-c", "mcp_servers.takeform.tool_timeout_sec=10",
+  "--stdio"
 ];
-const mcpConfig = `mcp_servers={${[...disabledConfig, `takeform={command=${JSON.stringify(process.execPath)},args=[${[
-  serverPath, "--control-socket", controlSocket, "--events", eventPath
-].map((value) => JSON.stringify(value)).join(",")}],required=true,startup_timeout_sec=10,tool_timeout_sec=10}`].join(",")}}`;
-const app = new AppServer(codexCommand, ["app-server", "-c", mcpConfig, "--stdio"]);
-let receipt;
+let turnId = null;
+const app = new AppServer(codexCommand, appServerArgs, {
+  serverRequestPolicy: mcpToolApprovalPolicy({
+    serverName: "takeform",
+    calls: {
+      takeform_snapshot: {},
+      takeform_propose_edit: PROPOSAL
+    },
+    getTurnId: () => turnId
+  })
+});
+const phases = { processStartedAt: new Date().toISOString() };
+let receipt = {
+  kind: runTurn ? "real_model_round_trip" : "no_model_preflight",
+  codexVersion: "0.154.0",
+  modelTurnStarted: false,
+  ephemeral: true,
+  sandbox: "read-only",
+  configuration: "app-server caller-owned mcp_servers override",
+  turnStartReturned: false,
+  phases
+};
+let modelEventCursor = null;
 
 try {
   await app.request("initialize", { clientInfo: { name: "takeform-proof", title: "Takeform proof", version: "0.2.0" } });
   app.notify("initialized");
+  phases.initializedAt = new Date().toISOString();
 
-  const catalog = await app.request("model/list", { includeHidden: false, limit: 100 });
-  const terra = catalog.data.find((entry) => entry.id === "gpt-5.6-terra" || entry.model === "gpt-5.6-terra");
+  const catalog = await listAll(app, "model/list", { includeHidden: false, limit: 100 });
+  const terra = catalog.find((entry) => entry.id === "gpt-5.6-terra" || entry.model === "gpt-5.6-terra");
   assert.ok(terra, "The installed model catalog does not advertise gpt-5.6-terra.");
   const model = terra.id ?? terra.model;
 
-  const statuses = await app.request("mcpServerStatus/list", { detail: "toolsAndAuthOnly", limit: 20 });
-  const unrelated = statuses.data.filter((server) => server.name !== "takeform");
+  const statuses = await listAll(app, "mcpServerStatus/list", { detail: "toolsAndAuthOnly", limit: 20 });
+  const unrelated = statuses.filter((server) => server.name !== "takeform");
   assert.ok(unrelated.every((server) => Object.keys(server.tools).length === 0), "An unrelated MCP server exposed tools.");
-  const takeform = statuses.data.find((server) => server.name === "takeform");
+  const takeform = statuses.find((server) => server.name === "takeform");
   assert.ok(takeform, "The Takeform MCP server is absent from the catalog.");
   const toolNames = Object.values(takeform.tools).map((tool) => tool.name).sort();
   assert.deepEqual(toolNames, REQUIRED_TOOLS, `The required Takeform tools were not discovered (${takeform.runtimeStatus}: ${takeform.toolsError ?? "no error"}).`);
@@ -221,13 +171,8 @@ try {
   assert.equal(firstSnapshot.revision, 1);
 
   receipt = {
-    kind: runTurn ? "real_model_round_trip" : "no_model_preflight",
-    codexVersion: "0.154.0",
+    ...receipt,
     model,
-    modelTurnStarted: runTurn,
-    ephemeral: true,
-    sandbox: "read-only",
-    configuration: "app-server caller-owned mcp_servers override",
     mcpServers: [takeform.name],
     unrelatedServers: { count: unrelated.length, configuredForInvocation: "disabled", exposedTools: 0 },
     tools: toolNames,
@@ -240,9 +185,13 @@ try {
     },
     initialSnapshot: firstSnapshot
   };
+  phases.preflightCompletedAt = new Date().toISOString();
 
   if (runTurn) {
+    modelEventCursor = readEvents(eventPath).length;
     const prompt = `Call takeform_snapshot. Then call takeform_propose_edit exactly once with ${JSON.stringify(PROPOSAL)}. Do not call any other tool. After the proposal, reply only: Proposed.`;
+    receipt.modelTurnStarted = true;
+    phases.turnStartRequestedAt = new Date().toISOString();
     const turnStarted = await app.request("turn/start", {
       threadId,
       effort: "low",
@@ -250,11 +199,17 @@ try {
       sandboxPolicy: { type: "readOnly", networkAccess: false },
       input: [{ type: "text", text: prompt }]
     }, 30_000);
-    const turnId = turnStarted.turn?.id ?? turnStarted.id;
-    const completed = await app.waitFor((message) => message.method === "turn/completed" && message.params?.turn?.id === turnId, 90_000);
+    receipt.turnStartReturned = true;
+    phases.turnStartReturnedAt = new Date().toISOString();
+    turnId = turnStarted.turn?.id ?? turnStarted.id;
+    receipt.turn = { id: turnId, status: "started" };
+    const completed = await app.waitFor((message) => message.method === "turn/completed" && message.params?.turn?.id === turnId, 120_000);
+    phases.turnCompletedAt = new Date().toISOString();
+    receipt.turn.status = completed.params.turn.status;
+    receipt.turn.errorCode = completed.params.turn.error?.code ?? null;
     assert.equal(completed.params.turn.status, "completed", completed.params.turn.error?.message);
 
-    const events = readEvents(eventPath);
+    const events = readEvents(eventPath).slice(modelEventCursor);
     assert.ok(events.some((event) => event.type === "snapshot_read"), "The model did not read the snapshot.");
     assert.ok(events.some((event) => event.type === "proposal_submitted" && event.commandID === PROPOSAL.commandID), "The model did not submit the specified proposal.");
 
@@ -314,21 +269,32 @@ try {
       modelToolEvents: events.filter((event) => ["snapshot_read", "proposal_submitted"].includes(event.type))
     };
     receipt.tokenUsage = usage;
+    receipt.diagnostics = app.diagnostics();
     receipt.result = "passed";
   } else {
+    receipt.diagnostics = app.diagnostics();
     receipt.result = "passed_before_model_turn";
   }
 } catch (error) {
-  process.stderr.write(`${JSON.stringify({ serverEvents: readEvents(eventPath).map((event) => event.type) })}\n`);
-  throw error;
-} finally {
-  await app.close();
-  if (receipt) {
-    receipt.terminalScratchInventory = [eventPath, controlSocket]
-      .filter(existsSync)
-      .map((path) => ({ name: basename(path), bytes: statSync(path).size }));
-    if (receiptPath) writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
-    else process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+  phases.failedAt = new Date().toISOString();
+  receipt.result = "failed";
+  receipt.failure = errorSummary(error, app.stderr);
+  if (!receipt.turn || receipt.turn.status === "started") {
+    receipt.turn = { id: turnId, status: turnId ? "completion_not_observed" : "not_started" };
   }
+  if (modelEventCursor !== null) {
+    receipt.modelToolEvents = readEvents(eventPath).slice(modelEventCursor).map((event) => event.type);
+    receipt.tokenUsage = app.notifications("thread/tokenUsage/updated").at(-1)?.params?.tokenUsage?.last ?? null;
+  }
+  receipt.diagnostics = app.diagnostics();
+  process.exitCode = 1;
+} finally {
+  receipt.processExit = await app.close();
+  phases.processReapedAt = new Date().toISOString();
+  receipt.terminalScratchInventory = [eventPath, controlSocket]
+    .filter(existsSync)
+    .map((path) => ({ name: basename(path), bytes: statSync(path).size }));
+  if (receiptPath) writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+  else process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
   rmSync(attemptDir, { recursive: true, force: true });
 }
