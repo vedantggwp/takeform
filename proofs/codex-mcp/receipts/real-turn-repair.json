@@ -1,0 +1,60 @@
+{
+  "kind": "real_model_round_trip",
+  "codexVersion": "0.154.0",
+  "model": "gpt-5.6-terra",
+  "modelTurnStarted": true,
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "configuration": "app-server caller-owned mcp_servers override",
+  "mcpServers": [
+    "takeform"
+  ],
+  "unrelatedServers": {
+    "count": 11,
+    "configuredForInvocation": "disabled",
+    "exposedTools": 0
+  },
+  "tools": [
+    "takeform_propose_edit",
+    "takeform_snapshot"
+  ],
+  "instructionSources": [],
+  "returnedSettings": {
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "reasoningEffort": "medium",
+    "approvalPolicy": null
+  },
+  "initialSnapshot": {
+    "revision": 1,
+    "scenes": [
+      {
+        "id": "scene-1",
+        "sentence": "Open with the creator's tension."
+      },
+      {
+        "id": "scene-2",
+        "sentence": "Show the one decision that changes the result."
+      },
+      {
+        "id": "scene-3",
+        "sentence": "End with a repeatable takeaway."
+      }
+    ]
+  },
+  "result": "timed_out_before_completion",
+  "failure": "No turn/completed notification arrived within 90 seconds.",
+  "modelToolEvents": [],
+  "proposalSubmitted": false,
+  "tokenUsage": null,
+  "terminalScratchInventory": [
+    {
+      "name": "mcp-events.jsonl",
+      "bytes": 296
+    },
+    {
+      "name": "creator.sock",
+      "bytes": 0
+    }
+  ]
+}

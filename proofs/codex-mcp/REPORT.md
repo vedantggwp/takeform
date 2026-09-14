@@ -1,27 +1,36 @@
 # Codex MCP proposal proof
 
-This proof models a generated three-scene project. The server advertises a read-only snapshot tool and a proposal tool. A proposal stays pending until a test creator accepts it. The source does not integrate with Takeform production authority, persistence, or UI.
+This proof models a generated three-scene project. The MCP server and creator control channel now share one ProposalStore. The control channel is an attempt-owned Unix socket that is not advertised to the model. This is a toy authority experiment, not Takeform production authorization.
 
 ## Result
 
-The local MCP protocol and creator acceptance semantics passed. The real Codex model turn did not receive the MCP tools. The requested end-to-end proposal round trip therefore failed.
+The repaired no-model preflight passed on Codex CLI 0.154.0. The app-server catalog exposed takeform_snapshot and takeform_propose_edit. Eleven unrelated configured servers exposed zero tools for this invocation. The ephemeral read-only thread returned no instruction sources, selected gpt-5.6-terra, and read revision 1 through the live MCP server.
 
-`codex exec --ignore-user-config --ephemeral` created an ephemeral `gpt-5.6-terra` turn. The turn reported 23,944 input tokens and 262 output tokens. The model replied that it could not access the Takeform tools. The proof server recorded no tool-list or tool-call event.
+The one permitted Terra turn did not complete within the driver's 90-second bound. It made no proposal tool call, returned no token usage, and was terminated with the app-server process. No second model turn ran. The requested real model proposal round trip therefore remains failed.
 
-The no-model app-server check then reported the cause. Codex disabled project-local config in this untrusted project. The `.codex/config.toml` declaration therefore did not load. This is measured from the app-server stderr. A future retry needs a root-approved trusted-project or per-thread configuration route. It must precede another model turn.
+The earlier blind run remains recorded in receipts/real-turn.json. It consumed 23,944 input tokens and exposed no Takeform tools. The repaired run did not repeat that failure mode because receipts/preflight.json proves discovery before the turn.
 
 ## Local behavior
 
-Run `npm test` in this directory. The test suite covers MCP framing and discovery, a pending proposal, explicit acceptance, duplicate acceptance, conflicting command IDs, malformed proposals, and stale proposals.
+ProposalStore rejects empty and whitespace-only replacement text. The server advertises snapshot and proposal tools. The private creator channel inspects and accepts proposals against the same in-memory store. Acceptance uses the existing compare-and-swap and idempotent command semantics.
 
-The proposal shape contains `expectedRevision`, `sceneID`, `replacementText`, and `commandID`. `ProposalStore.accept` performs compare-and-swap against the current revision. It returns the same result for a repeated accepted command ID.
+The Node 22.22.1 suite passed five tests. It proves revision 1 through MCP, a pending proposal without mutation, explicit creator acceptance through the private channel, and revision 2 through MCP. It also covers duplicate acceptance, conflicting command IDs, malformed proposals, whitespace replacement text, and stale proposals.
 
-`scripts/required-server-check.mjs` is a no-model app-server check. It starts an MCP server that exits immediately, marks it required, then starts an ephemeral thread. It returned a `thread/start` error that named the required server and its broken-pipe handshake. The command did not start a turn.
+scripts/required-server-check.mjs now resolves codex from PATH or --codex. Its requests reject on child exit or timeout. The live no-model check passed only after the returned error named required_failure and described an MCP startup failure.
+
+scripts/run-probe.mjs uses the documented app-server -c override and generated app-server schemas. Callers supply repeatable --disable-server or --disable-http-server flags for unrelated local MCP entries. Each disabled entry retains a valid transport shape. The driver fails before a turn unless only the two Takeform tools are exposed. The official configuration reference documents mcp_servers.<id>.enabled, required, enabled_tools, and the timeout fields.
+
+## Verification
+
+- Node 22.22.1 ran node --test test/*.test.mjs. All five tests passed.
+- Node 22.22.1 ran scripts/required-server-check.mjs without a model turn. The check passed.
+- Node 22.22.1 ran scripts/run-probe.mjs with invocation-only disable flags. The no-model catalog and revision 1 preflight passed.
+- The same command with --turn timed out before turn/completed. It made no model proposal call.
 
 ## Boundaries
 
-The local tests establish only the toy store behavior and the standard-MCP server framing. The failed real turn establishes that this configuration route was not operational in the observed CLI invocation. It does not prove native Takeform authority, production persistence, creator UX, provider flexibility, or ChatGPT web connectivity.
+The local test proves only toy store mechanics. The no-model receipt proves Codex app-server tool discovery and a live revision 1 read with explicit invocation configuration. Neither proves native Takeform authority, production persistence, creator UX, provider flexibility, or ChatGPT web connectivity.
 
-## Evidence
+One read-only diagnostic command unexpectedly printed an existing MCP environment credential while transport types were being investigated. The value was not copied into source, receipts, or reports. No further config dump or credential-bearing diagnostic ran.
 
-The real-turn JSONL, tool-event log, final message, and stderr stayed in local scratch. The retained facts above contain only event types, generated values, and aggregate token usage. Raw reasoning was not retained.
+Raw model reasoning was not retained. Public receipts contain generated values, aggregate settings, event facts, and no machine paths.

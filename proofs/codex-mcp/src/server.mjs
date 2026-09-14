@@ -1,5 +1,6 @@
 import readline from "node:readline";
 import { appendFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { ProposalStore, ProtocolError } from "./protocol.mjs";
 
 const store = new ProposalStore();
@@ -28,8 +29,8 @@ const tools = [
 ];
 
 function record(type, details = {}) {
-  if (!process.env.TAKEFORM_PROOF_EVENTS) return;
-  appendFileSync(process.env.TAKEFORM_PROOF_EVENTS, `${JSON.stringify({ type, ...details })}\n`);
+  if (!eventPath) return;
+  appendFileSync(eventPath, `${JSON.stringify({ type, ...details })}\n`);
 }
 
 function respond(id, result) {
@@ -41,12 +42,12 @@ function failure(id, error) {
 }
 
 function text(result) {
-  return { content: [{ type: "text", text: JSON.stringify(result) }] };
+  return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
 }
 
 function handle(request) {
   if (request.method === "initialize") {
-    return { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "takeform-proof", version: "0.1.0" } };
+    return { protocolVersion: request.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "takeform-proof", version: "0.2.0" } };
   }
   if (request.method === "tools/list") {
     record("tools_listed", { names: tools.map((tool) => tool.name) });
@@ -77,3 +78,45 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line
     failure(id, error);
   }
 });
+
+function argument(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
+const controlSocket = argument("--control-socket") ?? process.env.TAKEFORM_PROOF_CONTROL_SOCKET;
+const eventPath = argument("--events") ?? process.env.TAKEFORM_PROOF_EVENTS;
+let controlServer;
+record("server_started", { nodeVersion: process.version });
+
+function controlResult(request) {
+  if (request.action === "inspect") {
+    return { snapshot: store.getSnapshot(), pending: store.getPending() };
+  }
+  if (request.action === "accept") {
+    return store.accept(request.commandID);
+  }
+  throw new ProtocolError("unknown_control_action", "The control action is not supported.");
+}
+
+if (controlSocket) {
+  controlServer = createServer((connection) => {
+    const lines = readline.createInterface({ input: connection, crlfDelay: Infinity });
+    lines.once("line", (line) => {
+      try {
+        connection.end(`${JSON.stringify({ ok: true, result: controlResult(JSON.parse(line)) })}\n`);
+      } catch (error) {
+        connection.end(`${JSON.stringify({ ok: false, error: { code: error.code ?? "invalid_request", message: error.message } })}\n`);
+      }
+    });
+  });
+  controlServer.listen(controlSocket);
+}
+
+function shutdown() {
+  if (controlServer) controlServer.close(() => process.exit(0));
+  else process.exit(0);
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);

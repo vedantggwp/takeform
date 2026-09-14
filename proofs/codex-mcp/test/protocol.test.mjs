@@ -40,4 +40,5 @@ test("stale proposals and malformed inputs are rejected", () => {
   assert.throws(() => store.submit({ ...proposal, expectedRevision: 2, commandID: "proposal-other-0002", extra: true }), (error) => error instanceof ProtocolError && error.code === "invalid_proposal");
   store.submit({ ...proposal, commandID: "proposal-other-0002" });
   assert.throws(() => store.accept("proposal-other-0002"), (error) => error instanceof ProtocolError && error.code === "stale_proposal");
+  assert.throws(() => store.submit({ ...proposal, commandID: "proposal-empty-0003", replacementText: "   " }), (error) => error instanceof ProtocolError && error.code === "invalid_proposal");
 });

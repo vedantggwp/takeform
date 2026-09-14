@@ -34,7 +34,7 @@ export function parseProposal(raw, project) {
   if (typeof raw.sceneID !== "string" || !project.scenes.some((scene) => scene.id === raw.sceneID)) {
     throw new ProtocolError("invalid_proposal", "sceneID must identify an existing scene.");
   }
-  if (typeof raw.replacementText !== "string" || raw.replacementText.length < 1 || raw.replacementText.length > 160) {
+  if (typeof raw.replacementText !== "string" || raw.replacementText.trim().length < 1 || raw.replacementText.length > 160) {
     throw new ProtocolError("invalid_proposal", "replacementText must contain 1 to 160 characters.");
   }
   if (typeof raw.commandID !== "string" || !commandIDPattern.test(raw.commandID)) {
@@ -54,6 +54,12 @@ export class ProposalStore {
 
   getSnapshot() {
     return snapshot(this.#project);
+  }
+
+  getPending() {
+    return [...this.#proposals.values()]
+      .filter((proposal) => !this.#accepted.has(proposal.commandID))
+      .map((proposal) => structuredClone(proposal));
   }
 
   submit(raw) {
