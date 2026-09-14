@@ -13,7 +13,7 @@ guard let textFile = flag("--text-file"),
     exit(2)
 }
 
-final class Job: NSObject, AVSpeechSynthesizerDelegate {
+final class Job: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
     let text: String
     let aiff: URL
     let wordsURL: URL

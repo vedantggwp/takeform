@@ -1,0 +1,1199 @@
+{
+  "durationSeconds" : 38.227845804988661,
+  "isHumanGroundTruth" : false,
+  "origin" : "AVSpeechSynthesizer.willSpeakRangeOfSpeechString",
+  "sampleRate" : 22050,
+  "wordCount" : 119,
+  "words" : [
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 0
+      },
+      "index" : 0,
+      "sourceEndSeconds" : 0.29804988662131521,
+      "sourceStartSeconds" : 0.0078004535147392293,
+      "text" : "Hold"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 5
+      },
+      "index" : 1,
+      "sourceEndSeconds" : 0.37931972789115648,
+      "sourceStartSeconds" : 0.29804988662131521,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 9
+      },
+      "index" : 2,
+      "sourceEndSeconds" : 0.69278911564625856,
+      "sourceStartSeconds" : 0.37931972789115648,
+      "text" : "last"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 14
+      },
+      "index" : 3,
+      "sourceEndSeconds" : 1.2965079365079366,
+      "sourceStartSeconds" : 0.69278911564625856,
+      "text" : "thought."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 23
+      },
+      "index" : 4,
+      "sourceEndSeconds" : 1.4009977324263039,
+      "sourceStartSeconds" : 1.2965079365079366,
+      "text" : "The"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 27
+      },
+      "index" : 5,
+      "sourceEndSeconds" : 1.8189569160997732,
+      "sourceStartSeconds" : 1.4009977324263039,
+      "text" : "second"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 34
+      },
+      "index" : 6,
+      "sourceEndSeconds" : 2.0975963718820863,
+      "sourceStartSeconds" : 1.8189569160997732,
+      "text" : "take"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 39
+      },
+      "index" : 7,
+      "sourceEndSeconds" : 2.4226757369614513,
+      "sourceStartSeconds" : 2.0975963718820863,
+      "text" : "keeps"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 45
+      },
+      "index" : 8,
+      "sourceEndSeconds" : 2.5271655328798186,
+      "sourceStartSeconds" : 2.4226757369614513,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 49
+      },
+      "index" : 9,
+      "sourceEndSeconds" : 2.8638548752834465,
+      "sourceStartSeconds" : 2.5271655328798186,
+      "text" : "same"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 54
+      },
+      "index" : 10,
+      "sourceEndSeconds" : 3.1541043083900226,
+      "sourceStartSeconds" : 2.8638548752834465,
+      "text" : "meaning"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 62
+      },
+      "index" : 11,
+      "sourceEndSeconds" : 3.281814058956916,
+      "sourceStartSeconds" : 3.1541043083900226,
+      "text" : "and"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 66
+      },
+      "index" : 12,
+      "sourceEndSeconds" : 3.6417233560090705,
+      "sourceStartSeconds" : 3.281814058956916,
+      "text" : "drops"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 72
+      },
+      "index" : 13,
+      "sourceEndSeconds" : 3.7694331065759639,
+      "sourceStartSeconds" : 3.6417233560090705,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 76
+      },
+      "index" : 14,
+      "sourceEndSeconds" : 4.5240816326530613,
+      "sourceStartSeconds" : 3.7694331065759639,
+      "text" : "repeat."
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 84
+      },
+      "index" : 15,
+      "sourceEndSeconds" : 4.8956009070294781,
+      "sourceStartSeconds" : 4.5240816326530613,
+      "text" : "After"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 90
+      },
+      "index" : 16,
+      "sourceEndSeconds" : 5.0929705215419503,
+      "sourceStartSeconds" : 4.8956009070294781,
+      "text" : "this"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 95
+      },
+      "index" : 17,
+      "sourceEndSeconds" : 5.5573696145124716,
+      "sourceStartSeconds" : 5.0929705215419503,
+      "text" : "sentence"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 104
+      },
+      "index" : 18,
+      "sourceEndSeconds" : 5.7315192743764172,
+      "sourceStartSeconds" : 5.5573696145124716,
+      "text" : "there"
+    },
+    {
+      "characterRange" : {
+        "length" : 2,
+        "location" : 110
+      },
+      "index" : 19,
+      "sourceEndSeconds" : 5.8708390022675738,
+      "sourceStartSeconds" : 5.7315192743764172,
+      "text" : "is"
+    },
+    {
+      "characterRange" : {
+        "length" : 2,
+        "location" : 113
+      },
+      "index" : 20,
+      "sourceEndSeconds" : 6.0565986394557827,
+      "sourceStartSeconds" : 5.8708390022675738,
+      "text" : "no"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 116
+      },
+      "index" : 21,
+      "sourceEndSeconds" : 6.4513378684807252,
+      "sourceStartSeconds" : 6.0565986394557827,
+      "text" : "extra"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 122
+      },
+      "index" : 22,
+      "sourceEndSeconds" : 7.1711564625850341,
+      "sourceStartSeconds" : 6.4513378684807252,
+      "text" : "pause."
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 129
+      },
+      "index" : 23,
+      "sourceEndSeconds" : 7.2524263038548753,
+      "sourceStartSeconds" : 7.1711564625850341,
+      "text" : "A"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 131
+      },
+      "index" : 24,
+      "sourceEndSeconds" : 7.7632653061224488,
+      "sourceStartSeconds" : 7.2524263038548753,
+      "text" : "workshop"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 140
+      },
+      "index" : 25,
+      "sourceEndSeconds" : 8.1347845804988665,
+      "sourceStartSeconds" : 7.7632653061224488,
+      "text" : "table"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 146
+      },
+      "index" : 26,
+      "sourceEndSeconds" : 8.4714739229024936,
+      "sourceStartSeconds" : 8.1347845804988665,
+      "text" : "holds"
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 152
+      },
+      "index" : 27,
+      "sourceEndSeconds" : 8.5411337868480732,
+      "sourceStartSeconds" : 8.4714739229024936,
+      "text" : "a"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 154
+      },
+      "index" : 28,
+      "sourceEndSeconds" : 9.2377324263038556,
+      "sourceStartSeconds" : 8.5411337868480732,
+      "text" : "camera,"
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 162
+      },
+      "index" : 29,
+      "sourceEndSeconds" : 9.3073922902494335,
+      "sourceStartSeconds" : 9.2377324263038556,
+      "text" : "a"
+    },
+    {
+      "characterRange" : {
+        "length" : 9,
+        "location" : 164
+      },
+      "index" : 30,
+      "sourceEndSeconds" : 10.085260770975056,
+      "sourceStartSeconds" : 9.3073922902494335,
+      "text" : "notebook,"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 174
+      },
+      "index" : 31,
+      "sourceEndSeconds" : 10.236190476190476,
+      "sourceStartSeconds" : 10.085260770975056,
+      "text" : "and"
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 178
+      },
+      "index" : 32,
+      "sourceEndSeconds" : 10.294240362811792,
+      "sourceStartSeconds" : 10.236190476190476,
+      "text" : "a"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 180
+      },
+      "index" : 33,
+      "sourceEndSeconds" : 10.944399092970521,
+      "sourceStartSeconds" : 10.294240362811792,
+      "text" : "cup."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 185
+      },
+      "index" : 34,
+      "sourceEndSeconds" : 11.095328798185941,
+      "sourceStartSeconds" : 10.944399092970521,
+      "text" : "The"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 189
+      },
+      "index" : 35,
+      "sourceEndSeconds" : 11.66421768707483,
+      "sourceStartSeconds" : 11.095328798185941,
+      "text" : "operator"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 198
+      },
+      "index" : 36,
+      "sourceEndSeconds" : 12.012517006802721,
+      "sourceStartSeconds" : 11.66421768707483,
+      "text" : "names"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 204
+      },
+      "index" : 37,
+      "sourceEndSeconds" : 12.117006802721088,
+      "sourceStartSeconds" : 12.012517006802721,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 208
+      },
+      "index" : 38,
+      "sourceEndSeconds" : 12.767165532879819,
+      "sourceStartSeconds" : 12.117006802721088,
+      "text" : "cut,"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 213
+      },
+      "index" : 39,
+      "sourceEndSeconds" : 13.127074829931972,
+      "sourceStartSeconds" : 12.767165532879819,
+      "text" : "keeps"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 219
+      },
+      "index" : 40,
+      "sourceEndSeconds" : 13.219954648526077,
+      "sourceStartSeconds" : 13.127074829931972,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 223
+      },
+      "index" : 41,
+      "sourceEndSeconds" : 13.904943310657597,
+      "sourceStartSeconds" : 13.219954648526077,
+      "text" : "pause,"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 230
+      },
+      "index" : 42,
+      "sourceEndSeconds" : 14.044263038548753,
+      "sourceStartSeconds" : 13.904943310657597,
+      "text" : "and"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 234
+      },
+      "index" : 43,
+      "sourceEndSeconds" : 14.497052154195011,
+      "sourceStartSeconds" : 14.044263038548753,
+      "text" : "rejects"
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 242
+      },
+      "index" : 44,
+      "sourceEndSeconds" : 14.555102040816326,
+      "sourceStartSeconds" : 14.497052154195011,
+      "text" : "a"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 244
+      },
+      "index" : 45,
+      "sourceEndSeconds" : 14.94984126984127,
+      "sourceStartSeconds" : 14.555102040816326,
+      "text" : "false"
+    },
+    {
+      "characterRange" : {
+        "length" : 9,
+        "location" : 250
+      },
+      "index" : 46,
+      "sourceEndSeconds" : 15.797369614512471,
+      "sourceStartSeconds" : 14.94984126984127,
+      "text" : "deletion."
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 260
+      },
+      "index" : 47,
+      "sourceEndSeconds" : 16.343038548752833,
+      "sourceStartSeconds" : 15.797369614512471,
+      "text" : "Captions"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 269
+      },
+      "index" : 48,
+      "sourceEndSeconds" : 16.586848072562358,
+      "sourceStartSeconds" : 16.343038548752833,
+      "text" : "must"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 274
+      },
+      "index" : 49,
+      "sourceEndSeconds" : 17.004807256235829,
+      "sourceStartSeconds" : 16.586848072562358,
+      "text" : "follow"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 281
+      },
+      "index" : 50,
+      "sourceEndSeconds" : 17.109297052154194,
+      "sourceStartSeconds" : 17.004807256235829,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 285
+      },
+      "index" : 51,
+      "sourceEndSeconds" : 17.538866213151927,
+      "sourceStartSeconds" : 17.109297052154194,
+      "text" : "measured"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 294
+      },
+      "index" : 52,
+      "sourceEndSeconds" : 17.863945578231291,
+      "sourceStartSeconds" : 17.538866213151927,
+      "text" : "words"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 300
+      },
+      "index" : 53,
+      "sourceEndSeconds" : 18.038095238095238,
+      "sourceStartSeconds" : 17.863945578231291,
+      "text" : "through"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 308
+      },
+      "index" : 54,
+      "sourceEndSeconds" : 18.142585034013607,
+      "sourceStartSeconds" : 18.038095238095238,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 312
+      },
+      "index" : 55,
+      "sourceEndSeconds" : 18.69986394557823,
+      "sourceStartSeconds" : 18.142585034013607,
+      "text" : "map."
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 317
+      },
+      "index" : 56,
+      "sourceEndSeconds" : 18.804353741496598,
+      "sourceStartSeconds" : 18.69986394557823,
+      "text" : "A"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 319
+      },
+      "index" : 57,
+      "sourceEndSeconds" : 19.152653061224491,
+      "sourceStartSeconds" : 18.804353741496598,
+      "text" : "phrase"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 326
+      },
+      "index" : 58,
+      "sourceEndSeconds" : 19.3384126984127,
+      "sourceStartSeconds" : 19.152653061224491,
+      "text" : "that"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 331
+      },
+      "index" : 59,
+      "sourceEndSeconds" : 19.593832199546487,
+      "sourceStartSeconds" : 19.3384126984127,
+      "text" : "sits"
+    },
+    {
+      "characterRange" : {
+        "length" : 2,
+        "location" : 336
+      },
+      "index" : 60,
+      "sourceEndSeconds" : 19.756371882086167,
+      "sourceStartSeconds" : 19.593832199546487,
+      "text" : "on"
+    },
+    {
+      "characterRange" : {
+        "length" : 1,
+        "location" : 339
+      },
+      "index" : 61,
+      "sourceEndSeconds" : 19.826031746031745,
+      "sourceStartSeconds" : 19.756371882086167,
+      "text" : "a"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 341
+      },
+      "index" : 62,
+      "sourceEndSeconds" : 20.081451247165532,
+      "sourceStartSeconds" : 19.826031746031745,
+      "text" : "cut"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 345
+      },
+      "index" : 63,
+      "sourceEndSeconds" : 20.464580498866212,
+      "sourceStartSeconds" : 20.081451247165532,
+      "text" : "stays"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 351
+      },
+      "index" : 64,
+      "sourceEndSeconds" : 20.615510204081634,
+      "sourceStartSeconds" : 20.464580498866212,
+      "text" : "with"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 356
+      },
+      "index" : 65,
+      "sourceEndSeconds" : 20.719999999999999,
+      "sourceStartSeconds" : 20.615510204081634,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 360
+      },
+      "index" : 66,
+      "sourceEndSeconds" : 21.010249433106576,
+      "sourceStartSeconds" : 20.719999999999999,
+      "text" : "take"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 365
+      },
+      "index" : 67,
+      "sourceEndSeconds" : 21.172789115646257,
+      "sourceStartSeconds" : 21.010249433106576,
+      "text" : "that"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 370
+      },
+      "index" : 68,
+      "sourceEndSeconds" : 21.451428571428572,
+      "sourceStartSeconds" : 21.172789115646257,
+      "text" : "owns"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 375
+      },
+      "index" : 69,
+      "sourceEndSeconds" : 21.857777777777777,
+      "sourceStartSeconds" : 21.451428571428572,
+      "text" : "it."
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 379
+      },
+      "index" : 70,
+      "sourceEndSeconds" : 22.28734693877551,
+      "sourceStartSeconds" : 21.857777777777777,
+      "text" : "Chapter"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 387
+      },
+      "index" : 71,
+      "sourceEndSeconds" : 22.716916099773243,
+      "sourceStartSeconds" : 22.28734693877551,
+      "text" : "labels"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 394
+      },
+      "index" : 72,
+      "sourceEndSeconds" : 22.960725623582768,
+      "sourceStartSeconds" : 22.716916099773243,
+      "text" : "come"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 399
+      },
+      "index" : 73,
+      "sourceEndSeconds" : 23.158095238095239,
+      "sourceStartSeconds" : 22.960725623582768,
+      "text" : "from"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 404
+      },
+      "index" : 74,
+      "sourceEndSeconds" : 23.285804988662132,
+      "sourceStartSeconds" : 23.158095238095239,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 408
+      },
+      "index" : 75,
+      "sourceEndSeconds" : 23.935963718820862,
+      "sourceStartSeconds" : 23.285804988662132,
+      "text" : "author,"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 416
+      },
+      "index" : 76,
+      "sourceEndSeconds" : 24.144943310657595,
+      "sourceStartSeconds" : 23.935963718820862,
+      "text" : "not"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 420
+      },
+      "index" : 77,
+      "sourceEndSeconds" : 24.319092970521542,
+      "sourceStartSeconds" : 24.144943310657595,
+      "text" : "from"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 425
+      },
+      "index" : 78,
+      "sourceEndSeconds" : 24.574512471655328,
+      "sourceStartSeconds" : 24.319092970521542,
+      "text" : "every"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 431
+      },
+      "index" : 79,
+      "sourceEndSeconds" : 25.422040816326529,
+      "sourceStartSeconds" : 24.574512471655328,
+      "text" : "segment."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 440
+      },
+      "index" : 80,
+      "sourceEndSeconds" : 25.526530612244898,
+      "sourceStartSeconds" : 25.422040816326529,
+      "text" : "The"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 444
+      },
+      "index" : 81,
+      "sourceEndSeconds" : 25.932879818594106,
+      "sourceStartSeconds" : 25.526530612244898,
+      "text" : "music"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 450
+      },
+      "index" : 82,
+      "sourceEndSeconds" : 26.14185941043084,
+      "sourceStartSeconds" : 25.932879818594106,
+      "text" : "bed"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 454
+      },
+      "index" : 83,
+      "sourceEndSeconds" : 26.513378684807257,
+      "sourceStartSeconds" : 26.14185941043084,
+      "text" : "stays"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 460
+      },
+      "index" : 84,
+      "sourceEndSeconds" : 26.768798185941044,
+      "sourceStartSeconds" : 26.513378684807257,
+      "text" : "under"
+    },
+    {
+      "characterRange" : {
+        "length" : 10,
+        "location" : 466
+      },
+      "index" : 85,
+      "sourceEndSeconds" : 27.523446712018142,
+      "sourceStartSeconds" : 26.768798185941044,
+      "text" : "the voice."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 477
+      },
+      "index" : 86,
+      "sourceEndSeconds" : 27.790476190476191,
+      "sourceStartSeconds" : 27.523446712018142,
+      "text" : "One"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 481
+      },
+      "index" : 87,
+      "sourceEndSeconds" : 28.127165532879818,
+      "sourceStartSeconds" : 27.790476190476191,
+      "text" : "sound"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 487
+      },
+      "index" : 88,
+      "sourceEndSeconds" : 28.510294784580498,
+      "sourceStartSeconds" : 28.127165532879818,
+      "text" : "effect"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 494
+      },
+      "index" : 89,
+      "sourceEndSeconds" : 28.846984126984125,
+      "sourceStartSeconds" : 28.510294784580498,
+      "text" : "marks"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 500
+      },
+      "index" : 90,
+      "sourceEndSeconds" : 28.951473922902494,
+      "sourceStartSeconds" : 28.846984126984125,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 504
+      },
+      "index" : 91,
+      "sourceEndSeconds" : 29.404263038548752,
+      "sourceStartSeconds" : 28.951473922902494,
+      "text" : "chapter"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 512
+      },
+      "index" : 92,
+      "sourceEndSeconds" : 30.147301587301587,
+      "sourceStartSeconds" : 29.404263038548752,
+      "text" : "change."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 520
+      },
+      "index" : 93,
+      "sourceEndSeconds" : 30.263401360544218,
+      "sourceStartSeconds" : 30.147301587301587,
+      "text" : "The"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 524
+      },
+      "index" : 94,
+      "sourceEndSeconds" : 30.553650793650792,
+      "sourceStartSeconds" : 30.263401360544218,
+      "text" : "film"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 529
+      },
+      "index" : 95,
+      "sourceEndSeconds" : 30.785850340136054,
+      "sourceStartSeconds" : 30.553650793650792,
+      "text" : "ends"
+    },
+    {
+      "characterRange" : {
+        "length" : 2,
+        "location" : 534
+      },
+      "index" : 96,
+      "sourceEndSeconds" : 30.936780045351473,
+      "sourceStartSeconds" : 30.785850340136054,
+      "text" : "on"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 537
+      },
+      "index" : 97,
+      "sourceEndSeconds" : 31.018049886621316,
+      "sourceStartSeconds" : 30.936780045351473,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 541
+      },
+      "index" : 98,
+      "sourceEndSeconds" : 31.331519274376419,
+      "sourceStartSeconds" : 31.018049886621316,
+      "text" : "same"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 546
+      },
+      "index" : 99,
+      "sourceEndSeconds" : 31.842358276643992,
+      "sourceStartSeconds" : 31.331519274376419,
+      "text" : "sentence"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 555
+      },
+      "index" : 100,
+      "sourceEndSeconds" : 32.109387755102041,
+      "sourceStartSeconds" : 31.842358276643992,
+      "text" : "both"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 560
+      },
+      "index" : 101,
+      "sourceEndSeconds" : 32.434467120181409,
+      "sourceStartSeconds" : 32.109387755102041,
+      "text" : "takes"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 566
+      },
+      "index" : 102,
+      "sourceEndSeconds" : 33.038185941043082,
+      "sourceStartSeconds" : 32.434467120181409,
+      "text" : "share."
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 573
+      },
+      "index" : 103,
+      "sourceEndSeconds" : 33.142675736961451,
+      "sourceStartSeconds" : 33.038185941043082,
+      "text" : "The"
+    },
+    {
+      "characterRange" : {
+        "length" : 8,
+        "location" : 577
+      },
+      "index" : 104,
+      "sourceEndSeconds" : 33.630294784580499,
+      "sourceStartSeconds" : 33.142675736961451,
+      "text" : "notebook"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 586
+      },
+      "index" : 105,
+      "sourceEndSeconds" : 33.943764172335598,
+      "sourceStartSeconds" : 33.630294784580499,
+      "text" : "lists"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 592
+      },
+      "index" : 106,
+      "sourceEndSeconds" : 34.059863945578229,
+      "sourceStartSeconds" : 33.943764172335598,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 596
+      },
+      "index" : 107,
+      "sourceEndSeconds" : 34.384943310657597,
+      "sourceStartSeconds" : 34.059863945578229,
+      "text" : "five"
+    },
+    {
+      "characterRange" : {
+        "length" : 4,
+        "location" : 601
+      },
+      "index" : 108,
+      "sourceEndSeconds" : 34.640362811791384,
+      "sourceStartSeconds" : 34.384943310657597,
+      "text" : "word"
+    },
+    {
+      "characterRange" : {
+        "length" : 11,
+        "location" : 606
+      },
+      "index" : 109,
+      "sourceEndSeconds" : 35.186031746031745,
+      "sourceStartSeconds" : 34.640362811791384,
+      "text" : "corrections"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 618
+      },
+      "index" : 110,
+      "sourceEndSeconds" : 35.302131519274376,
+      "sourceStartSeconds" : 35.186031746031745,
+      "text" : "and"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 622
+      },
+      "index" : 111,
+      "sourceEndSeconds" : 35.371791383219957,
+      "sourceStartSeconds" : 35.302131519274376,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 5,
+        "location" : 626
+      },
+      "index" : 112,
+      "sourceEndSeconds" : 35.627210884353744,
+      "sourceStartSeconds" : 35.371791383219957,
+      "text" : "three"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 632
+      },
+      "index" : 113,
+      "sourceEndSeconds" : 36.091609977324261,
+      "sourceStartSeconds" : 35.627210884353744,
+      "text" : "chapter"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 640
+      },
+      "index" : 114,
+      "sourceEndSeconds" : 36.521179138321997,
+      "sourceStartSeconds" : 36.091609977324261,
+      "text" : "labels"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 647
+      },
+      "index" : 115,
+      "sourceEndSeconds" : 36.91591836734694,
+      "sourceStartSeconds" : 36.521179138321997,
+      "text" : "before"
+    },
+    {
+      "characterRange" : {
+        "length" : 3,
+        "location" : 654
+      },
+      "index" : 116,
+      "sourceEndSeconds" : 37.101678004535145,
+      "sourceStartSeconds" : 36.91591836734694,
+      "text" : "the"
+    },
+    {
+      "characterRange" : {
+        "length" : 6,
+        "location" : 658
+      },
+      "index" : 117,
+      "sourceEndSeconds" : 37.600907029478456,
+      "sourceStartSeconds" : 37.101678004535145,
+      "text" : "export"
+    },
+    {
+      "characterRange" : {
+        "length" : 7,
+        "location" : 665
+      },
+      "index" : 118,
+      "sourceEndSeconds" : 38.227845804988661,
+      "sourceStartSeconds" : 37.600907029478456,
+      "text" : "starts."
+    }
+  ]
+}
