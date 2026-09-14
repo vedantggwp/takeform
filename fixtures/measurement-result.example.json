@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "M",
+  "machine": {
+    "model": "unspecified",
+    "arch": "arm64",
+    "chip": "unspecified"
+  },
+  "osBuild": "25G83",
+  "toolPins": {
+    "ffmpeg": "8.0.1",
+    "swift": "6.3",
+    "node": "22.22.1",
+    "macos": "26.6.2 (25G83)",
+    "xcode": "26.4 (17E192)"
+  },
+  "backend": {
+    "identity": "none",
+    "version": "not-run"
+  },
+  "renderSettings": {
+    "note": "No renderer was run. Fill this object when a probe exists."
+  },
+  "runKind": "cold",
+  "wallTimeSeconds": null,
+  "peakRssBytes": null,
+  "seekLatenciesMs": [
+    {
+      "point": "frame-240",
+      "latencyMs": null
+    }
+  ],
+  "firstPreviewFrameSeconds": null,
+  "outputSha256": null,
+  "probeSummary": null,
+  "checks": [
+    {
+      "id": "export-wall-realtime-multiple",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "seek-frame-240-ms",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "first-last-frame-hash-stable",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "moment-used-exactly-once",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "caption-projects-from-source",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "corrected-word-timing-ms",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "word-onset-median-ms",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "word-onset-p95-ms",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "caption-no-straddle-cut",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "audio-peak-dbtp",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "loudness-error-lu",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "av-offset-frames",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "speech-cuts-listen",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "peak-rss-bytes",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "cancel-at-minute-10-s",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "kill-reopen-interrupted-count",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "chapter-7-selective-invalidation",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "joined-stream-continuous",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "chapter-joins-listen",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    },
+    {
+      "id": "selection-feedback-p95-ms",
+      "status": "not_run",
+      "detail": "No renderer was run in the fixture contract PR."
+    }
+  ],
+  "failures": [],
+  "rawRuns": []
+}

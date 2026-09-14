@@ -1,0 +1,714 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takeform.dev/schema/fixture-manifest.schema.json",
+  "title": "FixtureManifest",
+  "description": "Renderer-independent acceptance fixture. Times use RationalTime as ticks over timescale. SourceTime and OutputTime stay distinct objects.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "purpose",
+    "generator",
+    "sources",
+    "moments",
+    "canonicalPlan",
+    "expected",
+    "rights",
+    "thresholds"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[MTL]$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generator": {
+      "$ref": "#/$defs/generator"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "moments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/moment"
+      }
+    },
+    "canonicalPlan": {
+      "$ref": "#/$defs/canonicalPlan"
+    },
+    "expected": {
+      "$ref": "#/$defs/expected"
+    },
+    "rights": {
+      "$ref": "#/$defs/rights"
+    },
+    "thresholds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/threshold"
+      }
+    }
+  },
+  "$defs": {
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticks",
+        "timescale"
+      ],
+      "properties": {
+        "ticks": {
+          "type": "integer"
+        },
+        "timescale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "frameRate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num",
+        "den"
+      ],
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "sourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "duration"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/rational"
+        },
+        "duration": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "outputRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "duration"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/rational"
+        },
+        "duration": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "toolPins"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolPins": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "kind"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "video",
+            "audio",
+            "still"
+          ]
+        },
+        "codec": {
+          "type": "string"
+        },
+        "timebase": {
+          "$ref": "#/$defs/rational"
+        },
+        "sampleRate": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "channels": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "variableFrameRate": {
+          "type": "boolean"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "sha256",
+        "container",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$|^PENDING_AFTER_GENERATE$"
+        },
+        "container": {
+          "type": "string",
+          "minLength": 1
+        },
+        "codecs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frameRate": {
+          "$ref": "#/$defs/frameRate"
+        },
+        "duration": {
+          "$ref": "#/$defs/rational"
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stream"
+          }
+        },
+        "rotationDegrees": {
+          "type": "integer"
+        },
+        "timebase": {
+          "$ref": "#/$defs/rational"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "still",
+            "video",
+            "livePhotoStill",
+            "livePhotoVideo",
+            "audio",
+            "corrupt",
+            "duplicateOf"
+          ]
+        },
+        "duplicateOf": {
+          "type": "string"
+        },
+        "contentIdentifier": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "moment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceIds",
+        "confidencePermille"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidencePermille": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "pairingNote": {
+          "type": "string"
+        }
+      }
+    },
+    "occurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceId",
+        "sourceRange",
+        "outputRange",
+        "retimeFactor",
+        "layer"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceRange": {
+          "$ref": "#/$defs/sourceRange"
+        },
+        "outputRange": {
+          "$ref": "#/$defs/outputRange"
+        },
+        "retimeFactor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "num",
+            "den"
+          ],
+          "properties": {
+            "num": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "den": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "layer": {
+          "type": "integer"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "picture",
+            "dialogue",
+            "music",
+            "sfx",
+            "caption",
+            "transition"
+          ]
+        }
+      }
+    },
+    "canonicalPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outputFrameRate",
+        "width",
+        "height",
+        "occurrences"
+      ],
+      "properties": {
+        "outputFrameRate": {
+          "$ref": "#/$defs/frameRate"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurrences": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/occurrence"
+          }
+        },
+        "authorChapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "outputStart"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "outputStart": {
+                "$ref": "#/$defs/rational"
+              }
+            }
+          }
+        },
+        "wordCorrections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "wordIndex",
+              "fromText",
+              "toText",
+              "timingUnchanged"
+            ],
+            "properties": {
+              "wordIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fromText": {
+                "type": "string"
+              },
+              "toText": {
+                "type": "string"
+              },
+              "timingUnchanged": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "cutList": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "takeSourceId",
+              "sourceRange",
+              "outputRange"
+            ],
+            "properties": {
+              "takeSourceId": {
+                "type": "string"
+              },
+              "sourceRange": {
+                "$ref": "#/$defs/sourceRange"
+              },
+              "outputRange": {
+                "$ref": "#/$defs/outputRange"
+              },
+              "retimeFactor": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "num",
+                  "den"
+                ],
+                "properties": {
+                  "num": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "den": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "occurrenceId",
+        "sourceId",
+        "sourceRange",
+        "outputRange"
+      ],
+      "properties": {
+        "occurrenceId": {
+          "type": "string"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "sourceRange": {
+          "$ref": "#/$defs/sourceRange"
+        },
+        "outputRange": {
+          "$ref": "#/$defs/outputRange"
+        }
+      }
+    },
+    "caption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "sourceRange",
+        "outputRange",
+        "takeSourceId"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "sourceRange": {
+          "$ref": "#/$defs/sourceRange"
+        },
+        "outputRange": {
+          "$ref": "#/$defs/outputRange"
+        },
+        "takeSourceId": {
+          "type": "string"
+        },
+        "straddlesCut": {
+          "type": "boolean"
+        }
+      }
+    },
+    "coverageRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "momentId",
+        "usedCount"
+      ],
+      "properties": {
+        "momentId": {
+          "type": "string"
+        },
+        "usedCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "chapterBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "outputTime",
+        "clean"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTime": {
+          "$ref": "#/$defs/rational"
+        },
+        "clean": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frameCount",
+        "outputDuration",
+        "audioDuration",
+        "sourceToOutput",
+        "noRepeatCoverage"
+      ],
+      "properties": {
+        "frameCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameCountRule": {
+          "type": "string"
+        },
+        "outputDuration": {
+          "$ref": "#/$defs/rational"
+        },
+        "audioDuration": {
+          "$ref": "#/$defs/rational"
+        },
+        "sourceToOutput": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mapping"
+          }
+        },
+        "noRepeatCoverage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/coverageRow"
+          }
+        },
+        "captions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/caption"
+          }
+        },
+        "chapterBoundaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapterBoundary"
+          }
+        },
+        "wordTimingReceipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "origin",
+            "isHumanGroundTruth"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "isHumanGroundTruth": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "licence",
+        "redistribution",
+        "humanViewingChecks"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "enum": [
+            "generated"
+          ]
+        },
+        "licence": {
+          "type": "string"
+        },
+        "redistribution": {
+          "type": "string"
+        },
+        "humanViewingChecks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "limit",
+        "unit",
+        "requiresHuman",
+        "appliesTo"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "requiresHuman": {
+          "type": "boolean"
+        },
+        "appliesTo": {
+          "type": "string",
+          "enum": [
+            "M",
+            "T",
+            "L",
+            "all"
+          ]
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

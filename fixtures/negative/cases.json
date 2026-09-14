@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "note": "Protocol negative cases. No renderer is run in this PR. Expected outcomes are the contract later probes must meet.",
+  "cases": [
+    {
+      "id": "malformed-manifest",
+      "setup": "Load fixtures/negative/malformed-manifest.json.",
+      "expectedOutcome": "Schema validation fails with a message that names the missing required field. No render starts."
+    },
+    {
+      "id": "unsupported-feature",
+      "setup": "Ask a backend to render a plan that requests a feature it does not declare, for example a live-photo motion alternative when the backend has no pair handling.",
+      "expectedOutcome": "The backend refuses before render. The refusal names the unsupported feature. No output receipt is written."
+    },
+    {
+      "id": "missing-media",
+      "setup": "Delete one source listed in the plan, then ask the backend to build at plan time.",
+      "expectedOutcome": "Plan-time error. The missing source id and digest are named. No silent skip."
+    },
+    {
+      "id": "stale-preview",
+      "setup": "Show a preview for plan digest A, then edit the plan to digest B without rebuilding the preview.",
+      "expectedOutcome": "The preview is marked not current against the newer plan digest. It cannot stand in for approval of B."
+    },
+    {
+      "id": "interrupted-render",
+      "setup": "Kill the worker during fixture L, then reopen and read the reconcile report.",
+      "expectedOutcome": "Exactly one interrupted attempt. Retry resumes from cached clean segments when those segments exist. No duplicate completed output."
+    }
+  ]
+}
