@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "title": "Takeform acceptance fixture registry",
+  "manifestSchema": "schema/fixture-manifest.schema.json",
+  "measurementSchema": "schema/measurement-result.schema.json",
+  "fixtures": [
+    {
+      "id": "M",
+      "path": "M/manifest.json",
+      "generator": "M/generate.sh",
+      "purpose": "Overlapping montage with mixed stills, video, Live Photo pairs, a duplicate, and a corrupt file."
+    },
+    {
+      "id": "T",
+      "path": "T/manifest.json",
+      "generator": "T/generate.sh",
+      "purpose": "Talking-head edit with on-device synthesized speech, VFR take, captions, music, and SFX."
+    },
+    {
+      "id": "L",
+      "path": "L/manifest.json",
+      "generator": "L/generate.sh",
+      "purpose": "Thirty-minute chaptered film from fifteen labelled two-minute chapters with join crossfades."
+    }
+  ],
+  "negativeCases": [
+    {
+      "id": "malformed-manifest",
+      "path": "negative/malformed-manifest.json",
+      "expect": "schema-fail"
+    },
+    {
+      "id": "unsupported-feature",
+      "path": "negative/cases.json",
+      "key": "unsupported-feature",
+      "expect": "backend-refuse-before-render"
+    },
+    {
+      "id": "missing-media",
+      "path": "negative/cases.json",
+      "key": "missing-media",
+      "expect": "plan-time-error"
+    },
+    {
+      "id": "stale-preview",
+      "path": "negative/cases.json",
+      "key": "stale-preview",
+      "expect": "preview-not-current"
+    },
+    {
+      "id": "interrupted-render",
+      "path": "negative/cases.json",
+      "key": "interrupted-render",
+      "expect": "one-interrupted-attempt"
+    }
+  ]
+}

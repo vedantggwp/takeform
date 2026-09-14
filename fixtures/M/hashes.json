@@ -1,0 +1,54 @@
+{
+  "hashKind": "container",
+  "note": "Container sha256 of generated files. If a second generate differs, verify.sh switches this to decoded-av and records framemd5 plus audio md5.",
+  "files": {
+    "media/clip-24.mov": {
+      "sha256": "db4687e3a0edfc08bfe3ada4af965874bd5ae921239801ceda0ccbe0e778f1bb"
+    },
+    "media/clip-2997.mp4": {
+      "sha256": "06fdca3c7c3caac9278155737f43b808b5f44167163b09582b6d04dc4d964532"
+    },
+    "media/garden.png": {
+      "sha256": "62f8bf19a2401e0aeb9264cfa21a88cf425befc682cb619e144534316f810c6b"
+    },
+    "media/harbor-corrupt.png": {
+      "sha256": "22847ba8cc16b3138f3c1c1b1bdaabfe30e62d58a1e87bc809cf53b9af355bb3"
+    },
+    "media/harbor-duplicate.png": {
+      "sha256": "94eb94dc5846a240007906b722d894c7157388e7570ebd4a9a39a14e8545dab1"
+    },
+    "media/harbor.png": {
+      "sha256": "94eb94dc5846a240007906b722d894c7157388e7570ebd4a9a39a14e8545dab1"
+    },
+    "media/hill.png": {
+      "sha256": "3303df8594f8a52f3383bc0a8f4fec254cfe983b0a006e4902cfed020ef1c012"
+    },
+    "media/library.png": {
+      "sha256": "2fde58ee38918225a6155a8dfcd9e44eb6ff8d33df8735dd8677a98e1e61f681"
+    },
+    "media/lp-matched.heic": {
+      "sha256": "22a30dc73f51ccae3a761ffa02b6d584818f1a40c9d14af1bbbaf390f5d8657e"
+    },
+    "media/lp-matched.mov": {
+      "sha256": "dafdfa0f7ed20c9c54280b57bc8b252279dc631152b643bf9ff560ca4694e73f"
+    },
+    "media/lp-mismatch.heic": {
+      "sha256": "b721ab9e595b7d26e74f1d968ef7212f963c3761407e9c3a990db4d82b21dcc7"
+    },
+    "media/lp-mismatch.mov": {
+      "sha256": "b9727e08c120b61884e6e15fb6f512325dabbdc3e2d65162576342c5bc9a74f9"
+    },
+    "media/market.png": {
+      "sha256": "16ce9c767a8fc69a11638e6075c6de2408593fbd70b10ad244cebc243da12dd6"
+    },
+    "media/night.png": {
+      "sha256": "585f90dbc84d2abb80eab27d8b3683e79f9ca0c2dd755d6fe2d21df467ea4e13"
+    },
+    "media/station.heic": {
+      "sha256": "57d04c4d43065b238a879e70142e08471c7c34bd04516cb1da17650f93247f1d"
+    },
+    "media/workshop.png": {
+      "sha256": "8139353af148ff1f2559f21be21fb9ba7ed309bd3aa612be9ddd8172a6c47753"
+    }
+  }
+}

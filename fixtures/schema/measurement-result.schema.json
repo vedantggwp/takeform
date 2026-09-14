@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takeform.dev/schema/measurement-result.schema.json",
+  "title": "MeasurementResult",
+  "description": "One renderer probe run against a FixtureManifest. Status not_run is required for any check that did not execute.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureId",
+    "machine",
+    "osBuild",
+    "toolPins",
+    "backend",
+    "renderSettings",
+    "runKind",
+    "wallTimeSeconds",
+    "peakRssBytes",
+    "seekLatenciesMs",
+    "firstPreviewFrameSeconds",
+    "outputSha256",
+    "probeSummary",
+    "checks",
+    "failures"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "fixtureId": {
+      "type": "string",
+      "pattern": "^[MTL]$"
+    },
+    "machine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "arch",
+        "chip"
+      ],
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "chip": {
+          "type": "string"
+        }
+      }
+    },
+    "osBuild": {
+      "type": "string"
+    },
+    "toolPins": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "version"
+      ],
+      "properties": {
+        "identity": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "renderSettings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "runKind": {
+      "type": "string",
+      "enum": [
+        "cold",
+        "warm"
+      ]
+    },
+    "wallTimeSeconds": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "peakRssBytes": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "seekLatenciesMs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "point",
+          "latencyMs"
+        ],
+        "properties": {
+          "point": {
+            "type": "string"
+          },
+          "latencyMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "firstPreviewFrameSeconds": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "outputSha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "probeSummary": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "not_run",
+              "needs_human_viewing"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rawRuns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "wallTimeSeconds",
+          "failed"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "wallTimeSeconds": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "failed": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

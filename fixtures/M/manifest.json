@@ -1,0 +1,1268 @@
+{
+  "schemaVersion": 1,
+  "id": "M",
+  "title": "Overlapping montage",
+  "purpose": "Renderer-independent 16 s montage with mixed stills, two frame rates, Live Photo pairs, a duplicate, and a corrupt file. No narration.",
+  "generator": {
+    "command": "./fixtures/M/generate.sh",
+    "toolPins": {
+      "ffmpeg": "8.0.1",
+      "ffprobe": "8.0.1",
+      "swift": "6.3",
+      "node": "22.22.1",
+      "macos": "26.6.2 (25G83)",
+      "xcode": "26.4 (17E192)",
+      "arch": "arm64",
+      "font": "NSFont.systemFont via LabelStill.swift"
+    }
+  },
+  "sources": [
+    {
+      "id": "harbor",
+      "path": "media/harbor.png",
+      "sha256": "94eb94dc5846a240007906b722d894c7157388e7570ebd4a9a39a14e8545dab1",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "workshop",
+      "path": "media/workshop.png",
+      "sha256": "8139353af148ff1f2559f21be21fb9ba7ed309bd3aa612be9ddd8172a6c47753",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "hill",
+      "path": "media/hill.png",
+      "sha256": "3303df8594f8a52f3383bc0a8f4fec254cfe983b0a006e4902cfed020ef1c012",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "night",
+      "path": "media/night.png",
+      "sha256": "585f90dbc84d2abb80eab27d8b3683e79f9ca0c2dd755d6fe2d21df467ea4e13",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "market",
+      "path": "media/market.png",
+      "sha256": "16ce9c767a8fc69a11638e6075c6de2408593fbd70b10ad244cebc243da12dd6",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "library",
+      "path": "media/library.png",
+      "sha256": "2fde58ee38918225a6155a8dfcd9e44eb6ff8d33df8735dd8677a98e1e61f681",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "garden",
+      "path": "media/garden.png",
+      "sha256": "62f8bf19a2401e0aeb9264cfa21a88cf425befc682cb619e144534316f810c6b",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "station",
+      "path": "media/station.heic",
+      "sha256": "57d04c4d43065b238a879e70142e08471c7c34bd04516cb1da17650f93247f1d",
+      "container": "heic",
+      "codecs": [
+        "heic"
+      ],
+      "kind": "still",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "heic"
+        }
+      ],
+      "rotationDegrees": 90,
+      "notes": "Orientation tag 6, 90 degrees clockwise."
+    },
+    {
+      "id": "clip24",
+      "path": "media/clip-24.mov",
+      "sha256": "db4687e3a0edfc08bfe3ada4af965874bd5ae921239801ceda0ccbe0e778f1bb",
+      "container": "mov",
+      "codecs": [
+        "h264"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24,
+        "den": 1
+      },
+      "duration": {
+        "ticks": 3,
+        "timescale": 1
+      },
+      "timebase": {
+        "ticks": 1,
+        "timescale": 24
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1,
+            "timescale": 24
+          },
+          "variableFrameRate": false
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "clip2997",
+      "path": "media/clip-2997.mp4",
+      "sha256": "06fdca3c7c3caac9278155737f43b808b5f44167163b09582b6d04dc4d964532",
+      "container": "mp4",
+      "codecs": [
+        "h264"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 30000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 4,
+        "timescale": 1
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 30000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 30000
+          },
+          "variableFrameRate": false
+        }
+      ],
+      "rotationDegrees": 0
+    },
+    {
+      "id": "lpMatchedStill",
+      "path": "media/lp-matched.heic",
+      "sha256": "22a30dc73f51ccae3a761ffa02b6d584818f1a40c9d14af1bbbaf390f5d8657e",
+      "container": "heic",
+      "codecs": [
+        "heic"
+      ],
+      "kind": "livePhotoStill",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "heic"
+        }
+      ],
+      "contentIdentifier": "LP-MATCHED-001"
+    },
+    {
+      "id": "lpMatchedVideo",
+      "path": "media/lp-matched.mov",
+      "sha256": "dafdfa0f7ed20c9c54280b57bc8b252279dc631152b643bf9ff560ca4694e73f",
+      "container": "mov",
+      "codecs": [
+        "h264"
+      ],
+      "kind": "livePhotoVideo",
+      "frameRate": {
+        "num": 30,
+        "den": 1
+      },
+      "duration": {
+        "ticks": 3,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "variableFrameRate": false
+        }
+      ],
+      "contentIdentifier": "LP-MATCHED-001"
+    },
+    {
+      "id": "lpMismatchStill",
+      "path": "media/lp-mismatch.heic",
+      "sha256": "b721ab9e595b7d26e74f1d968ef7212f963c3761407e9c3a990db4d82b21dcc7",
+      "container": "heic",
+      "codecs": [
+        "heic"
+      ],
+      "kind": "livePhotoStill",
+      "duration": {
+        "ticks": 0,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "heic"
+        }
+      ],
+      "contentIdentifier": "LP-MISMATCH-STILL"
+    },
+    {
+      "id": "lpMismatchVideo",
+      "path": "media/lp-mismatch.mov",
+      "sha256": "b9727e08c120b61884e6e15fb6f512325dabbdc3e2d65162576342c5bc9a74f9",
+      "container": "mov",
+      "codecs": [
+        "h264"
+      ],
+      "kind": "livePhotoVideo",
+      "frameRate": {
+        "num": 30,
+        "den": 1
+      },
+      "duration": {
+        "ticks": 3,
+        "timescale": 1
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "variableFrameRate": false
+        }
+      ],
+      "contentIdentifier": "LP-MISMATCH-VIDEO"
+    },
+    {
+      "id": "harborDup",
+      "path": "media/harbor-duplicate.png",
+      "sha256": "94eb94dc5846a240007906b722d894c7157388e7570ebd4a9a39a14e8545dab1",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "duplicateOf",
+      "duplicateOf": "harbor",
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ]
+    },
+    {
+      "id": "harborCorrupt",
+      "path": "media/harbor-corrupt.png",
+      "sha256": "22847ba8cc16b3138f3c1c1b1bdaabfe30e62d58a1e87bc809cf53b9af355bb3",
+      "container": "png",
+      "codecs": [
+        "png"
+      ],
+      "kind": "corrupt",
+      "notes": "Truncated PNG, not a moment.",
+      "streams": [
+        {
+          "index": 0,
+          "kind": "still",
+          "codec": "png"
+        }
+      ]
+    }
+  ],
+  "moments": [
+    {
+      "id": "mHarbor",
+      "sourceIds": [
+        "harbor"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mWorkshop",
+      "sourceIds": [
+        "workshop"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mHill",
+      "sourceIds": [
+        "hill"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mNight",
+      "sourceIds": [
+        "night"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mMarket",
+      "sourceIds": [
+        "market"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mLibrary",
+      "sourceIds": [
+        "library"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mGarden",
+      "sourceIds": [
+        "garden"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mStation",
+      "sourceIds": [
+        "station"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mClip24",
+      "sourceIds": [
+        "clip24"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mClip2997",
+      "sourceIds": [
+        "clip2997"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mLiveMatched",
+      "sourceIds": [
+        "lpMatchedStill",
+        "lpMatchedVideo"
+      ],
+      "confidencePermille": 1000,
+      "pairingNote": "Shared content identifier LP-MATCHED-001. Counts as one moment."
+    },
+    {
+      "id": "mLiveMismatch",
+      "sourceIds": [
+        "lpMismatchStill",
+        "lpMismatchVideo"
+      ],
+      "confidencePermille": 200,
+      "pairingNote": "Deliberate identifier mismatch. Uncertain pair. Still one moment."
+    }
+  ],
+  "canonicalPlan": {
+    "outputFrameRate": {
+      "num": 30,
+      "den": 1
+    },
+    "width": 1920,
+    "height": 1080,
+    "occurrences": [
+      {
+        "id": "oHarbor",
+        "sourceId": "harbor",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "oWorkshop",
+        "sourceId": "workshop",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 60,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "picture"
+      },
+      {
+        "id": "oHill",
+        "sourceId": "hill",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 120,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "oNight",
+        "sourceId": "night",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 180,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "picture"
+      },
+      {
+        "id": "oMarket",
+        "sourceId": "market",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 240,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "oLibrary",
+        "sourceId": "library",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 300,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "picture"
+      },
+      {
+        "id": "oGarden",
+        "sourceId": "garden",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 360,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "oStation",
+        "sourceId": "station",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 30,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 60,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 3,
+        "role": "picture"
+      },
+      {
+        "id": "oClip24",
+        "sourceId": "clip24",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 3,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 150,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 2,
+        "role": "picture"
+      },
+      {
+        "id": "oClip2997",
+        "sourceId": "clip2997",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 4,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 270,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 2,
+        "role": "picture"
+      },
+      {
+        "id": "oLiveMatched",
+        "sourceId": "lpMatchedVideo",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 3,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 330,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 2,
+        "role": "picture"
+      },
+      {
+        "id": "oLiveMismatch",
+        "sourceId": "lpMismatchStill",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 390,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "picture"
+      }
+    ]
+  },
+  "expected": {
+    "frameCount": 480,
+    "frameCountRule": "Output duration is 16 s at 30/1. Frame count is 16 * 30 = 480. Half-open [0, 16) uses indices 0 through 479.",
+    "outputDuration": {
+      "ticks": 16,
+      "timescale": 1
+    },
+    "audioDuration": {
+      "ticks": 0,
+      "timescale": 1
+    },
+    "sourceToOutput": [
+      {
+        "occurrenceId": "oHarbor",
+        "sourceId": "harbor",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oWorkshop",
+        "sourceId": "workshop",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 60,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oHill",
+        "sourceId": "hill",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 120,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oNight",
+        "sourceId": "night",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 180,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oMarket",
+        "sourceId": "market",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 240,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oLibrary",
+        "sourceId": "library",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 300,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oGarden",
+        "sourceId": "garden",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 360,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oStation",
+        "sourceId": "station",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 30,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 60,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oClip24",
+        "sourceId": "clip24",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 3,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 150,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oClip2997",
+        "sourceId": "clip2997",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 4,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 270,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 120,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oLiveMatched",
+        "sourceId": "lpMatchedVideo",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 3,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 330,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        }
+      },
+      {
+        "occurrenceId": "oLiveMismatch",
+        "sourceId": "lpMismatchStill",
+        "sourceRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 1
+          },
+          "duration": {
+            "ticks": 0,
+            "timescale": 1
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 390,
+            "timescale": 30
+          },
+          "duration": {
+            "ticks": 90,
+            "timescale": 30
+          }
+        }
+      }
+    ],
+    "noRepeatCoverage": [
+      {
+        "momentId": "mHarbor",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mWorkshop",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mHill",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mNight",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mMarket",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mLibrary",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mGarden",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mStation",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mClip24",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mClip2997",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mLiveMatched",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mLiveMismatch",
+        "usedCount": 1
+      }
+    ]
+  },
+  "rights": {
+    "origin": "generated",
+    "licence": "MIT for generators, manifests, schemas, and scripts. Generated media are not tracked in git.",
+    "redistribution": "Synthesized speech from macOS voices is unverified for redistribution. Do not ship those bytes. Stills, tones, and lavfi patterns are generated on the machine that runs generate.sh.",
+    "humanViewingChecks": [
+      "montage panel overlaps and motion look like distinct scenes, not colour bars only",
+      "talking-head captions stay readable and do not straddle cuts",
+      "talking-head speech cuts, ducking, and the 1.5x retime are listened through",
+      "long-film chapter labels stay readable and joins are listened through",
+      "lip sync is not judged on synthesized speech without a face; that check is deferred to issue 16"
+    ]
+  },
+  "thresholds": [
+    {
+      "id": "export-wall-realtime-multiple",
+      "limit": 3,
+      "unit": "x-realtime",
+      "requiresHuman": false,
+      "appliesTo": "M",
+      "note": "Export wall time at most 3x realtime."
+    },
+    {
+      "id": "seek-frame-240-ms",
+      "limit": 250,
+      "unit": "ms",
+      "requiresHuman": false,
+      "appliesTo": "M",
+      "note": "Interactive seek to frame 240 at most 250 ms."
+    },
+    {
+      "id": "first-last-frame-hash-stable",
+      "limit": 1,
+      "unit": "boolean",
+      "requiresHuman": false,
+      "appliesTo": "M",
+      "note": "First and last decoded frame hashes identical across two renders on the same machine."
+    },
+    {
+      "id": "moment-used-exactly-once",
+      "limit": 1,
+      "unit": "count",
+      "requiresHuman": false,
+      "appliesTo": "M",
+      "note": "Every moment used exactly once. A Live Photo pair is one moment."
+    },
+    {
+      "id": "selection-feedback-p95-ms",
+      "limit": 100,
+      "unit": "ms",
+      "requiresHuman": false,
+      "appliesTo": "all",
+      "note": "From native UX row for responsive interaction. Local selection feedback p95."
+    }
+  ]
+}
