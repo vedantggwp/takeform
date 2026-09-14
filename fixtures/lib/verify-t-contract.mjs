@@ -131,27 +131,24 @@ export function normalizeCtcText(text) {
   return { parts, symbols, events };
 }
 
-function speechUtterancesFromScript(text) {
-  const utterances = [];
+export function parseSpeechParts(text) {
+  if (typeof text !== "string") fail("Script is not text");
+  const parts = [];
   const pausePattern = /\[PAUSE:([0-9.]+)\]/g;
   let cursor = 0;
-  let partIndex = 0;
   for (const match of text.matchAll(pausePattern)) {
     if (match.index > cursor) {
       const chunk = text.slice(cursor, match.index).trim();
-      if (chunk.length > 0) {
-        utterances.push({ id: "utterance-" + partIndex, text: chunk });
-        partIndex += 1;
-      }
+      if (chunk.length > 0) parts.push({ kind: "speak", value: chunk });
     }
-    partIndex += 1;
+    parts.push({ kind: "pause", value: match[1] });
     cursor = match.index + match[0].length;
   }
   if (cursor < text.length) {
     const chunk = text.slice(cursor).trim();
-    if (chunk.length > 0) utterances.push({ id: "utterance-" + partIndex, text: chunk });
+    if (chunk.length > 0) parts.push({ kind: "speak", value: chunk });
   }
-  return utterances;
+  return parts;
 }
 
 function validateAudioReceipt(sourceId, receipt, facts) {
@@ -175,10 +172,28 @@ function validateReceipt(sourceId, receipt, audioReceipt, facts, audioPath, text
   const scriptText = readFileSync(textPath, "utf8");
   if (!receipt.inputText || receipt.inputText.sha256 !== sha256(textPath)) fail(sourceId + " receipt input text does not match its script");
   if (!Array.isArray(receipt.words) || receipt.words.length === 0 || receipt.wordCount !== receipt.words.length) fail(sourceId + " receipt has no complete word list");
-  const scriptUtterances = speechUtterancesFromScript(scriptText);
+  const scriptParts = parseSpeechParts(scriptText);
+  const scriptUtterances = scriptParts.flatMap((part, index) => part.kind === "speak" ? [{ id: "utterance-" + index, text: part.value }] : []);
   if (scriptUtterances.length !== audioReceipt.utterances.length || scriptUtterances.some((utterance, index) => utterance.id !== audioReceipt.utterances[index]?.id || utterance.text !== audioReceipt.utterances[index]?.text)) {
     fail(sourceId + " audio utterances do not match the input script");
   }
+  let expectedFrame = 0;
+  let utteranceIndex = 0;
+  for (const part of scriptParts) {
+    if (part.kind === "pause") {
+      const seconds = Number(part.value);
+      if (!Number.isFinite(seconds) || seconds <= 0) fail(sourceId + " script has an invalid pause duration");
+      expectedFrame += Math.round(seconds * facts.sampleRate);
+      continue;
+    }
+    const utterance = audioReceipt.utterances[utteranceIndex];
+    if (!Number.isInteger(utterance?.startFrame) || !Number.isInteger(utterance?.endFrame) || utterance.startFrame !== expectedFrame || utterance.endFrame <= utterance.startFrame || utterance.endFrame > facts.frames || utterance.sampleRate !== facts.sampleRate) {
+      fail(sourceId + " audio sample bounds do not match the input script");
+    }
+    expectedFrame = utterance.endFrame;
+    utteranceIndex += 1;
+  }
+  if (expectedFrame !== facts.frames) fail(sourceId + " audio sample bounds do not match the input script");
   const utterances = new Map(audioReceipt.utterances.map((utterance) => [utterance.id, utterance]));
   if (utterances.size !== audioReceipt.utterances.length) fail(sourceId + " audio receipt utterance ids are not unique");
   const evidenceByUtterance = new Map();

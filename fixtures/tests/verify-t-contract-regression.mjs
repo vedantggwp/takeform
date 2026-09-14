@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { normalizeCtcText } from "../lib/verify-t-contract.mjs";
+import { normalizeCtcText, parseSpeechParts } from "../lib/verify-t-contract.mjs";
 
 const fixture = process.argv[2];
 if (!fixture) throw new Error("usage: verify-t-contract-regression.mjs <T fixture dir>");
@@ -50,6 +50,18 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
     }
     throw new Error("CTC normalizer accepted unsupported input: " + JSON.stringify(text));
   }
+}
+
+{
+  const parts = parseSpeechParts(" [PAUSE:1] Alpha [PAUSE:2][PAUSE:0.5] Beta [PAUSE:3] ");
+  if (JSON.stringify(parts) !== JSON.stringify([
+    { kind: "pause", value: "1" },
+    { kind: "speak", value: "Alpha" },
+    { kind: "pause", value: "2" },
+    { kind: "pause", value: "0.5" },
+    { kind: "speak", value: "Beta" },
+    { kind: "pause", value: "3" }
+  ])) throw new Error("speech parser changed leading, trailing, or consecutive pause handling");
 }
 
 {
@@ -202,6 +214,16 @@ execFileSync(process.execPath, [verifier, fixture], { stdio: "inherit" });
   words.inputText.sha256 = createHash("sha256").update(readFileSync(scriptPath)).digest("hex");
   writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
   expectFail(dir, "audio sample bounds do not match the input script");
+}
+
+{
+  const dir = prepare();
+  const scriptPath = join(dir, "script-take1.txt");
+  writeFileSync(scriptPath, readFileSync(scriptPath, "utf8").replace("[PAUSE:2]", "[PAUSE:0]"));
+  const words = JSON.parse(readFileSync(join(dir, "words-take1.json"), "utf8"));
+  words.inputText.sha256 = createHash("sha256").update(readFileSync(scriptPath)).digest("hex");
+  writeFileSync(join(dir, "words-take1.json"), JSON.stringify(words));
+  expectFail(dir, "script has an invalid pause duration");
 }
 
 {
