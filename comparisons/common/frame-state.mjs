@@ -219,6 +219,10 @@ export function frameState(snapshot, fixtureId, frame) {
       pictureLayers = [transition.outgoing, transition.incoming];
       state.pictureLayers = pictureLayers;
       state.audio = { roles: [{ ...transition.outgoing, gain: transition.audio.outgoingGain }, { ...transition.incoming, gain: transition.audio.incomingGain }], transition };
+    } else if (chapter) {
+      state.audio = { roles: [{ ...layerFor(snapshot, 'L', chapter, frame, time), gain: 1 }] };
+    } else {
+      throw new ComparisonError(`L frame ${frame} lacks an active chapter audio source`, 'missing-chapter-audio');
     }
   }
   return state;

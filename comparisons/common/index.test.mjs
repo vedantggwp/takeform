@@ -120,16 +120,39 @@ test('projects measured speech gaps into a linear-dB music envelope', () => {
   assert.deepEqual(frameState(snapshot, 'T', 270).audio.normalization, { targetIntegratedLufs: -16, maxTruePeakDbtp: -1, actualBackendMixing: null, explicitNormalizationStage: null });
 });
 
-test('returns progressing bounded samples for every frame of every L join', () => {
+test('keeps L chapter audio continuous and bounded through every join', () => {
   const manifest = snapshot._manifests.L.manifest;
   const transitions = manifest.canonicalPlan.occurrences.filter(item => item.role === 'transition');
+  const assertBoundedAudio = roles => {
+    assert.ok(roles.length > 0);
+    for (const role of roles) {
+      assert.ok(role.sourceTime && role.sourceRange);
+      assert.ok(rationalCompare(role.sourceTime, role.sourceRange.start) >= 0n);
+      assert.ok(rationalCompare(role.sourceTime, rationalAdd(role.sourceRange.start, role.sourceRange.duration)) < 0n);
+    }
+  };
+  for (const frame of [0, 43156]) {
+    const state = frameState(snapshot, 'L', frame);
+    const roles = state.audio.roles;
+    assert.equal(roles.length, 1);
+    assert.equal(roles[0].gain, 1);
+    assert.equal(roles[0].occurrenceId, state.pictureLayers[0].occurrenceId);
+    assert.deepEqual(roles[0].sourceRange, state.pictureLayers[0].sourceRange);
+    assert.equal(rationalCompare(roles[0].sourceTime, state.pictureLayers[0].sourceTime), 0n);
+    assertBoundedAudio(roles);
+  }
   for (const transition of transitions) {
     const start = transition.outputRange.start.ticks / 1001;
     const end = start + 24;
     let previousTimes = null;
     for (let frame = start; frame < end; frame += 1) {
       const layers = frameState(snapshot, 'L', frame).pictureLayers;
+      const audio = frameState(snapshot, 'L', frame).audio;
       assert.equal(layers.length, 2);
+      assert.equal(audio.roles.length, 2);
+      assert.equal(audio.roles[0].gain, audio.transition.audio.outgoingGain);
+      assert.equal(audio.roles[1].gain, audio.transition.audio.incomingGain);
+      assertBoundedAudio(audio.roles);
       for (const layer of layers) {
         assert.ok(layer.sourceTime && layer.sourceRange && layer.geometry);
         assert.ok(rationalCompare(layer.sourceTime, layer.sourceRange.start) >= 0n);
@@ -138,8 +161,17 @@ test('returns progressing bounded samples for every frame of every L join', () =
       if (previousTimes) for (let index = 0; index < 2; index += 1) assert.ok(rationalCompare(layers[index].sourceTime, previousTimes[index]) > 0n);
       previousTimes = layers.map(layer => layer.sourceTime);
     }
-    assert.equal(frameState(snapshot, 'L', start - 1).audio.transition, undefined);
-    assert.equal(frameState(snapshot, 'L', end).audio.transition, undefined);
+    for (const frame of [start - 1, end]) {
+      const state = frameState(snapshot, 'L', frame);
+      const audio = state.audio;
+      assert.equal(audio.transition, undefined);
+      assert.equal(audio.roles.length, 1);
+      assert.equal(audio.roles[0].gain, 1);
+      assert.equal(audio.roles[0].occurrenceId, state.pictureLayers[0].occurrenceId);
+      assert.deepEqual(audio.roles[0].sourceRange, state.pictureLayers[0].sourceRange);
+      assert.equal(rationalCompare(audio.roles[0].sourceTime, state.pictureLayers[0].sourceTime), 0n);
+      assertBoundedAudio(audio.roles);
+    }
   }
   const first = frameState(snapshot, 'L', 2865);
   assert.equal(rationalCompare(first.pictureLayers[1].sourceRange.start, { ticks: 12012, timescale: 24000 }), 0n);
