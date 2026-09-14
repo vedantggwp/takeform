@@ -131,6 +131,29 @@ export function normalizeCtcText(text) {
   return { parts, symbols, events };
 }
 
+function speechUtterancesFromScript(text) {
+  const utterances = [];
+  const pausePattern = /\[PAUSE:([0-9.]+)\]/g;
+  let cursor = 0;
+  let partIndex = 0;
+  for (const match of text.matchAll(pausePattern)) {
+    if (match.index > cursor) {
+      const chunk = text.slice(cursor, match.index).trim();
+      if (chunk.length > 0) {
+        utterances.push({ id: "utterance-" + partIndex, text: chunk });
+        partIndex += 1;
+      }
+    }
+    partIndex += 1;
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) {
+    const chunk = text.slice(cursor).trim();
+    if (chunk.length > 0) utterances.push({ id: "utterance-" + partIndex, text: chunk });
+  }
+  return utterances;
+}
+
 function validateAudioReceipt(sourceId, receipt, facts) {
   if (receipt.origin !== "AVSpeechSynthesizer buffer write") fail(sourceId + " audio receipt has the wrong origin");
   if (receipt.sampleRate !== facts.sampleRate) fail(sourceId + " audio receipt sample rate disagrees with ffprobe");
@@ -149,8 +172,13 @@ function validateReceipt(sourceId, receipt, audioReceipt, facts, audioPath, text
   }
   const inputAudio = receipt.inputAudio;
   if (!inputAudio || inputAudio.sha256 !== sha256(audioPath) || inputAudio.sampleRate !== facts.sampleRate || inputAudio.frames !== facts.frames) fail(sourceId + " receipt input audio does not match the generated file");
+  const scriptText = readFileSync(textPath, "utf8");
   if (!receipt.inputText || receipt.inputText.sha256 !== sha256(textPath)) fail(sourceId + " receipt input text does not match its script");
   if (!Array.isArray(receipt.words) || receipt.words.length === 0 || receipt.wordCount !== receipt.words.length) fail(sourceId + " receipt has no complete word list");
+  const scriptUtterances = speechUtterancesFromScript(scriptText);
+  if (scriptUtterances.length !== audioReceipt.utterances.length || scriptUtterances.some((utterance, index) => utterance.id !== audioReceipt.utterances[index]?.id || utterance.text !== audioReceipt.utterances[index]?.text)) {
+    fail(sourceId + " audio utterances do not match the input script");
+  }
   const utterances = new Map(audioReceipt.utterances.map((utterance) => [utterance.id, utterance]));
   if (utterances.size !== audioReceipt.utterances.length) fail(sourceId + " audio receipt utterance ids are not unique");
   const evidenceByUtterance = new Map();
