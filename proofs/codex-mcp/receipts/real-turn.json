@@ -1,0 +1,17 @@
+{
+  "kind": "real_model_turn",
+  "codexVersion": "0.154.0",
+  "model": "gpt-5.6-terra",
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "attemptsBeforeModel": 2,
+  "toolEvents": [],
+  "modelResult": "no_tools_available",
+  "tokenUsage": {
+    "input": 23944,
+    "cachedInput": 5888,
+    "output": 262,
+    "reasoningOutput": 238
+  },
+  "conclusion": "failed_before_proposal"
+}
