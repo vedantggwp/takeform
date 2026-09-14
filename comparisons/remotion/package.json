@@ -1,0 +1,8 @@
+{
+  "name": "@takeform/remotion-comparison-adapter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {"node": ">=22 <23"},
+  "scripts": {"test": "node --test ./test/asset-server.test.mjs"}
+}
