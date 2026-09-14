@@ -1,0 +1,2641 @@
+{
+  "schemaVersion": 1,
+  "id": "L",
+  "title": "Thirty-minute chaptered film",
+  "purpose": "Fifteen labelled two-minute chapters of repeated test material at 24000/1001, with audio bed and a crossfade on each join.",
+  "generator": {
+    "command": "./fixtures/L/generate.sh",
+    "toolPins": {
+      "ffmpeg": "8.0.1",
+      "ffprobe": "8.0.1",
+      "swift": "6.3",
+      "node": "22.22.1",
+      "macos": "26.6.2 (25G83)",
+      "xcode": "26.4 (17E192)",
+      "arch": "arm64",
+      "font": "NSFont.systemFont via LabelStill.swift"
+    }
+  },
+  "sources": [
+    {
+      "id": "chapter01",
+      "path": "media/chapter-01.mp4",
+      "sha256": "391a889e39db2b63030b0753ebcf5ec58680647076b83e149a17568686984576",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter02",
+      "path": "media/chapter-02.mp4",
+      "sha256": "347aaa3387518402db35d8cb8b01fcbda2b5c825ca457ea1524d0e75895871b5",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter03",
+      "path": "media/chapter-03.mp4",
+      "sha256": "6fa800eaf58edf20e4c65285e687639f4687f3c8de532252fff7260854ed47a3",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter04",
+      "path": "media/chapter-04.mp4",
+      "sha256": "2af11e56bb890dd283ce394059e424289941a2e5b3bedaf9295cacd8fe7f97fa",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter05",
+      "path": "media/chapter-05.mp4",
+      "sha256": "4eeb666beba4ebd8b3403d83ae2a704222357ce7b12a32792479b67174a1a856",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter06",
+      "path": "media/chapter-06.mp4",
+      "sha256": "a668f9949197a77db99c411d085a985c3fa39c59d8a3ccc034fb1a84d102a048",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter07",
+      "path": "media/chapter-07.mp4",
+      "sha256": "a19c6877ee2195cb75f175a382c065324cb9188f01af3027ae7a129eadb8c98f",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter08",
+      "path": "media/chapter-08.mp4",
+      "sha256": "4643dad86cf2ca2996ccfdd7b4f6cbfcb8c7783b2dead0fd2e6eb24824aa0b8b",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter09",
+      "path": "media/chapter-09.mp4",
+      "sha256": "1f423c61d708ada9a606d8e395f2229e870398174d4e9e92baf189d96130b611",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter10",
+      "path": "media/chapter-10.mp4",
+      "sha256": "a66bdeb0ba6ca04f4257c899d18b84dad001ad43675bc2629d05b13556f43e33",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter11",
+      "path": "media/chapter-11.mp4",
+      "sha256": "52c9367c35802f45190f3e5dfde2583aeeeaa91d22673c8e49343af16ce43581",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter12",
+      "path": "media/chapter-12.mp4",
+      "sha256": "392b6bef9fb78b7c6c4cee413d08c91e52e25ff1c8f0ead0f57ed7e099b46883",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter13",
+      "path": "media/chapter-13.mp4",
+      "sha256": "f0201d77103618e26a9f781a3d7b37344674a545eebdf86aeead071c6afc7eee",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter14",
+      "path": "media/chapter-14.mp4",
+      "sha256": "a8296bc7594b991859730e6244f2c67193274b302d9d3a568d845d98487a9563",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    },
+    {
+      "id": "chapter15",
+      "path": "media/chapter-15.mp4",
+      "sha256": "09a0332928790e8b82429c2ea498d8396ce76956a40b7e31111669b217470e0b",
+      "container": "mp4",
+      "codecs": [
+        "h264",
+        "aac"
+      ],
+      "kind": "video",
+      "frameRate": {
+        "num": 24000,
+        "den": 1001
+      },
+      "duration": {
+        "ticks": 2927925,
+        "timescale": 24000
+      },
+      "timebase": {
+        "ticks": 1001,
+        "timescale": 24000
+      },
+      "streams": [
+        {
+          "index": 0,
+          "kind": "video",
+          "codec": "h264",
+          "timebase": {
+            "ticks": 1001,
+            "timescale": 24000
+          },
+          "variableFrameRate": false
+        },
+        {
+          "index": 1,
+          "kind": "audio",
+          "codec": "aac",
+          "sampleRate": 48000,
+          "channels": 2
+        }
+      ],
+      "notes": "Repeated test material. On-screen chapter label and per-chapter tone frequency are the only intended differences."
+    }
+  ],
+  "moments": [
+    {
+      "id": "mchapter01",
+      "sourceIds": [
+        "chapter01"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter02",
+      "sourceIds": [
+        "chapter02"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter03",
+      "sourceIds": [
+        "chapter03"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter04",
+      "sourceIds": [
+        "chapter04"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter05",
+      "sourceIds": [
+        "chapter05"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter06",
+      "sourceIds": [
+        "chapter06"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter07",
+      "sourceIds": [
+        "chapter07"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter08",
+      "sourceIds": [
+        "chapter08"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter09",
+      "sourceIds": [
+        "chapter09"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter10",
+      "sourceIds": [
+        "chapter10"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter11",
+      "sourceIds": [
+        "chapter11"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter12",
+      "sourceIds": [
+        "chapter12"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter13",
+      "sourceIds": [
+        "chapter13"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter14",
+      "sourceIds": [
+        "chapter14"
+      ],
+      "confidencePermille": 1000
+    },
+    {
+      "id": "mchapter15",
+      "sourceIds": [
+        "chapter15"
+      ],
+      "confidencePermille": 1000
+    }
+  ],
+  "canonicalPlan": {
+    "outputFrameRate": {
+      "num": 24000,
+      "den": 1001
+    },
+    "width": 1920,
+    "height": 1080,
+    "occurrences": [
+      {
+        "id": "ochapter01",
+        "sourceId": "chapter01",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade01",
+        "sourceId": "chapter01",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 2867865,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter02",
+        "sourceId": "chapter02",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 2879877,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade02",
+        "sourceId": "chapter02",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 5747742,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter03",
+        "sourceId": "chapter03",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 5759754,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade03",
+        "sourceId": "chapter03",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 8627619,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter04",
+        "sourceId": "chapter04",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 8639631,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade04",
+        "sourceId": "chapter04",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 11507496,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter05",
+        "sourceId": "chapter05",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 11519508,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade05",
+        "sourceId": "chapter05",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 14387373,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter06",
+        "sourceId": "chapter06",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 14399385,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade06",
+        "sourceId": "chapter06",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 17267250,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter07",
+        "sourceId": "chapter07",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 17279262,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade07",
+        "sourceId": "chapter07",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 20147127,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter08",
+        "sourceId": "chapter08",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 20159139,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade08",
+        "sourceId": "chapter08",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 23027004,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter09",
+        "sourceId": "chapter09",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 23039016,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade09",
+        "sourceId": "chapter09",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 25906881,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter10",
+        "sourceId": "chapter10",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 25918893,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade10",
+        "sourceId": "chapter10",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 28786758,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter11",
+        "sourceId": "chapter11",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 28798770,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade11",
+        "sourceId": "chapter11",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 31666635,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter12",
+        "sourceId": "chapter12",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 31678647,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade12",
+        "sourceId": "chapter12",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 34546512,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter13",
+        "sourceId": "chapter13",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 34558524,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade13",
+        "sourceId": "chapter13",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 37426389,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter14",
+        "sourceId": "chapter14",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 37438401,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      },
+      {
+        "id": "xfade14",
+        "sourceId": "chapter14",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 40306266,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 1,
+        "role": "transition"
+      },
+      {
+        "id": "ochapter15",
+        "sourceId": "chapter15",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2881879,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 40318278,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2881879,
+            "timescale": 24000
+          }
+        },
+        "retimeFactor": {
+          "num": 1,
+          "den": 1
+        },
+        "layer": 0,
+        "role": "picture"
+      }
+    ]
+  },
+  "expected": {
+    "frameCount": 43157,
+    "frameCountRule": "Planned exclusive end is 1800 s. Frame i presents at i * 1001/24000 s. Frames with PTS in [0, 1800) are i = 0 through 43156, so the count is 43157. Equivalently floor((1800 * 24000 - 1) / 1001) + 1. The duration of those 43157 frames is 43157 * 1001 / 24000 s, which is 1800.0065416 s. Fourteen chapters contribute 2877 frames and chapter 15 contributes 2879 frames.",
+    "outputDuration": {
+      "ticks": 43200157,
+      "timescale": 24000
+    },
+    "audioDuration": {
+      "ticks": 43200157,
+      "timescale": 24000
+    },
+    "sourceToOutput": [
+      {
+        "occurrenceId": "ochapter01",
+        "sourceId": "chapter01",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 0,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade01",
+        "sourceId": "chapter01",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 2867865,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter02",
+        "sourceId": "chapter02",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 2879877,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade02",
+        "sourceId": "chapter02",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 5747742,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter03",
+        "sourceId": "chapter03",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 5759754,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade03",
+        "sourceId": "chapter03",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 8627619,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter04",
+        "sourceId": "chapter04",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 8639631,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade04",
+        "sourceId": "chapter04",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 11507496,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter05",
+        "sourceId": "chapter05",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 11519508,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade05",
+        "sourceId": "chapter05",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 14387373,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter06",
+        "sourceId": "chapter06",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 14399385,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade06",
+        "sourceId": "chapter06",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 17267250,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter07",
+        "sourceId": "chapter07",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 17279262,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade07",
+        "sourceId": "chapter07",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 20147127,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter08",
+        "sourceId": "chapter08",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 20159139,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade08",
+        "sourceId": "chapter08",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 23027004,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter09",
+        "sourceId": "chapter09",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 23039016,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade09",
+        "sourceId": "chapter09",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 25906881,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter10",
+        "sourceId": "chapter10",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 25918893,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade10",
+        "sourceId": "chapter10",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 28786758,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter11",
+        "sourceId": "chapter11",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 28798770,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade11",
+        "sourceId": "chapter11",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 31666635,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter12",
+        "sourceId": "chapter12",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 31678647,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade12",
+        "sourceId": "chapter12",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 34546512,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter13",
+        "sourceId": "chapter13",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 34558524,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade13",
+        "sourceId": "chapter13",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 37426389,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter14",
+        "sourceId": "chapter14",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 37438401,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2879877,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "xfade14",
+        "sourceId": "chapter14",
+        "sourceRange": {
+          "start": {
+            "ticks": 2891889,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 40306266,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 24024,
+            "timescale": 24000
+          }
+        }
+      },
+      {
+        "occurrenceId": "ochapter15",
+        "sourceId": "chapter15",
+        "sourceRange": {
+          "start": {
+            "ticks": 24024,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2881879,
+            "timescale": 24000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 40318278,
+            "timescale": 24000
+          },
+          "duration": {
+            "ticks": 2881879,
+            "timescale": 24000
+          }
+        }
+      }
+    ],
+    "noRepeatCoverage": [
+      {
+        "momentId": "mchapter01",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter02",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter03",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter04",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter05",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter06",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter07",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter08",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter09",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter10",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter11",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter12",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter13",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter14",
+        "usedCount": 1
+      },
+      {
+        "momentId": "mchapter15",
+        "usedCount": 1
+      }
+    ],
+    "chapterBoundaries": [
+      {
+        "index": 0,
+        "outputTime": {
+          "ticks": 0,
+          "timescale": 24000
+        },
+        "clean": true,
+        "note": "Start of film. No transition spans this instant."
+      },
+      {
+        "index": 1,
+        "outputTime": {
+          "ticks": 2879877,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 2,
+        "outputTime": {
+          "ticks": 5759754,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 3,
+        "outputTime": {
+          "ticks": 8639631,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 4,
+        "outputTime": {
+          "ticks": 11519508,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 5,
+        "outputTime": {
+          "ticks": 14399385,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 6,
+        "outputTime": {
+          "ticks": 17279262,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 7,
+        "outputTime": {
+          "ticks": 20159139,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 8,
+        "outputTime": {
+          "ticks": 23039016,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 9,
+        "outputTime": {
+          "ticks": 25918893,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 10,
+        "outputTime": {
+          "ticks": 28798770,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 11,
+        "outputTime": {
+          "ticks": 31678647,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 12,
+        "outputTime": {
+          "ticks": 34558524,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 13,
+        "outputTime": {
+          "ticks": 37438401,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 14,
+        "outputTime": {
+          "ticks": 40318278,
+          "timescale": 24000
+        },
+        "clean": false,
+        "note": "Join with 24-frame crossfade. Unclean. Selective invalidation must include this boundary. Segment reuse across it needs transition handles, matching codec and timebase, and sample continuity."
+      },
+      {
+        "index": 15,
+        "outputTime": {
+          "ticks": 43200157,
+          "timescale": 24000
+        },
+        "clean": true,
+        "note": "Exclusive end. No transition spans past the last frame."
+      }
+    ]
+  },
+  "rights": {
+    "origin": "generated",
+    "licence": "MIT for generators, manifests, schemas, and scripts. Generated media are not tracked in git.",
+    "redistribution": "Synthesized speech from macOS voices is unverified for redistribution. Do not ship those bytes. Stills, tones, and lavfi patterns are generated on the machine that runs generate.sh.",
+    "humanViewingChecks": [
+      "montage panel overlaps and motion look like distinct scenes, not colour bars only",
+      "talking-head captions stay readable and do not straddle cuts",
+      "talking-head speech cuts, ducking, and the 1.5x retime are listened through",
+      "long-film chapter labels stay readable and joins are listened through",
+      "lip sync is not judged on synthesized speech without a face; that check is deferred to issue 16"
+    ]
+  },
+  "thresholds": [
+    {
+      "id": "peak-rss-bytes",
+      "limit": 4294967296,
+      "unit": "bytes",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "Peak RSS under 4 GB."
+    },
+    {
+      "id": "export-wall-realtime-multiple",
+      "limit": 2,
+      "unit": "x-realtime",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "Export at most 2x realtime."
+    },
+    {
+      "id": "cancel-at-minute-10-s",
+      "limit": 5,
+      "unit": "s",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "Cancel at minute 10 stops the worker within 5 s with no partial receipt."
+    },
+    {
+      "id": "kill-reopen-interrupted-count",
+      "limit": 1,
+      "unit": "count",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "Kill and reopen yields exactly one interrupted attempt."
+    },
+    {
+      "id": "chapter-7-selective-invalidation",
+      "limit": 1,
+      "unit": "boolean",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "A chapter 7 change re-renders only chapter 7 plus unclean adjacent boundaries. Checked separately from segment render reuse."
+    },
+    {
+      "id": "joined-stream-continuous",
+      "limit": 1,
+      "unit": "boolean",
+      "requiresHuman": false,
+      "appliesTo": "L",
+      "note": "Joined output probes as one continuous stream with no timestamp discontinuity and no dropped audio sample."
+    },
+    {
+      "id": "chapter-joins-listen",
+      "limit": 1,
+      "unit": "boolean",
+      "requiresHuman": true,
+      "appliesTo": "L",
+      "note": "Listen through every chapter join."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "hashKind": "container",
+  "note": "Container sha256 of generated files. If a second generate differs, verify.sh switches this to decoded-av and records framemd5 plus audio md5.",
+  "files": {
+    "media/chapter-01.mp4": {
+      "sha256": "391a889e39db2b63030b0753ebcf5ec58680647076b83e149a17568686984576"
+    },
+    "media/chapter-02.mp4": {
+      "sha256": "347aaa3387518402db35d8cb8b01fcbda2b5c825ca457ea1524d0e75895871b5"
+    },
+    "media/chapter-03.mp4": {
+      "sha256": "6fa800eaf58edf20e4c65285e687639f4687f3c8de532252fff7260854ed47a3"
+    },
+    "media/chapter-04.mp4": {
+      "sha256": "2af11e56bb890dd283ce394059e424289941a2e5b3bedaf9295cacd8fe7f97fa"
+    },
+    "media/chapter-05.mp4": {
+      "sha256": "4eeb666beba4ebd8b3403d83ae2a704222357ce7b12a32792479b67174a1a856"
+    },
+    "media/chapter-06.mp4": {
+      "sha256": "a668f9949197a77db99c411d085a985c3fa39c59d8a3ccc034fb1a84d102a048"
+    },
+    "media/chapter-07.mp4": {
+      "sha256": "a19c6877ee2195cb75f175a382c065324cb9188f01af3027ae7a129eadb8c98f"
+    },
+    "media/chapter-08.mp4": {
+      "sha256": "4643dad86cf2ca2996ccfdd7b4f6cbfcb8c7783b2dead0fd2e6eb24824aa0b8b"
+    },
+    "media/chapter-09.mp4": {
+      "sha256": "1f423c61d708ada9a606d8e395f2229e870398174d4e9e92baf189d96130b611"
+    },
+    "media/chapter-10.mp4": {
+      "sha256": "a66bdeb0ba6ca04f4257c899d18b84dad001ad43675bc2629d05b13556f43e33"
+    },
+    "media/chapter-11.mp4": {
+      "sha256": "52c9367c35802f45190f3e5dfde2583aeeeaa91d22673c8e49343af16ce43581"
+    },
+    "media/chapter-12.mp4": {
+      "sha256": "392b6bef9fb78b7c6c4cee413d08c91e52e25ff1c8f0ead0f57ed7e099b46883"
+    },
+    "media/chapter-13.mp4": {
+      "sha256": "f0201d77103618e26a9f781a3d7b37344674a545eebdf86aeead071c6afc7eee"
+    },
+    "media/chapter-14.mp4": {
+      "sha256": "a8296bc7594b991859730e6244f2c67193274b302d9d3a568d845d98487a9563"
+    },
+    "media/chapter-15.mp4": {
+      "sha256": "09a0332928790e8b82429c2ea498d8396ce76956a40b7e31111669b217470e0b"
+    }
+  }
+}
