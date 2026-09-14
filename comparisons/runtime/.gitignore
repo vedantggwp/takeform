@@ -2,3 +2,5 @@ node_modules/
 .npm-cache/
 .browser-cache/
 scratch/
+browser/scratch/
+browser/artifacts/

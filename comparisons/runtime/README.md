@@ -39,7 +39,19 @@ The first install used Node `22.22.1` and npm `10.9.4`. It took 7 seconds as set
 
 The doctor imports `@hyperframes/producer` and `@remotion/renderer`. It creates a HyperFrames job with `{num: 24000, den: 1001}` without rendering. It verifies Remotion's exported `ensureBrowser`, `openBrowser`, and `renderMedia` APIs without rendering.
 
-HyperFrames documents `chromePath`, `PRODUCER_HEADLESS_SHELL_PATH`, and `HYPERFRAMES_BROWSER_PATH` as override routes. Remotion exposes `ensureBrowser({browserExecutable})` and `openBrowser('chrome', {browserExecutable})`. The pinned HyperFrames and Remotion launch implementations both add sandbox-disabling flags. This workspace does not call either launch API, so no BeginFrame or screenshot capability is claimed and no browser is shared. The custom executable bootstrap only confirms Remotion accepts the provided executable path.
+HyperFrames documents `chromePath`, `PRODUCER_HEADLESS_SHELL_PATH`, and `HYPERFRAMES_BROWSER_PATH` as override routes. Remotion exposes `ensureBrowser({browserExecutable})` and `openBrowser('chrome', {browserExecutable})`. The pinned launch implementations add sandbox-disabling and web-security weakening flags. The browser proof filters those known defaults at the executable boundary before the target starts. It does not share a browser.
+
+## Browser launch proof
+
+`browser/secure-browser-launcher.sh` is a caller-configured executable wrapper. Its target is provided through `TAKEFORM_BROWSER_EXECUTABLE`. It removes the pinned sandbox, mixed-content, site-isolation, and local/private-network weakening defaults, preserves unrelated arguments, and rejects explicit web-security or certificate-bypass requests. It replaces itself with the target process and does not print the target path or unrestricted arguments.
+
+Run the bounded probe with an explicit existing runtime and browser executable:
+
+```sh
+node comparisons/runtime/browser/probe.mjs --runtime RUNTIME_WORKSPACE --browser BROWSER_EXECUTABLE
+```
+
+The probe runs each SDK's documented executable override in a separate process group, with a bounded timeout and owned temporary scratch space. It retains one blank capture per SDK under the ignored `browser/artifacts/` directory for review. Remotion uses documented new-headless mode with an isolated temporary profile. HyperFrames uses its exported capture-session route and a minimal local page that implements its documented `window.__hf` seek contract. On macOS, the measured HyperFrames mode is `screenshot`; this proof does not claim BeginFrame support. The runner drains capped child streams and terminates an owned process group on timeout. It proves the launch and capture routes plus absence of the filtered flags, not an OS-level sandbox attestation or renderer capability.
 
 No final licence determination is made here. Font availability, helper redistribution, browser distribution, and any production licensing decision remain open.
 
