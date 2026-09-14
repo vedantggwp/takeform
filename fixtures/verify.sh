@@ -14,6 +14,10 @@ if [[ -f "$ROOT/measurement-result.example.json" ]]; then
   "${VAL[@]}" "$MEAS" "$ROOT/measurement-result.example.json"
 fi
 
+node "$ROOT/lib/verify-t-contract.mjs" "$ROOT/T"
+node "$ROOT/tests/verify-t-contract-regression.mjs" "$ROOT/T"
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tests/ctc-text-regression.py"
+
 python3 - << PY
 import json, subprocess, sys
 from pathlib import Path
@@ -104,14 +108,6 @@ for fx in ("M", "T", "L"):
     else:
         print(f"skip hashes/probe {fx}: hashes.json not present yet")
 
-t_words = root / "T" / "words-take1.json"
-if t_words.exists():
-    w = load(t_words)
-    assert w.get("isHumanGroundTruth") is False
-    assert "AVSpeechSynthesizer" in w.get("origin", "")
-    print(f"ok word receipt origin={w.get('origin')} words={w.get('wordCount')}")
-else:
-    print("skip word receipt: not generated yet")
 print("verify ok")
 PY
 

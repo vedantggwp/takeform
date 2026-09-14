@@ -9,16 +9,16 @@
       "sha256": "79ec79b54338e68f96628b33b09608078eddb6f221597ced8ea24b99d141c581"
     },
     "media/take1-speech.aiff": {
-      "sha256": "a0f2352560042d0690f26c73c896c806e40952be60072db9bbb914e398002113"
+      "sha256": "a2152e1157cfb3de9e817a3ae80d683a0139aff6964591908643d2985ec28175"
     },
     "media/take1.mp4": {
-      "sha256": "0ee70653d7d2274bab7ef5e66784eec8239bd6a3c6ff802041dc68596265bce2"
+      "sha256": "018653ba6fc06a0cc25bb79f1bc01eed4531e5bfc8146a731d29836f5f6c88a3"
     },
     "media/take2-speech.aiff": {
-      "sha256": "4bb677648dfcdb10e1b56f9f72303120a6542e57ef010e2be1beccd1cb026f17"
+      "sha256": "dc539f1f85c7b82d9e92eb0c5968e1c1847d9b392a266cbd340263d857d5c28a"
     },
     "media/take2.mp4": {
-      "sha256": "a2db91b027d451924f8c3c4d355d714acfa7448de12b8a7b1ae570a29b946fa3"
+      "sha256": "a3f1f90159dac3a99c06a4a40b62bc2608f1b28311d913fec97aa4afe1e002b8"
     }
   }
 }

@@ -20,7 +20,7 @@
     {
       "id": "take1",
       "path": "media/take1.mp4",
-      "sha256": "0ee70653d7d2274bab7ef5e66784eec8239bd6a3c6ff802041dc68596265bce2",
+      "sha256": "018653ba6fc06a0cc25bb79f1bc01eed4531e5bfc8146a731d29836f5f6c88a3",
       "container": "mp4",
       "codecs": [
         "h264",
@@ -55,7 +55,7 @@
     {
       "id": "take2",
       "path": "media/take2.mp4",
-      "sha256": "a2db91b027d451924f8c3c4d355d714acfa7448de12b8a7b1ae570a29b946fa3",
+      "sha256": "a3f1f90159dac3a99c06a4a40b62bc2608f1b28311d913fec97aa4afe1e002b8",
       "container": "mp4",
       "codecs": [
         "h264",
@@ -86,7 +86,7 @@
     {
       "id": "take1Audio",
       "path": "media/take1-speech.aiff",
-      "sha256": "a0f2352560042d0690f26c73c896c806e40952be60072db9bbb914e398002113",
+      "sha256": "a2152e1157cfb3de9e817a3ae80d683a0139aff6964591908643d2985ec28175",
       "container": "aiff",
       "codecs": [
         "pcm_s16be"
@@ -103,7 +103,7 @@
     {
       "id": "take2Audio",
       "path": "media/take2-speech.aiff",
-      "sha256": "4bb677648dfcdb10e1b56f9f72303120a6542e57ef010e2be1beccd1cb026f17",
+      "sha256": "dc539f1f85c7b82d9e92eb0c5968e1c1847d9b392a266cbd340263d857d5c28a",
       "container": "aiff",
       "codecs": [
         "pcm_s16be"
@@ -239,12 +239,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 10,
-            "timescale": 1
+            "ticks": 220500,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 48,
-            "timescale": 1
+            "ticks": 622424,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -258,8 +258,8 @@
           }
         },
         "retimeFactor": {
-          "num": 1,
-          "den": 1
+          "num": 77803,
+          "den": 132300
         },
         "layer": 0,
         "role": "picture"
@@ -269,12 +269,12 @@
         "sourceId": "take1",
         "sourceRange": {
           "start": {
-            "ticks": 36,
-            "timescale": 1
+            "ticks": 749700,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 15,
-            "timescale": 1
+            "ticks": 165155,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -288,8 +288,8 @@
           }
         },
         "retimeFactor": {
-          "num": 3,
-          "den": 2
+          "num": 33031,
+          "den": 44100
         },
         "layer": 0,
         "role": "picture"
@@ -299,12 +299,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 40,
-            "timescale": 1
+            "ticks": 441000,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 20,
-            "timescale": 1
+            "ticks": 401924,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -318,8 +318,8 @@
           }
         },
         "retimeFactor": {
-          "num": 1,
-          "den": 1
+          "num": 100481,
+          "den": 110250
         },
         "layer": 0,
         "role": "picture"
@@ -359,12 +359,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 10,
-            "timescale": 1
+            "ticks": 220500,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 48,
-            "timescale": 1
+            "ticks": 622424,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -378,8 +378,8 @@
           }
         },
         "retimeFactor": {
-          "num": 1,
-          "den": 1
+          "num": 77803,
+          "den": 132300
         },
         "layer": 1,
         "role": "dialogue"
@@ -389,12 +389,12 @@
         "sourceId": "take1",
         "sourceRange": {
           "start": {
-            "ticks": 36,
-            "timescale": 1
+            "ticks": 749700,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 15,
-            "timescale": 1
+            "ticks": 165155,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -408,8 +408,8 @@
           }
         },
         "retimeFactor": {
-          "num": 3,
-          "den": 2
+          "num": 33031,
+          "den": 44100
         },
         "layer": 1,
         "role": "dialogue"
@@ -419,12 +419,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 40,
-            "timescale": 1
+            "ticks": 441000,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 20,
-            "timescale": 1
+            "ticks": 401924,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -438,8 +438,8 @@
           }
         },
         "retimeFactor": {
-          "num": 1,
-          "den": 1
+          "num": 100481,
+          "den": 110250
         },
         "layer": 1,
         "role": "dialogue"
@@ -530,38 +530,60 @@
     ],
     "wordCorrections": [
       {
-        "wordIndex": 40,
+        "sourceId": "take1",
+        "wordId": "take1-word-002",
+        "fromText": "last",
+        "toText": "final",
+        "timingUnchanged": true,
+        "occurrenceIds": [
+          "oDlg1A"
+        ]
+      },
+      {
+        "sourceId": "take2",
+        "wordId": "take2-word-035",
         "fromText": "operator",
         "toText": "creator",
-        "timingUnchanged": true
+        "timingUnchanged": true,
+        "occurrenceIds": [
+          "oDlg2A"
+        ]
       },
       {
-        "wordIndex": 50,
-        "fromText": "false",
-        "toText": "wrong",
-        "timingUnchanged": true
+        "sourceId": "take2",
+        "wordId": "take2-word-047",
+        "fromText": "Captions",
+        "toText": "Subtitles",
+        "timingUnchanged": true,
+        "occurrenceIds": [
+          "oDlg2A"
+        ]
       },
       {
-        "wordIndex": 73,
-        "fromText": "owns",
-        "toText": "keeps",
-        "timingUnchanged": true
+        "sourceId": "take2",
+        "wordId": "take2-word-070",
+        "fromText": "Chapter",
+        "toText": "Section",
+        "timingUnchanged": true,
+        "occurrenceIds": [
+          "oDlg2A",
+          "oDlg2B"
+        ]
       },
       {
-        "wordIndex": 87,
-        "fromText": "bed",
-        "toText": "track",
-        "timingUnchanged": true
-      },
-      {
-        "wordIndex": 107,
-        "fromText": "share.",
-        "toText": "keep",
-        "timingUnchanged": true
+        "sourceId": "take1",
+        "wordId": "take1-word-104",
+        "fromText": "same",
+        "toText": "shared",
+        "timingUnchanged": true,
+        "occurrenceIds": [
+          "oDlg1B"
+        ]
       }
     ],
     "cutList": [
       {
+        "occurrenceId": "oDlg1A",
         "takeSourceId": "take1",
         "sourceRange": {
           "start": {
@@ -585,15 +607,16 @@
         }
       },
       {
+        "occurrenceId": "oDlg2A",
         "takeSourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 10,
-            "timescale": 1
+            "ticks": 220500,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 48,
-            "timescale": 1
+            "ticks": 622424,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -605,18 +628,23 @@
             "ticks": 1440,
             "timescale": 30
           }
+        },
+        "retimeFactor": {
+          "num": 77803,
+          "den": 132300
         }
       },
       {
+        "occurrenceId": "oDlg1B",
         "takeSourceId": "take1",
         "sourceRange": {
           "start": {
-            "ticks": 36,
-            "timescale": 1
+            "ticks": 749700,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 15,
-            "timescale": 1
+            "ticks": 165155,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -630,20 +658,21 @@
           }
         },
         "retimeFactor": {
-          "num": 3,
-          "den": 2
+          "num": 33031,
+          "den": 44100
         }
       },
       {
+        "occurrenceId": "oDlg2B",
         "takeSourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 40,
-            "timescale": 1
+            "ticks": 441000,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 20,
-            "timescale": 1
+            "ticks": 401924,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -655,6 +684,10 @@
             "ticks": 600,
             "timescale": 30
           }
+        },
+        "retimeFactor": {
+          "num": 100481,
+          "den": 110250
         }
       }
     ]
@@ -700,12 +733,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 10,
-            "timescale": 1
+            "ticks": 220500,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 48,
-            "timescale": 1
+            "ticks": 622424,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -724,12 +757,12 @@
         "sourceId": "take1",
         "sourceRange": {
           "start": {
-            "ticks": 36,
-            "timescale": 1
+            "ticks": 749700,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 15,
-            "timescale": 1
+            "ticks": 165155,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -748,12 +781,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 40,
-            "timescale": 1
+            "ticks": 441000,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 20,
-            "timescale": 1
+            "ticks": 401924,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -796,12 +829,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 10,
-            "timescale": 1
+            "ticks": 220500,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 48,
-            "timescale": 1
+            "ticks": 622424,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -820,12 +853,12 @@
         "sourceId": "take1",
         "sourceRange": {
           "start": {
-            "ticks": 36,
-            "timescale": 1
+            "ticks": 749700,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 15,
-            "timescale": 1
+            "ticks": 165155,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -844,12 +877,12 @@
         "sourceId": "take2",
         "sourceRange": {
           "start": {
-            "ticks": 40,
-            "timescale": 1
+            "ticks": 441000,
+            "timescale": 22050
           },
           "duration": {
-            "ticks": 20,
-            "timescale": 1
+            "ticks": 401924,
+            "timescale": 22050
           }
         },
         "outputRange": {
@@ -932,103 +965,159 @@
     ],
     "captions": [
       {
-        "text": "Hold the last thought.",
+        "text": "Hold the final thought.",
         "sourceRange": {
           "start": {
-            "ticks": 8,
+            "ticks": 40,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1289,
+            "ticks": 961,
             "timescale": 1000
           }
         },
         "outputRange": {
           "start": {
-            "ticks": 8,
+            "ticks": 40,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1289,
+            "ticks": 961,
             "timescale": 1000
           }
         },
         "takeSourceId": "take1",
+        "occurrenceId": "oDlg1A",
         "straddlesCut": false
       },
       {
-        "text": "operator names the cut,",
+        "text": "creator names the cut,",
         "sourceRange": {
           "start": {
-            "ticks": 11095,
+            "ticks": 11182,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1672,
+            "ticks": 1280,
             "timescale": 1000
           }
         },
         "outputRange": {
           "start": {
-            "ticks": 13095,
+            "ticks": 14010,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1672,
+            "ticks": 2177,
             "timescale": 1000
           }
         },
         "takeSourceId": "take2",
+        "occurrenceId": "oDlg2A",
         "straddlesCut": false
       },
       {
-        "text": "same sentence both takes share.",
+        "text": "Subtitles must follow the measured words through the map.",
         "sourceRange": {
           "start": {
-            "ticks": 36280,
+            "ticks": 15823,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 2032,
+            "ticks": 2601,
             "timescale": 1000
           }
         },
         "outputRange": {
           "start": {
-            "ticks": 60187,
+            "ticks": 21902,
             "timescale": 1000
           },
           "duration": {
-            "ticks": 1354,
+            "ticks": 4422,
+            "timescale": 1000
+          }
+        },
+        "takeSourceId": "take2",
+        "occurrenceId": "oDlg2A",
+        "straddlesCut": false
+      },
+      {
+        "text": "Section labels come from the author, not from every segment.",
+        "sourceRange": {
+          "start": {
+            "ticks": 21904,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 3221,
+            "timescale": 1000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 32243,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 5477,
+            "timescale": 1000
+          }
+        },
+        "takeSourceId": "take2",
+        "occurrenceId": "oDlg2A",
+        "straddlesCut": false
+      },
+      {
+        "text": "Section labels come from the author, not from every segment.",
+        "sourceRange": {
+          "start": {
+            "ticks": 21904,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 3221,
+            "timescale": 1000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 72090,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 3534,
+            "timescale": 1000
+          }
+        },
+        "takeSourceId": "take2",
+        "occurrenceId": "oDlg2B",
+        "straddlesCut": false
+      },
+      {
+        "text": "shared sentence both takes share.",
+        "sourceRange": {
+          "start": {
+            "ticks": 34349,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 1680,
+            "timescale": 1000
+          }
+        },
+        "outputRange": {
+          "start": {
+            "ticks": 60466,
+            "timescale": 1000
+          },
+          "duration": {
+            "ticks": 2243,
             "timescale": 1000
           }
         },
         "takeSourceId": "take1",
-        "straddlesCut": false
-      },
-      {
-        "text": "Chapter labels come from the author, not from every segment.",
-        "sourceRange": {
-          "start": {
-            "ticks": 21869,
-            "timescale": 1000
-          },
-          "duration": {
-            "ticks": 3553,
-            "timescale": 1000
-          }
-        },
-        "outputRange": {
-          "start": {
-            "ticks": 23869,
-            "timescale": 1000
-          },
-          "duration": {
-            "ticks": 3553,
-            "timescale": 1000
-          }
-        },
-        "takeSourceId": "take2",
+        "occurrenceId": "oDlg1B",
         "straddlesCut": false
       }
     ],

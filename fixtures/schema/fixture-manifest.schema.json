@@ -416,15 +416,21 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "wordIndex",
+              "sourceId",
+              "wordId",
               "fromText",
               "toText",
-              "timingUnchanged"
+              "timingUnchanged",
+              "occurrenceIds"
             ],
             "properties": {
-              "wordIndex": {
-                "type": "integer",
-                "minimum": 0
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "wordId": {
+                "type": "string",
+                "minLength": 1
               },
               "fromText": {
                 "type": "string"
@@ -434,6 +440,14 @@
               },
               "timingUnchanged": {
                 "type": "boolean"
+              },
+              "occurrenceIds": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             }
           }
@@ -444,11 +458,16 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
+              "occurrenceId",
               "takeSourceId",
               "sourceRange",
               "outputRange"
             ],
             "properties": {
+              "occurrenceId": {
+                "type": "string",
+                "minLength": 1
+              },
               "takeSourceId": {
                 "type": "string"
               },
@@ -512,7 +531,8 @@
         "text",
         "sourceRange",
         "outputRange",
-        "takeSourceId"
+        "takeSourceId",
+        "occurrenceId"
       ],
       "properties": {
         "text": {
@@ -526,6 +546,10 @@
         },
         "takeSourceId": {
           "type": "string"
+        },
+        "occurrenceId": {
+          "type": "string",
+          "minLength": 1
         },
         "straddlesCut": {
           "type": "boolean"

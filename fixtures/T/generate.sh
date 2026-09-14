@@ -3,18 +3,34 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/lib/common.sh"
 MEDIA="$ROOT/T/media"
-rm -rf "$MEDIA"
-mkdir -p "$MEDIA"
+reuse_audio=false
+if [[ "${1:-}" == "--reuse-audio" ]]; then
+  reuse_audio=true
+elif [[ $# -ne 0 ]]; then
+  echo "usage: generate.sh [--reuse-audio]" >&2
+  exit 2
+fi
 
-run_swift "$ROOT/tools/SpeechWriter.swift" \
-  --text-file "$ROOT/T/script-take1.txt" \
-  --output-aiff "$MEDIA/take1-speech.aiff" \
-  --output-words "$ROOT/T/words-take1.json"
-
-run_swift "$ROOT/tools/SpeechWriter.swift" \
-  --text-file "$ROOT/T/script-take2.txt" \
-  --output-aiff "$MEDIA/take2-speech.aiff" \
-  --output-words "$ROOT/T/words-take2.json"
+if [[ "$reuse_audio" == false ]]; then
+  CTC_PYTHON="${CTC_PYTHON:?set CTC_PYTHON to a Python 3.12+ environment with fixtures/tools/requirements-ctc.txt installed}"
+  CTC_MODEL_DIR="${CTC_MODEL_DIR:?set CTC_MODEL_DIR to the directory containing the pinned local Wav2Vec2 checkpoint}"
+  rm -rf "$MEDIA"
+  mkdir -p "$MEDIA"
+  run_swift "$ROOT/tools/SpeechWriter.swift" \
+    --text-file "$ROOT/T/script-take1.txt" \
+    --output-aiff "$MEDIA/take1-speech.aiff" \
+    --output-audio-receipt "$ROOT/T/audio-take1.json"
+  run_swift "$ROOT/tools/SpeechWriter.swift" \
+    --text-file "$ROOT/T/script-take2.txt" \
+    --output-aiff "$MEDIA/take2-speech.aiff" \
+    --output-audio-receipt "$ROOT/T/audio-take2.json"
+  PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/align_fixture_speech.py" --fixture "$ROOT/T" --source take1 --python "$CTC_PYTHON" --model-dir "$CTC_MODEL_DIR"
+  PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/align_fixture_speech.py" --fixture "$ROOT/T" --source take2 --python "$CTC_PYTHON" --model-dir "$CTC_MODEL_DIR"
+else
+  for required in "$MEDIA/take1-speech.aiff" "$MEDIA/take2-speech.aiff" "$ROOT/T/audio-take1.json" "$ROOT/T/audio-take2.json" "$ROOT/T/words-take1.json" "$ROOT/T/words-take2.json"; do
+    [[ -f "$required" ]] || { echo "--reuse-audio requires $required" >&2; exit 1; }
+  done
+fi
 
 pad_audio() {
   local in="$1" out="$2"

@@ -1,0 +1,23 @@
+{
+  "durationSeconds" : 41.490022675736959,
+  "finalizedFrames" : 914855,
+  "origin" : "AVSpeechSynthesizer buffer write",
+  "sampleRate" : 22050,
+  "utterances" : [
+    {
+      "endFrame" : 185772,
+      "id" : "utterance-0",
+      "sampleRate" : 22050,
+      "startFrame" : 0,
+      "text" : "Hold the last thought. Hold the last thought. The second take keeps the same meaning and drops the repeat. After this sentence there is a two second pause."
+    },
+    {
+      "endFrame" : 914855,
+      "id" : "utterance-2",
+      "sampleRate" : 22050,
+      "startFrame" : 229872,
+      "text" : "A workshop table holds a camera, a notebook, and a cup. The operator names the cut, keeps the pause, and rejects a false deletion. Captions must follow the measured words through the map. A phrase that sits on a cut stays with the take that owns it. Chapter labels come from the author, not from every segment. The music bed stays under the voice. One sound effect marks the chapter change. The film ends on the same sentence both takes share. The notebook lists the five word corrections and the three chapter labels before the export starts."
+    }
+  ],
+  "writtenFrames" : 914855
+}

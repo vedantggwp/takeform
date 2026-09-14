@@ -13,7 +13,7 @@ No renderer is chosen or run from this directory.
 The registry is `fixtures/registry.json`. It lists three fixtures.
 
 - M is a 16 s overlapping montage at 30/1 fps and 1920x1080. It has twelve moments, a duplicate still, and a truncated corrupt file.
-- T is an about 90 s talking-head edit. Take 1 has a repeated phrase and a two second pause. Take 2 is a VFR concatenation. Word times come from `AVSpeechSynthesizer` word-boundary callbacks.
+- T is an about 90 s talking-head edit. Take 1 has a repeated phrase and a two second pause. Take 2 is a VFR concatenation. Word times are local CTC alignment estimates with source-word and occurrence identities.
 - L is a 30 minute chaptered film at 24000/1001. It is fifteen labelled two-minute chapters of repeated test material, with a 24-frame crossfade on each join.
 
 The data shapes are `fixtures/schema/fixture-manifest.schema.json` and `fixtures/schema/measurement-result.schema.json`. Times are `{ticks, timescale}` rationals. Source ranges and output ranges stay distinct objects.
@@ -22,16 +22,28 @@ The data shapes are `fixtures/schema/fixture-manifest.schema.json` and `fixtures
 
 Work on a Mac with the pinned tools recorded in each manifest `generator.toolPins`. Current pins are FFmpeg 8.0.1, Swift 6.3, Node 22.22.1, and macOS 26.6.2 (25G83) arm64. This FFmpeg build has no drawtext filter. Labels are PNG overlays from `LabelStill.swift` using the system UI font.
 
-From the repository root:
+T generation needs an explicit local CTC Python executable and model directory. Dependencies are pinned in `fixtures/tools/requirements-ctc.txt`. The checkpoint is not tracked and the generator never downloads it.
+
+To obtain the optional public checkpoint, choose a local directory and run:
 
 ```bash
-./fixtures/generate.sh
+mkdir -p .local/takeform-ctc
+curl --fail --location https://download.pytorch.org/torchaudio/models/wav2vec2_fairseq_base_ls960_asr_ls960.pth -o .local/takeform-ctc/wav2vec2_fairseq_base_ls960_asr_ls960.pth
+shasum -a 256 .local/takeform-ctc/wav2vec2_fairseq_base_ls960_asr_ls960.pth
+```
+
+The required SHA-256 is `488fd4f16de84438ffc945334278c1b9fb9b7159a806c1080b16111a958c945d`. The weights are the official PyTorch Wav2Vec2 ASR Base 960h checkpoint under MIT terms. Install the pinned packages in a local Python environment, then run from the repository root:
+
+```bash
+CTC_PYTHON="$PWD/.venv-ctc/bin/python" CTC_MODEL_DIR="$PWD/.local/takeform-ctc" ./fixtures/generate.sh
 ./fixtures/verify.sh
 ```
 
 `generate.sh` deletes each `media/` directory, writes new files, and stamps `hashes.json` plus source `sha256` fields in the manifests.
 
-Speech is written to AIFF first, then transcoded. `say -o` with `.m4a` is not used.
+Speech is written to AIFF first, then transcoded. `say -o` with `.m4a` is not used. The CTC runner validates the model hash, exact audio-frame receipt, transcript coverage, positive nonoverlapping word spans, utterance origins, and active waveform support before it writes the word receipt.
+
+`fixtures/T/generate.sh --reuse-audio` only encodes the checked local AIFF files and receipts already present in `fixtures/T`. It refuses incomplete inputs and does not re-synthesize or realign them.
 
 ## How to verify
 
@@ -42,8 +54,9 @@ Speech is written to AIFF first, then transcoded. `say -o` with `.m4a` is not us
 3. Checks plan arithmetic (480, 2700, and 43157 frames).
 4. Checks `hashes.json` against file bytes when hashes exist.
 5. Probes generated media with ffprobe.
-6. Confirms the talking-head word receipt names `AVSpeechSynthesizer` and is not human ground truth.
-7. Runs `hygiene-check.sh`.
+6. Confirms the talking-head audio receipt, exact `ffprobe` frame count, local CTC provenance, word origins, correction targets, and source-to-output projection.
+7. Runs T contract regressions for doubled frames, invalid word times, overlap, silent tails, incorrect correction identities, unselected corrections, and cut crossings.
+8. Runs `hygiene-check.sh`.
 
 Run generate twice when you need the hash stability finding. Compare `hashes.json`. On this machine two consecutive runs matched container sha256 for every T and L file and for 14 of 16 M files. The two Live Photo MOV wrappers differed. Isolated ContentIdWriter copies of one encode matched. The MOV difference is the x264 encode of those clips. For those two files, compare decoded video with `ffmpeg -map 0:v -f md5`. Talking-head word-boundary receipts can jitter by tens of milliseconds across runs even when the AIFF bytes match. Same machine, same pins is the only identity claim. Cross-machine byte identity is not promised.
 
@@ -111,4 +124,6 @@ These limits were written before any renderer measurement.
 
 ## Word timings
 
-`fixtures/T/words-take1.json` and `words-take2.json` are synthesizer word-boundary receipts. They are not ground truth from a human. Do not invent even spacing for a phrase.
+`fixtures/T/words-take1.json` and `words-take2.json` contain raw local Wav2Vec2 CTC spans. They retain the original transcript word, utterance origin, token evidence, and an independently named waveform-tail estimate. The tail estimate is acoustic activity, not a phonetic boundary. These records are not human ground truth, lip-sync proof, or a renderer measurement.
+
+Synthesizer range callbacks were rejected because they did not prove the written sample position. Whisper alignment was rejected because it produced zero-duration words on the frozen full takes. Do not invent even spacing, silently repair a span, or reuse a correction outside its named source occurrence.
