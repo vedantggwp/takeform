@@ -15,21 +15,31 @@ The hidden rubric scored six criteria from 0 to 5:
 5. Honest evidence and a conditional renderer.
 6. Structural commitment.
 
-The record retains the original packages by SHA-256. Each package fingerprint hashes a lexically sorted list of SHA-256 file digests in that package. The correction record and score records are individual-file digests.
+The candidate packages are retained private artifacts. Their package fingerprints are integrity receipts for the retained files, not public reproducible inputs. Each fingerprint is the SHA-256 digest of a canonical manifest. The manifest has one newline-terminated line for each regular file. Lines sort by root-relative path with `LC_ALL=C`. Each line contains the lowercase file digest, two spaces, and the root-relative path. From a package root, this command produces the manifest digest in its first output field:
+
+```sh
+find . -type f -print | LC_ALL=C sort |
+  while IFS= read -r file; do
+    digest=$(shasum -a 256 "$file" | awk '{print $1}')
+    printf '%s  %s\n' "$digest" "${file#./}"
+  done | shasum -a 256
+```
+
+The correction record and score records are individual-file digests.
 
 | Artifact | SHA-256 |
 |---|---|
-| Candidate A package | `b280a0d151bcf45cda72c0f4c158165f7fa8ab12b32d1d6a4d004bfe98cb6c69` |
-| Candidate B package | `9bab1d7b4d05fc2846a65d61cc6ecb4f568767114af7515f4c94254a4b50c1dc` |
-| Candidate C package | `0a21de81d3a2b82494accf6049ba1e0e6b23a988bb925eab57f343cfcd383557` |
-| Candidate D dropout record | `0d82565618eab0fd507fe6abc09c9c1caa9c9492cf69ec25869e6ba436e64219` |
+| Candidate A package | `4ba8ca3639bcad9d9f31fe97c434f3d7ee9fcf179856dda902bbf41aaeb637a4` |
+| Candidate B package | `b09db34d62586edfd21d9354b59d995e728bd5682874776123842ec52aa56c8f` |
+| Candidate C package | `1cc2c49e7d205de3438666eff7031088fcfdc41f542e347f6b75cf0e9c4dc4ce` |
+| Candidate D dropout record | `cc7d80916733a2f5ac0822a2e6786f62b51ee177832bdd8439034f922942eb3f` |
 | Final parent-score record | `a083af88f2cb7a54998657439d4c1def84acbcd74310534de9c3caa3003639b9` |
 | Cross-judge verdict | `085a701b9b0e57eb653824351a98ae02dd3bfe60d024f51d2c68f493b75bd837` |
 | Full-read correction record | `573e9334713864279839cc6a286a0ca224693d4974ee075e25b48efc47f13147` |
 
 ## Historical arena
 
-The historical arena requested `claude-fable-5-1-thinking-max` for candidate A, `gpt-5.6-sol-max` for candidate B, `cursor-grok-4.6-high-fast` for candidate C, and `claude-opus-5-thinking-xhigh` for candidate D. A, B, and C produced complete design packages. D dropped out before dispatch because the delegation tool rejected its requested model label. No substitute ran.
+The historical arena requested the labels `claude-fable-5-1-thinking-max` for candidate A, `gpt-5.6-sol-max` for candidate B, `cursor-grok-4.6-high-fast` for candidate C, and `claude-opus-5-thinking-xhigh` for candidate D. These labels record requested tool calls. They do not independently attest the child model or provider. A, B, and C produced complete design packages. D dropped out before dispatch because the delegation tool rejected its requested model label. No substitute ran.
 
 The designs were structurally different. A used a linked Swift library with an elected writer. B used a native SwiftUI app, CLI, and agent tools over one signed on-demand Swift authority. C used a single-occupier document kernel with XPC helpers and an external recipe library.
 
@@ -43,7 +53,7 @@ The final parent and judge totals were:
 
 The provisional parent selection preceded a complete read of all type sketches. A later full read corrected the parent totals from A 26, B 29, and C 19 to the totals above. Candidate B remained the base. The original process was therefore not fully compliant from the start, even though the correction confirmed the same selection.
 
-The cross-judge also authored candidate B. Path labels reduced direct attribution, but they did not remove that bias. The parent agreement after the full read is corroboration from another model family, not independent consensus.
+The cross-judge also authored candidate B. Path labels reduced direct attribution, but they did not remove that bias. The parent agreement after the full read corroborates the result from a run requested on another model family. The actual child model identity was not independently attested. This is not independent consensus.
 
 ## Selected design
 
@@ -62,7 +72,7 @@ The synthesis rejected caller-supplied identity, public receipt commands, stored
 
 No application, renderer, native preview, provider adapter, distribution package, or production database is accepted by this record.
 
-[PR #28](https://github.com/vedantggwp/takeform/pull/28) contains the signed native-boundary probe and has an independent source-and-receipt review. Root-owned direct native UI and CLI interaction acceptance remains pending. The probe does not establish signed distribution, notarization, XPC, or sandbox capability transfer.
+[PR #28](https://github.com/vedantggwp/takeform/pull/28) owns the signed native-boundary evidence. This historical record does not state a current review verdict for that separate PR. The probe does not establish signed distribution, notarization, XPC, or sandbox capability transfer.
 
 All renderer dependencies remain pending: [issue #19](https://github.com/vedantggwp/takeform/issues/19) defines the fixtures, [issue #24](https://github.com/vedantggwp/takeform/issues/24) measures HyperFrames, [issue #25](https://github.com/vedantggwp/takeform/issues/25) measures Remotion, [issue #26](https://github.com/vedantggwp/takeform/issues/26) measures native preview, and [issue #27](https://github.com/vedantggwp/takeform/issues/27) makes the decision. The decision record must include failed runs, licence status, preview behaviour, memory, seeking, export, cancellation, recovery, and output inspection before selecting a renderer.
 
