@@ -15,6 +15,8 @@ const packages = [
   ['@remotion/renderer', '4.0.524'],
   ['@remotion/player', '4.0.524'],
 ];
+const maxOutputBytes = 4096;
+const terminationGraceMs = 100;
 
 function parseArgs(argv) {
   const options = {
@@ -58,31 +60,67 @@ function publicPath(pathname) {
   return pathname ? 'provided' : 'not-provided';
 }
 
-function errorDetail(error) {
-  return error instanceof Error ? error.message : String(error);
+function publicVersion(output) {
+  const line = output.split('\n')[0].trim().slice(0, 512);
+  return line.replace(/(?:^|\s)(?:\/|~\/)[^\s]*/g, ' [path]');
+}
+
+function diagnostic(error, subject) {
+  const code = typeof error === 'object' && error !== null && typeof error.code === 'string'
+    ? error.code
+    : error instanceof Error
+      ? error.name
+      : 'UNKNOWN';
+  return {code, message: `${subject} failed`};
 }
 
 function command(executable, args, timeoutMs) {
   return new Promise((resolveCommand) => {
     let settled = false;
-    const child = spawn(executable, args, {stdio: ['ignore', 'pipe', 'pipe']});
+    let timedOut = false;
+    let terminated = false;
+    let killTimer;
+    let timeout;
     let stdout = '';
     let stderr = '';
+    const append = (value, chunk) => {
+      if (Buffer.byteLength(value) >= maxOutputBytes) return value;
+      const remaining = maxOutputBytes - Buffer.byteLength(value);
+      return value + chunk.toString('utf8').slice(0, remaining);
+    };
     const finish = (result) => {
       if (!settled) {
         settled = true;
         clearTimeout(timeout);
+        clearTimeout(killTimer);
         resolveCommand(result);
       }
     };
-    const timeout = setTimeout(() => {
+    let child;
+    try {
+      child = spawn(executable, args, {stdio: ['ignore', 'pipe', 'pipe']});
+    } catch (error) {
+      finish({status: 'error', error: diagnostic(error, 'Executable')});
+      return;
+    }
+    timeout = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGTERM');
-      finish({status: 'timeout', stdout, stderr});
+      killTimer = setTimeout(() => {
+        terminated = true;
+        child.kill('SIGKILL');
+      }, terminationGraceMs);
     }, timeoutMs);
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('error', (error) => finish({status: 'error', error: errorDetail(error), stdout, stderr}));
-    child.on('close', (code) => finish({status: code === 0 ? 'ok' : 'error', code, stdout, stderr}));
+    child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk); });
+    child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk); });
+    child.on('error', (error) => finish({status: 'error', error: diagnostic(error, 'Executable')}));
+    child.on('close', (code, signal) => {
+      if (timedOut) {
+        finish({status: 'timeout', reaped: true, signal: signal ?? (terminated ? 'SIGKILL' : 'SIGTERM')});
+        return;
+      }
+      finish({status: code === 0 ? 'ok' : 'error', code, stdout, stderr});
+    });
   });
 }
 
@@ -94,7 +132,9 @@ async function importPackage(runtime, name) {
     ? rootExport
     : rootExport?.import ?? rootExport?.module ?? metadata.module ?? metadata.main;
   if (!entry) {
-    throw new Error(`${name} has no import entrypoint`);
+    const error = new Error('Package has no import entrypoint');
+    error.code = 'NO_ENTRYPOINT';
+    throw error;
   }
   return {
     metadata,
@@ -118,48 +158,61 @@ async function packageStatus(runtime, name, expectedVersion) {
     }
     return {status: 'ok', version: metadata.version};
   } catch (error) {
-    return {status: 'error', error: errorDetail(error)};
+    return {status: 'error', error: diagnostic(error, `${name} package metadata`)};
   }
+}
+
+function exportedFunctions(module, names) {
+  return names.filter((name) => typeof module[name] !== 'function');
 }
 
 async function importsStatus(runtime) {
   const result = {};
   try {
     const producer = await importPackage(runtime, '@hyperframes/producer');
-    const job = producer.module.createRenderJob({
-      format: 'mp4',
-      fps: {num: 24000, den: 1001},
-      quality: 'standard',
-      workers: 1,
-    });
-    result.hyperframes = {
-      status: 'ok',
-      exactRationalConfig: job.config.fps,
-      publicApis: ['createRenderJob', 'executeRenderJob'],
-    };
+    const publicApis = ['createRenderJob', 'executeRenderJob'];
+    const missing = exportedFunctions(producer.module, publicApis);
+    if (missing.length > 0) {
+      result.hyperframes = {status: 'error', error: {code: 'MISSING_EXPORT', message: 'HyperFrames producer API is unavailable'}, missing};
+    } else {
+      const job = producer.module.createRenderJob({
+        format: 'mp4',
+        fps: {num: 24000, den: 1001},
+        quality: 'standard',
+        workers: 1,
+      });
+      result.hyperframes = {
+        status: 'ok',
+        exactRationalConfig: job.config.fps,
+        publicApis,
+      };
+    }
   } catch (error) {
-    result.hyperframes = {status: 'error', error: errorDetail(error)};
+    result.hyperframes = {status: 'error', error: diagnostic(error, 'HyperFrames producer import')};
   }
 
   try {
     const renderer = await importPackage(runtime, '@remotion/renderer');
     await importPackage(runtime, 'remotion');
+    const publicApis = ['ensureBrowser', 'openBrowser', 'renderMedia'];
+    const missing = exportedFunctions(renderer.module, publicApis);
     result.remotion = {
-      status: typeof renderer.module.ensureBrowser === 'function' && typeof renderer.module.openBrowser === 'function' ? 'ok' : 'error',
-      publicApis: ['ensureBrowser', 'openBrowser', 'renderMedia'],
+      status: missing.length === 0 ? 'ok' : 'error',
+      publicApis,
     };
     if (result.remotion.status === 'error') {
-      result.remotion.error = 'Expected renderer APIs were not exported';
+      result.remotion.error = {code: 'MISSING_EXPORT', message: 'Remotion renderer API is unavailable'};
+      result.remotion.missing = missing;
     }
   } catch (error) {
-    result.remotion = {status: 'error', error: errorDetail(error)};
+    result.remotion = {status: 'error', error: diagnostic(error, 'Remotion renderer import')};
   }
   return result;
 }
 
 async function browserStatus(options, imports) {
   const result = {
-    candidate: publicPath(options.browser),
+    candidate: {status: options.browser ? 'pending' : 'not-provided'},
     hyperframes: {
       status: 'not-run',
       reason: 'Pinned launch helpers inject sandbox-disabling flags. This runtime does not use them.',
@@ -169,17 +222,17 @@ async function browserStatus(options, imports) {
   if (!options.browser) return result;
 
   const version = await command(options.browser, ['--version'], options.timeoutMs);
-  result.version = version.status === 'ok'
-    ? version.stdout.trim() || version.stderr.trim()
-    : {status: version.status, error: version.error ?? `exit ${version.code ?? 'unknown'}`};
+  result.candidate = version.status === 'ok'
+    ? {status: 'ok', version: publicVersion(version.stdout || version.stderr)}
+    : {status: 'error', error: version.error ?? {code: version.status === 'timeout' ? 'TIMEOUT' : 'EXECUTABLE_ERROR', message: 'Browser executable could not be queried'}};
 
   if (!options.bootstrapBrowser) return result;
   if (version.status !== 'ok') {
-    result.remotion = {status: 'error', error: 'Browser executable could not be queried'};
+    result.remotion = {status: 'error', error: {code: 'BROWSER_UNAVAILABLE', message: 'Browser executable could not be queried'}};
     return result;
   }
   if (imports.remotion.status !== 'ok') {
-    result.remotion = {status: 'error', error: 'Remotion renderer import failed'};
+    result.remotion = {status: 'error', error: {code: 'RENDERER_IMPORT_FAILED', message: 'Remotion renderer import failed'}};
     return result;
   }
 
@@ -195,7 +248,7 @@ async function browserStatus(options, imports) {
       path: publicPath(bootstrap.path),
     };
   } catch (error) {
-    result.remotion = {status: 'error', error: errorDetail(error)};
+    result.remotion = {status: 'error', error: diagnostic(error, 'Remotion browser bootstrap')};
   }
   return result;
 }
@@ -203,9 +256,9 @@ async function browserStatus(options, imports) {
 async function executableStatus(executable, timeoutMs) {
   const result = await command(executable, ['-version'], timeoutMs);
   if (result.status === 'ok') {
-    return {status: 'ok', version: result.stdout.split('\n')[0]};
+    return {status: 'ok', version: publicVersion(result.stdout)};
   }
-  return {status: 'error', executable: publicPath(executable), error: result.error ?? `exit ${result.code ?? 'unknown'}`};
+  return {status: 'error', executable: publicPath(executable), error: result.error ?? {code: result.status === 'timeout' ? 'TIMEOUT' : 'EXECUTABLE_ERROR', message: 'FFmpeg executable could not be queried'}};
 }
 
 async function runtimeStatus(runtime) {
@@ -213,8 +266,8 @@ async function runtimeStatus(runtime) {
     await access(runtime);
     const details = await stat(runtime);
     return details.isDirectory() ? {status: 'ok'} : {status: 'error', error: '--runtime must be a directory'};
-  } catch {
-    return {status: 'error', error: '--runtime does not exist'};
+  } catch (error) {
+    return {status: 'error', error: diagnostic(error, 'Runtime directory')};
   }
 }
 
@@ -242,6 +295,7 @@ async function main() {
     ...Object.values(result.packages).map((entry) => entry.status),
     result.imports.hyperframes.status,
     result.imports.remotion.status,
+    result.browser.candidate.status === 'not-provided' ? 'ok' : result.browser.candidate.status,
     result.browser.remotion.status === 'not-requested' ? 'ok' : result.browser.remotion.status,
   ].every((status) => status === 'ok');
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -249,6 +303,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stdout.write(`${JSON.stringify({ok: false, error: errorDetail(error)}, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ok: false, error: diagnostic(error, 'Doctor')}, null, 2)}\n`);
   process.exitCode = 1;
 });

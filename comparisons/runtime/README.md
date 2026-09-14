@@ -16,7 +16,7 @@ Pass explicit paths when an adapter needs a non-default executable.
 npm run doctor -- --runtime . --ffmpeg ffmpeg --browser BROWSER_EXECUTABLE --bootstrap-browser
 ```
 
-The command emits JSON. It does not print executable paths. `--timeout-ms` bounds subprocess checks between 100 and 30000 milliseconds. The browser bootstrap verifies the Remotion public `ensureBrowser()` custom-executable route. It does not launch a browser.
+The command emits JSON. It does not print executable or runtime paths. Errors contain a diagnostic code and a concise public message. `--timeout-ms` bounds subprocess checks between 100 and 30000 milliseconds. A timed-out child receives `TERM`, then `KILL` after a short grace period, and the doctor waits for it to close. An explicit browser candidate must pass its version check even when bootstrap is not requested. The browser bootstrap verifies the Remotion public `ensureBrowser()` custom-executable route. It does not launch a browser.
 
 ## Pinned packages
 
@@ -50,4 +50,4 @@ npm test
 npm run doctor -- --ffmpeg ffmpeg
 ```
 
-The tests exercise missing FFmpeg, unsupported Node, and a missing browser bootstrap. They do not render media or assert package-version strings.
+The tests exercise missing private paths, unsupported Node, missing imports, invalid browser candidates, browser bootstrap failure, and a `TERM`-ignoring child. They do not render media or assert package-version strings.
