@@ -278,6 +278,9 @@ final class EpisodeCompositionTests: XCTestCase {
         guard case .failure(.rejected) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, invalidSelectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("a reused setup operation ID must reject changed selectors") }
         guard case .renderRuntimeReadiness(.ready) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(package, Data(credential.utf8)), from: .app) else { return XCTFail("an invalid setup must not clobber prior valid selectors") }
 
+        try Data("changed profile bytes".utf8).write(to: runtime.profile, options: .atomic)
+        guard case .renderRuntimeReadiness(.unavailable) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(package, Data(credential.utf8)), from: .app) else { return XCTFail("a changed runtime profile must invalidate prior readiness") }
+
         let movedPackage = root.appendingPathComponent("RuntimeMoved.takeform")
         try FileManager.default.moveItem(at: package, to: movedPackage)
         let movedAuthority = try ProjectAuthority(packageURL: movedPackage)
@@ -451,12 +454,14 @@ final class EpisodeCompositionTests: XCTestCase {
         let runtime = root.appendingPathComponent("fake-runtime")
         try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
         let node = runtime.appendingPathComponent("node")
+        let profile = runtime.appendingPathComponent("runtime-profile.json")
         let worker = runtime.appendingPathComponent("worker")
         let browser = runtime.appendingPathComponent("browser")
         let browserWrapper = runtime.appendingPathComponent("browser-wrapper")
         let ffmpeg = runtime.appendingPathComponent("ffmpeg")
         let ffprobe = runtime.appendingPathComponent("ffprobe")
         try "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo v22.22.1; exit 0; fi\nworker=\"$1\"; shift; exec \"$worker\" \"$@\"\n".write(to: node, atomically: true, encoding: .utf8)
+        try "{\"schemaVersion\":1}\n".write(to: profile, atomically: true, encoding: .utf8)
         let defaultWorker = "#!/bin/sh\nstage=\"$TAKEFORM_RENDER_STAGE\"\njob=\"$TAKEFORM_RENDER_JOB\"\nattempt=\"$TAKEFORM_RENDER_ATTEMPT\"\nhash=\"$TAKEFORM_RENDER_SNAPSHOT_SHA256\"\nrequest=\"$2\"\ngrep -q '\\\"browserWrapperExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"browserTargetExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"ffmpegExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"ffprobeExecutable\\\"' \"$request\" || exit 65\nprintf render > \"$stage/render.mp4\"\nsha=$(/usr/bin/shasum -a 256 \"$stage/render.mp4\" | /usr/bin/awk '{print $1}')\nprintf '{\\\"schemaVersion\\\":1,\\\"jobID\\\":\\\"%s\\\",\\\"attemptID\\\":\\\"%s\\\",\\\"outcome\\\":\\\"succeeded\\\",\\\"input\\\":{\\\"compositionDigest\\\":\\\"ignored\\\",\\\"snapshotSHA256\\\":\\\"%s\\\",\\\"assets\\\":[]},\\\"artifact\\\":{\\\"fileName\\\":\\\"render.mp4\\\",\\\"byteLength\\\":6,\\\"sha256\\\":\\\"%s\\\"}}' \"$job\" \"$attempt\" \"$hash\" \"$sha\" > \"$stage/attempt-receipt.json\"\n"
         try (workerScript ?? defaultWorker).write(to: worker, atomically: true, encoding: .utf8)
         try "#!/bin/sh\necho FakeTool 1.0\n".write(to: browser, atomically: true, encoding: .utf8)
@@ -465,6 +470,6 @@ final class EpisodeCompositionTests: XCTestCase {
         let defaultProbe = "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\",\\\"width\\\":1920,\\\"height\\\":1080,\\\"avg_frame_rate\\\":\\\"30/1\\\",\\\"nb_frames\\\":\\\"360\\\"}],\\\"format\\\":{\\\"duration\\\":\\\"12.0\\\"}}\\n'; fi\n"
         try (ffprobeScript ?? defaultProbe).write(to: ffprobe, atomically: true, encoding: .utf8)
         for url in [node, worker, browser, browserWrapper, ffmpeg, ffprobe] { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path) }
-        return RenderWorkerRuntime(node: node, worker: worker, runtimeRoot: runtime, browser: browser, browserWrapper: browserWrapper, ffmpeg: ffmpeg, ffprobe: ffprobe)
+        return RenderWorkerRuntime(node: node, profile: profile, worker: worker, runtimeRoot: runtime, browser: browser, browserWrapper: browserWrapper, ffmpeg: ffmpeg, ffprobe: ffprobe)
     }
 }

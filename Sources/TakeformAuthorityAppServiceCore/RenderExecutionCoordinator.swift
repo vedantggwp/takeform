@@ -8,6 +8,7 @@ import TakeformCore
 /// coordinator is written to project.sqlite or returned as a portable value.
 struct RenderWorkerRuntime: Sendable {
     let node: URL
+    let profile: URL
     let worker: URL
     let runtimeRoot: URL
     /// The app-selected Chrome target. It is never replaced by a PATH lookup.
@@ -103,6 +104,8 @@ private struct PersistedRenderRuntimeSelectors: Codable {
 
 private struct RenderRuntimeIdentity: Codable, Equatable {
     let nodeVersion: String
+    let nodeSHA256: String
+    let profileSHA256: String
     let workerSHA256: String
     let browserWrapperSHA256: String
     let browserSHA256: String
@@ -530,7 +533,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
                   marker.machineBindingDigest == input.machineBindingDigest else { return nil }
             // The process is deliberately unstarted: recovery never signals a
             // process whose ownership did not survive this service instance.
-            return Active(process: Process(), attemptID: marker.attemptID, snapshotSHA256: marker.snapshotSHA256, stage: stage, runtime: RenderWorkerRuntime(node: URL(fileURLWithPath: "/dev/null"), worker: URL(fileURLWithPath: "/dev/null"), runtimeRoot: URL(fileURLWithPath: "/dev/null"), browser: URL(fileURLWithPath: "/dev/null"), browserWrapper: URL(fileURLWithPath: "/dev/null"), ffmpeg: URL(fileURLWithPath: "/dev/null"), ffprobe: URL(fileURLWithPath: "/dev/null")))
+            return Active(process: Process(), attemptID: marker.attemptID, snapshotSHA256: marker.snapshotSHA256, stage: stage, runtime: RenderWorkerRuntime(node: URL(fileURLWithPath: "/dev/null"), profile: URL(fileURLWithPath: "/dev/null"), worker: URL(fileURLWithPath: "/dev/null"), runtimeRoot: URL(fileURLWithPath: "/dev/null"), browser: URL(fileURLWithPath: "/dev/null"), browserWrapper: URL(fileURLWithPath: "/dev/null"), ffmpeg: URL(fileURLWithPath: "/dev/null"), ffprobe: URL(fileURLWithPath: "/dev/null")))
         }
     }
 
@@ -571,7 +574,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
               let browserLauncher = profile.launchers.first(where: { $0.kind == "browser" }),
               profile.launchers.filter({ $0.kind == "browser" }).count == 1,
               let browserWrapper = containedProfileFile(root: resources, relativePath: browserLauncher.path, expectedSHA256: browserLauncher.sha256, executable: true) else { return nil }
-        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), worker: worker, runtimeRoot: resources, browser: URL(fileURLWithPath: selectors.browser), browserWrapper: browserWrapper, ffmpeg: URL(fileURLWithPath: selectors.ffmpeg), ffprobe: URL(fileURLWithPath: selectors.ffprobe))
+        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), profile: resources.appendingPathComponent("runtime-profile.json"), worker: worker, runtimeRoot: resources, browser: URL(fileURLWithPath: selectors.browser), browserWrapper: browserWrapper, ffmpeg: URL(fileURLWithPath: selectors.ffmpeg), ffprobe: URL(fileURLWithPath: selectors.ffprobe))
     }
 
     private func candidateRuntime(projectID: UUID, selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
@@ -589,7 +592,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
               let ffprobe = canonicalExecutable(selectors.ffprobe) else { return nil }
         // Configuration has not been preflighted yet; identity is filled only
         // immediately before the atomically written validated record.
-        return PersistedRenderRuntimeSelectors(browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe, machineBindingDigest: "", runtimeIdentity: RenderRuntimeIdentity(nodeVersion: "", workerSHA256: "", browserWrapperSHA256: "", browserSHA256: "", ffmpegSHA256: "", ffprobeSHA256: ""))
+        return PersistedRenderRuntimeSelectors(browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe, machineBindingDigest: "", runtimeIdentity: RenderRuntimeIdentity(nodeVersion: "", nodeSHA256: "", profileSHA256: "", workerSHA256: "", browserWrapperSHA256: "", browserSHA256: "", ffmpegSHA256: "", ffprobeSHA256: ""))
     }
 
     private func canonicalExecutable(_ url: URL) -> String? {
@@ -628,6 +631,8 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
     private func runtimeIdentity(for runtime: RenderWorkerRuntime) throws -> RenderRuntimeIdentity {
         RenderRuntimeIdentity(
             nodeVersion: try version(runtime.node, arguments: ["--version"]),
+            nodeSHA256: digest(try safeExecutableData(at: runtime.node)),
+            profileSHA256: digest(try safeRegularData(at: runtime.profile)),
             workerSHA256: digest(try safeRegularData(at: runtime.worker)),
             browserWrapperSHA256: digest(try safeExecutableData(at: runtime.browserWrapper)),
             browserSHA256: digest(try safeExecutableData(at: runtime.browser)),
@@ -643,6 +648,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
 
     private func readiness(for runtime: RenderWorkerRuntime) -> RenderRuntimeReadiness {
         guard [runtime.node, runtime.browserWrapper, runtime.browser, runtime.ffmpeg, runtime.ffprobe].allSatisfy({ (try? safeExecutableData(at: $0)) != nil }),
+              (try? safeRegularData(at: runtime.profile)) != nil,
               (try? safeRegularData(at: runtime.worker)) != nil else {
             return .unavailable(reason: "The bundled renderer or selected executable is unavailable.")
         }
