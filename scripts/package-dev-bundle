@@ -64,7 +64,7 @@ if [ -n "$RENDERER_NODE_ROOT" ]; then
   require_absolute_directory "--renderer-runtime-source" "$RENDERER_RUNTIME_SOURCE"
   RENDERER_NODE="$RENDERER_NODE_ROOT/bin/node"
   [ -x "$RENDERER_NODE" ] || { echo "Renderer Node root has no executable bin/node." >&2; exit 64; }
-  [ -f "$RENDERER_RUNTIME_SOURCE/package-lock.json" ] && [ -d "$RENDERER_RUNTIME_SOURCE/node_modules" ] && [ -f "$RENDERER_RUNTIME_SOURCE/doctor.mjs" ] || { echo "Renderer runtime source is incomplete." >&2; exit 64; }
+  [ -f "$RENDERER_RUNTIME_SOURCE/package-lock.json" ] && [ -d "$RENDERER_RUNTIME_SOURCE/node_modules" ] || { echo "Renderer runtime source is incomplete." >&2; exit 64; }
   assert_self_contained_node "$RENDERER_NODE_ROOT"
   EXPECTED_NODE_VERSION="$("$RENDERER_NODE" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).nodeVersion)' "$ROOT_DIR/renderer/runtime-profile.json")"
   ACTUAL_NODE_VERSION="$("$RENDERER_NODE" --version)"
@@ -110,7 +110,10 @@ if [ -n "$RENDERER_NODE_ROOT" ]; then
   mkdir -p "$RENDERER_BUNDLE"
   ditto "$RENDERER_NODE_ROOT" "$RENDERER_BUNDLE/node"
   ditto "$RENDERER_RUNTIME_SOURCE/node_modules" "$RENDERER_BUNDLE/node_modules"
-  cp "$RENDERER_RUNTIME_SOURCE/package.json" "$RENDERER_RUNTIME_SOURCE/package-lock.json" "$RENDERER_RUNTIME_SOURCE/doctor.mjs" "$RENDERER_BUNDLE/"
+  cp "$RENDERER_RUNTIME_SOURCE/package.json" "$RENDERER_RUNTIME_SOURCE/package-lock.json" "$RENDERER_BUNDLE/"
+  # The package-owned doctor is the verifier contract. The external runtime
+  # supplies only pinned dependencies and must not override it.
+  cp "$ROOT_DIR/comparisons/runtime/doctor.mjs" "$RENDERER_BUNDLE/doctor.mjs"
   cp "$ROOT_DIR/renderer/episode-render-worker.mjs" "$ROOT_DIR/renderer/runtime-profile.json" "$RENDERER_BUNDLE/"
 fi
 
