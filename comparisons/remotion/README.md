@@ -14,7 +14,7 @@ Three raw M H.264 exports completed at 1920×1080, 30 fps and 480 frames (16 sec
 
 Public cancellation was exercised after 10 rendered frames with no encoded output. The renderer reported interruption and the launcher exited 1. A post-cancel profile inventory raced Chrome removing a profile file, so cleanup was completed manually from the valid interrupted terminal receipt and was limited to task-owned scratch. This is a lifecycle limitation, not an automatic-cleanup success claim.
 
-The fixture's pre-agreed `first-last-frame-hash-stable` predicate currently **fails**: first decoded RGBA hashes matched across the three outputs while final decoded RGBA hashes differed. Independent review found no visible discrepancy at sampled frames, but that does not identify an encoder cause or make the determinism predicate pass. All three divergent MP4s are retained while a bounded lossless still diagnostic is assessed. See [REPORT.md](./REPORT.md) for output hashes, scope and evidence gaps.
+The fixture's pre-agreed `first-last-frame-hash-stable` predicate currently **fails**: first decoded RGBA hashes matched across the three outputs while final decoded RGBA hashes differed. Independent review found no visible discrepancy at sampled frames, but that does not identify an encoder cause or make the determinism predicate pass. An authorized lossless still diagnostic completed as a failed public browser-discovery launch before its first capture; it produced no PNG, bundle fingerprint, or decoded hash. All three divergent MP4s remain retained. See [REPORT.md](./REPORT.md) for output hashes, scope and evidence gaps.
 
 ## Source checks
 
