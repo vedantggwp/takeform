@@ -108,8 +108,7 @@ async function stagedAssets({snapshot, fixtureRoot, derivativeRoot, mediaPrepMan
     const expectedHash = derivative ? derivative.sha256 : source.sha256;
     if (await fileHash(sourcePath) !== expectedHash) throw new Error(`staged source hash mismatch: ${source.id}`);
     const sourceExtension = derivative ? extname(derivative.path) : extname(source.path);
-    // The accepted helper serves video only under its .mp4/.webm allowlist. MOV inputs remain byte-for-byte source copies, but use the H.264 MP4 MIME route.
-    const servedExtension = !derivative && source.container === 'mov' ? '.mp4' : sourceExtension;
+    const servedExtension = sourceExtension;
     const relative = `media/${source.id}${servedExtension}`;
     await copyFile(sourcePath, join(bundleRoot, relative));
     if (await fileHash(join(bundleRoot, relative)) !== expectedHash) throw new Error(`copied source hash mismatch: ${source.id}`);

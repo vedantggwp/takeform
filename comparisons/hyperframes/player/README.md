@@ -6,7 +6,7 @@ The builder freezes the accepted M snapshot, derives every layer and media targe
 
 The bundle uses Player’s public `seek`, `play`, and `pause` methods. Its native bridge preserves command request, session, and snapshot identities. A seek/load acknowledgement is `decoded` only after the Player’s composition document exposes every active video at the requested source time with current video data; it remains browser decode evidence, not native-renderer output evidence.
 
-The host allowlist serves video under `.mp4` or `.webm`. Accepted H.264 MOV sources are copied byte-for-byte under a `.mp4` bundle path so the existing helper can serve them with its video MIME route. `bundle-manifest.json` retains the original hash and both source and served extensions. No media bytes, source times, or retime factors change.
+The current host helper serves video under `.mp4` or `.webm`, while M also has H.264 MOV sources. The bundle preserves their original `.mov` path and bytes; their helper delivery is therefore an open host-side MIME allowlist requirement. `bundle-manifest.json` retains the original hash and source/served extensions. No media bytes, source times, or retime factors change.
 
 ## Build
 

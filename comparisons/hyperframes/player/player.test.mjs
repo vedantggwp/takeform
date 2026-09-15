@@ -23,7 +23,7 @@ test('M Player bundle uses pinned local runtime, frameState media, and the appro
   assert.equal(station.bundlePath, 'media/station.png');
   assert.equal(station.preparedSha256, 'b7b06cbf3075abc4f5b6a464235dd60ed3c91244599d9982ce9c92bc5ce1853d');
   const clip24 = receipt.sourceAssets.find(asset => asset.sourceId === 'clip24');
-  assert.deepEqual({sourceExtension: clip24.sourceExtension, servedExtension: clip24.servedExtension}, {sourceExtension: '.mov', servedExtension: '.mp4'});
+  assert.deepEqual({sourceExtension: clip24.sourceExtension, servedExtension: clip24.servedExtension}, {sourceExtension: '.mov', servedExtension: '.mov'});
   const [index, composition, verification] = await Promise.all([
     readFile(join(root, 'index.html'), 'utf8'), readFile(join(root, 'composition.html'), 'utf8'), readFile(join(root, 'verification.json'), 'utf8')
   ]);
