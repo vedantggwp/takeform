@@ -215,12 +215,15 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             let savePanel = app.windows["save-panel"]
-            if savePanel.exists, savePanel.buttons[confirmation].exists { return savePanel }
+            let saveConfirmation = savePanel.buttons[confirmation]
+            if savePanel.exists, saveConfirmation.exists, saveConfirmation.isHittable { return savePanel }
 
             // Other AppKit file panels are still app-owned windows. Select one
             // only when it exposes the expected visible action, rather than by
             // position or by creating an unconfigured application proxy.
-            for panel in app.windows.allElementsBoundByIndex where panel.buttons[confirmation].exists {
+            for panel in app.windows.allElementsBoundByIndex {
+                let action = panel.buttons[confirmation]
+                guard action.exists, action.isHittable else { continue }
                 return panel
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))

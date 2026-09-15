@@ -45,4 +45,5 @@ if grep -Eq '=([[:space:]]*)XCUIApplication\(\)' "$TEST_SOURCE"; then
 fi
 grep -Eq 'presentedSystemPanel\(in: app' "$TEST_SOURCE"
 grep -Eq 'app\.windows\["save-panel"\]' "$TEST_SOURCE"
-grep -Eq 'panel\.buttons\[confirmation\]\.exists' "$TEST_SOURCE"
+grep -Eq 'saveConfirmation\.exists, saveConfirmation\.isHittable' "$TEST_SOURCE"
+grep -Eq 'action\.exists, action\.isHittable' "$TEST_SOURCE"
