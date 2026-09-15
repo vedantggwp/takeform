@@ -278,10 +278,13 @@ extension WorkspaceModel {
                 let source = try await renderClient.playbackSource(packageURL: activeRender.packageURL, jobID: activeRender.jobID, operationID: operationID)
                 guard self.renderPreviewLoadGeneration == previewLoadGeneration,
                       self.activeRender == activeRender,
-                      source.jobID == activeRender.jobID,
-                      source.requestedRevision == activeRender.revision,
-                      source.compositionDigest == activeRender.compositionDigest,
                       isCurrentRenderContext(activeRender) else {
+                    return
+                }
+                guard source.jobID == activeRender.jobID,
+                      source.requestedRevision == activeRender.revision,
+                      source.compositionDigest == activeRender.compositionDigest else {
+                    rejectInconsistentRenderStatus()
                     return
                 }
                 try await renderedPreviewPlayer.load(source)

@@ -323,6 +323,28 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(identity?.requestedRevision, active.revision)
         XCTAssertEqual(identity?.compositionDigest, digest)
         XCTAssertEqual(message, "Ready to preview the verified render.")
+
+        // A current request that receives an authority source for different
+        // render identity must clear the previously loaded item.
+        let mismatchedJobID = UUID()
+        let mismatchedSource = EpisodeRenderPlaybackSource(
+            jobID: mismatchedJobID,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            output: output,
+            descriptor: EpisodeRenderDescriptor(jobID: mismatchedJobID, format: .mp4, byteLength: 1, sha256: String(repeating: "b", count: 64)),
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: URL(fileURLWithPath: "/private/tmp/mismatched-render.mp4")
+        )
+        await MainActor.run { model.loadRenderedPreview() }
+        await client.waitForPlaybackRequests(4)
+        await client.finishPlayback(3, with: mismatchedSource)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity != nil }) { await Task.yield() }
+        let mismatchedIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let mismatchMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(mismatchedIdentity)
+        XCTAssertEqual(mismatchMessage, "The render status did not match the saved composition.")
     }
 
     func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {
