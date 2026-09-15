@@ -1,6 +1,8 @@
 import Foundation
 import CryptoKit
+import AVFoundation
 import CoreGraphics
+import CoreVideo
 import Darwin
 import ImageIO
 import Security
@@ -26,6 +28,31 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return data as Data
     }()
+
+    private func writePublicVideo(to url: URL) async throws {
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 8, AVVideoHeightKey: 4])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 8, kCVPixelBufferHeightKey as String: 4])
+        guard writer.canAdd(input) else { throw AuthorityFailure.corruptDatabase }
+        writer.add(input); guard writer.startWriting() else { throw writer.error ?? AuthorityFailure.corruptDatabase }
+        writer.startSession(atSourceTime: .zero)
+        var pixel: CVPixelBuffer?
+        guard CVPixelBufferCreate(kCFAllocatorDefault, 8, 4, kCVPixelFormatType_32BGRA, nil, &pixel) == kCVReturnSuccess, let pixel else { throw AuthorityFailure.corruptDatabase }
+        while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(1)) }
+        guard adaptor.append(pixel, withPresentationTime: .zero) else { throw writer.error ?? AuthorityFailure.corruptDatabase }
+        input.markAsFinished()
+        await withCheckedContinuation { continuation in writer.finishWriting { continuation.resume() } }
+        guard writer.status == .completed else { throw writer.error ?? AuthorityFailure.corruptDatabase }
+    }
+
+    private func writePublicAudio(to url: URL) throws {
+        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 22_050, AVNumberOfChannelsKey: 1]
+        let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: true)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 512)!
+        buffer.frameLength = 512
+        buffer.floatChannelData![0].initialize(repeating: 0, count: 512)
+        try file.write(from: buffer)
+    }
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-authority-\(UUID().uuidString)")
@@ -427,6 +454,23 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertTrue(try authority.open().document.assets.isEmpty)
     }
 
+    func testManagedImportCatalogsMeasuredPublicImageVideoAndAudio() async throws {
+        let package = root.appendingPathComponent("MeasuredMedia.takeform")
+        let image = root.appendingPathComponent("still.png")
+        let video = root.appendingPathComponent("clip.mov")
+        let audio = root.appendingPathComponent("tone.aiff")
+        try validPNG.write(to: image)
+        try await writePublicVideo(to: video)
+        try writePublicAudio(to: audio)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let outcomes = try authority.importManagedSources([image, video, audio], credential: "creator")
+        let imported = outcomes.compactMap { if case let .imported(asset) = $0 { asset } else { nil } }
+        XCTAssertEqual(imported.map(\.mediaType).sorted(), ["audio", "image", "video"])
+        XCTAssertEqual(try authority.open().document.assets, imported)
+    }
+
     func testManagedImportCancellationAndSourceChangeLeaveNoCatalogReference() throws {
         let package = root.appendingPathComponent("Cancelled.takeform")
         let source = root.appendingPathComponent("source.mov")
@@ -436,6 +480,7 @@ final class ProjectAuthorityTests: XCTestCase {
         projectIDs.insert(document.projectID)
 
         let operationID = UUID()
+        let started = ContinuousClock.now
         guard case .success = CreatorAuthorityService.respond(to: .cancelImport(package, operationID, Data("creator".utf8)), from: .app) else {
             return XCTFail("cancel route was not accepted")
         }
@@ -443,6 +488,7 @@ final class ProjectAuthorityTests: XCTestCase {
             return XCTFail("cancelled route did not reply")
         }
         XCTAssertEqual(cancelled, [.cancelled(filename: "source.mov")])
+        XCTAssertLessThan(started.duration(to: .now), .seconds(1))
         XCTAssertTrue(try authority.open().document.assets.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/objects").path))
 

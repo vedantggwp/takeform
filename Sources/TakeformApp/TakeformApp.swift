@@ -98,6 +98,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var pendingRebindURL: URL?
     @Published private(set) var cliGrants: [CLIPairingSummary] = []
     @Published var selectedGrantID: UUID?
+    @Published private(set) var importOutcomes: [ManagedImportOutcome] = []
+    @Published var selectedAssetID: UUID?
+    @Published var isDropTargeted = false
 
     private let client: any WorkspaceClient
     private var importTask: Task<Void, Never>?
@@ -170,9 +173,11 @@ final class WorkspaceModel: ObservableObject {
         importTask = Task { [weak self] in
             guard let self else { return }
             self.isWorking = true
+            self.importOutcomes = []
             defer { self.isWorking = false; self.importTask = nil }
             do {
                 let outcomes = try await self.client.importMedia(packageURL: packageURL, sources: urls)
+                self.importOutcomes = outcomes
                 if Task.isCancelled { self.status = "Media import cancelled."; return }
                 self.status = outcomes.map(Self.importMessage).joined(separator: "\n")
                 self.snapshot = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
@@ -181,7 +186,7 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    private static func importMessage(_ outcome: ManagedImportOutcome) -> String {
+    static func importMessage(_ outcome: ManagedImportOutcome) -> String {
         switch outcome {
         case .imported(let asset): "Imported \(asset.filename) · \(asset.byteLength) bytes"
         case .duplicate(_, let filename): "Already managed: \(filename)"
@@ -357,23 +362,31 @@ private struct WorkspaceView: View {
                     GroupBox("Managed media") {
                         if document.assets.isEmpty { Text("No managed media yet. Imported originals are copied into this project unchanged.").foregroundStyle(.secondary) }
                         ForEach(document.assets) { asset in
-                            HStack(alignment: .top, spacing: 12) {
+                            Button { model.selectedAssetID = asset.id } label: { HStack(alignment: .top, spacing: 12) {
                                 ManagedAssetPreview(asset: asset, packageURL: model.packageURL)
                                 VStack(alignment: .leading) {
                                     Text(asset.filename)
-                                    Text("\(asset.mediaType) · \(asset.byteLength) bytes · \(asset.digest.prefix(12))").font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    Text("Source asset · \(asset.mediaType) · \(asset.byteLength) bytes · \(asset.digest.prefix(12))").font(.caption.monospaced()).foregroundStyle(.secondary)
                                 }
-                            }
+                            }.padding(4).background(model.selectedAssetID == asset.id ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6)) }
+                            .buttonStyle(.plain).accessibilityIdentifier("managed-asset-\(asset.digest.prefix(12))")
                         }
                         HStack {
                             Button("Import footage…") { model.chooseMedia() }
                             if model.isWorking { Button("Cancel import", role: .cancel) { model.cancelMediaImport() } }
                         }
+                        if model.isWorking { ProgressView("Copying and measuring imported media…").accessibilityIdentifier("managed-import-progress") }
+                        if !model.importOutcomes.isEmpty {
+                            VStack(alignment: .leading) { Text("Latest import").font(.headline); ForEach(model.importOutcomes) { Text(WorkspaceModel.importMessage($0)) } }
+                                .accessibilityIdentifier("managed-import-outcomes")
+                        }
                     }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
+                .background(model.isDropTargeted ? Color.accentColor.opacity(0.08) : .clear)
+                .accessibilityIdentifier("managed-media-drop-target")
+                .onDrop(of: [UTType.fileURL], isTargeted: $model.isDropTargeted) { providers in
                     let group = DispatchGroup()
                     let urls = DroppedURLs()
                     for provider in providers {
