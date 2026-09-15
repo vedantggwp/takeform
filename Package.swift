@@ -7,7 +7,6 @@ let package = Package(
     products: [
         .library(name: "TakeformSupport", targets: ["TakeformSupport"]),
         .library(name: "TakeformCore", targets: ["TakeformCore"]),
-        .library(name: "TakeformAuthority", targets: ["TakeformAuthority"]),
         .executable(name: "Takeform", targets: ["TakeformApp"]),
         .executable(name: "TakeformDoctor", targets: ["TakeformDoctor"]),
         .executable(name: "takeform", targets: ["TakeformCLI"]),
@@ -23,6 +22,7 @@ let package = Package(
         .executableTarget(name: "TakeformCLI", dependencies: ["TakeformAuthority", "TakeformCore"]),
         .executableTarget(name: "TakeformAuthorityService", dependencies: ["TakeformAuthority", "TakeformCore"]),
         .executableTarget(name: "TakeformAuthorityHarness", dependencies: ["TakeformAuthority", "TakeformCore"]),
+        .executableTarget(name: "TakeformAuthorityFaultHarness", dependencies: ["TakeformAuthority", "TakeformCore"]),
         .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"]),
         .testTarget(name: "TakeformAuthorityTests", dependencies: ["TakeformAuthority", "TakeformCore"])
     ]

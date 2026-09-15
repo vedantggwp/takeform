@@ -12,20 +12,29 @@ empty. The projection
 is an inspectable export of the authority document. Opening a package reports
 whether it matches; it never becomes a second writer or resets the database.
 
-Machine bindings and grants are kept in the caller-provided machine-local
-runtime directory. They are not portable package data. A second location with
-the same project UUID needs an explicit rebind; rebind invalidates that
-project's local grants, so a CLI must be paired again. A newer schema, a
-missing inventoried object, database corruption, projection drift, and a copy
-decision are distinct outcomes.
+Machine bindings and token digests live in the user Application Support
+directory. A paired CLI keeps its raw token in its own login Keychain item;
+the service receives that token on standard input and compares only its digest.
+Service and CLI arguments cannot select either store. A second location with
+the same project UUID needs an explicit rebind; rebind increments the epoch and
+invalidates that project's prior grant digest, so a CLI must be paired again. A
+newer schema, a missing inventoried object, database corruption, projection
+drift, and a copy decision are distinct outcomes.
 
 `TakeformAuthorityService` accepts only an already-authorized typed command.
-`takeform` relays that same command to the service selected by
-`TAKEFORM_AUTHORITY_SERVICE`; it does not import or open SQLite. Authorization
-and scope are checked before a command-result lookup. An authorized replay of
+`takeform` relays that same command only to its bundled sibling authority
+service; it does not import or open SQLite. Authorization and scope are checked
+before a command-result lookup. An authorized replay of
 the same command ID and request returns the saved result. Reuse with a
-different request is rejected, and a stale revision returns the committed
-revision.
+different expected revision or request is rejected, and a stale revision
+returns the committed revision.
+
+The app-owned pairing flow imports an issued raw token into the CLI with
+`takeform import-paired-credential <grant-id>` over standard input. Importing a
+credential cannot issue a grant: the service still requires a current
+app-storage digest, scope, expiry, revocation state and authority epoch. The
+CLI uses bounded background Keychain calls and returns a typed unavailable or
+store failure instead of writing a plaintext fallback.
 
 The grant issuer used by the process integration test is test-only. Neither
 shipping executable can mint creator authority, and this boundary does not
@@ -40,7 +49,11 @@ swift run TakeformAuthorityHarness .build/debug/TakeformAuthorityService .build/
 ```
 
 `TakeformAuthorityHarness` is an unshipped executable target. It seeds only a
-disposable machine-local grant, then runs the real service and CLI. Crash-
-barrier evidence and native creator interaction evidence remain separate
-acceptance work; no fault switch is present in the app, CLI, or authority
-service.
+disposable app-storage digest, then has the real CLI import its paired
+credential and runs the real service and CLI. It also measures 20 opens and 20
+paired CLI commands. Crash-
+barrier evidence comes from the separately built `TakeformAuthorityFaultHarness`:
+its owned process stops before invoking a transaction and after the authority
+returns a durable result but before it acknowledges to a caller. It has no
+fault switch in the app, CLI, or authority service. Native creator interaction
+evidence remains separate acceptance work.

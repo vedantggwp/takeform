@@ -49,9 +49,11 @@ public struct Grant: Codable, Equatable, Sendable, Identifiable {
     public let label: String
     public let scopes: Set<GrantScope>
     public let expiresAt: Date
+    public let authorityEpoch: Int
+    public let tokenDigest: String
     public var revokedAt: Date?
-    public init(id: UUID = UUID(), label: String, scopes: Set<GrantScope>, expiresAt: Date, revokedAt: Date? = nil) {
-        self.id = id; self.label = label; self.scopes = scopes; self.expiresAt = expiresAt; self.revokedAt = revokedAt
+    public init(id: UUID = UUID(), label: String, scopes: Set<GrantScope>, expiresAt: Date, authorityEpoch: Int, tokenDigest: String, revokedAt: Date? = nil) {
+        self.id = id; self.label = label; self.scopes = scopes; self.expiresAt = expiresAt; self.authorityEpoch = authorityEpoch; self.tokenDigest = tokenDigest; self.revokedAt = revokedAt
     }
     public var isActive: Bool { revokedAt == nil && expiresAt > Date() }
 }

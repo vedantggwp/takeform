@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import TakeformCore
 
 public enum AuthorityFailure: Error, Equatable, LocalizedError {
@@ -17,8 +18,8 @@ public struct ProjectOpenState: Equatable, Sendable {
 }
 
 private struct MachineState: Codable {
-    var grants: [UUID: [Grant]] = [:]
-    var bindings: [UUID: MachineBinding] = [:]
+    var binding: MachineBinding?
+    var grants: [Grant] = []
 }
 
 private struct MachineBinding: Codable {
@@ -34,17 +35,15 @@ private struct PortableManifest: Codable {
 
 public final class ProjectAuthority {
     private let packageURL: URL
-    private let runtimeURL: URL
     private let database: SQLiteDatabase
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(packageURL: URL, runtimeURL: URL) throws {
+    public init(packageURL: URL) throws {
         self.packageURL = packageURL.standardizedFileURL
-        self.runtimeURL = runtimeURL.standardizedFileURL
+        guard !self.packageURL.path.contains("/.takeform/") else { throw AuthorityFailure.unauthorized }
         let stateURL = packageURL.appendingPathComponent(".takeform", isDirectory: true)
         try FileManager.default.createDirectory(at: stateURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: runtimeURL, withIntermediateDirectories: true)
         let manifestURL = stateURL.appendingPathComponent("manifest.json")
         let databaseURL = stateURL.appendingPathComponent("project.sqlite")
         if FileManager.default.fileExists(atPath: manifestURL.path), !FileManager.default.fileExists(atPath: databaseURL.path) {
@@ -67,13 +66,13 @@ public final class ProjectAuthority {
     public func open(rebindMovedPackage: Bool = false) throws -> ProjectOpenState {
         let document = try loadDocument()
         try validateManifest(document)
-        var state = try loadMachineState()
-        let binding = state.bindings[document.projectID]
+        var state = try loadMachineState(for: document.projectID)
+        let binding = state.binding
         if let binding, binding.canonicalPath != packageURL.path, !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
         if binding?.canonicalPath != packageURL.path {
-            state.bindings[document.projectID] = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
-            if binding != nil { state.grants[document.projectID] = [] }
-            try saveMachineState(state)
+            state.binding = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
+            if binding != nil { state.grants = [] }
+            try saveMachineState(state, for: document.projectID)
         }
         let projectionURL = packageURL.appendingPathComponent(".takeform/projection.json")
         let projection: ProjectDocument?
@@ -85,13 +84,16 @@ public final class ProjectAuthority {
         return ProjectOpenState(document: document, projectionMatches: projection == document)
     }
 
-    public func execute(_ envelope: CommandEnvelope, grantID: UUID?) throws -> CommandResult {
-        let document = try loadDocument()
-        let machineState = try loadMachineState()
-        let grant = grantID.flatMap { id in machineState.grants[document.projectID]?.first(where: { $0.id == id }) }
-        guard grant?.isActive == true, grant?.scopes.contains(envelope.command.requiredScope) == true else { return CommandResult(id: envelope.id, outcome: .rejected(reason: "unauthorized")) }
+    public func execute(_ envelope: CommandEnvelope, grantID: UUID?, token: String?) throws -> CommandResult {
+        let openState = try open()
+        let document = openState.document
+        let bindingState = try loadMachineState(for: document.projectID)
+        let binding = bindingState.binding
+        let grant = grantID.flatMap { id in bindingState.grants.first(where: { $0.id == id }) }
+        let presentedTokenDigest = token.map({ tokenDigest($0) })
+        guard grant?.isActive == true, grant?.authorityEpoch == binding?.epoch, grant?.tokenDigest == presentedTokenDigest, grant?.scopes.contains(envelope.command.requiredScope) == true else { return CommandResult(id: envelope.id, outcome: .rejected(reason: "unauthorized")) }
         let result = try database.transaction {
-            let fingerprint = try encode(envelope.command)
+            let fingerprint = try encode(envelope)
             if let stored = try database.value("SELECT result FROM command_results WHERE id = ?", bindings: [envelope.id.value.uuidString]) {
                 guard let existing = try database.value("SELECT fingerprint FROM command_results WHERE id = ?", bindings: [envelope.id.value.uuidString]), existing == fingerprint else {
                     return CommandResult(id: envelope.id, outcome: .rejected(reason: "command-id-reused-with-different-request"))
@@ -194,10 +196,17 @@ public final class ProjectAuthority {
     private func writeProjection(_ document: ProjectDocument) throws { try encoder.encode(document).write(to: packageURL.appendingPathComponent(".takeform/projection.json"), options: .atomic) }
     private func encode<T: Encodable>(_ value: T) throws -> String { String(decoding: try encoder.encode(value), as: UTF8.self) }
     private func decode<T: Decodable>(_ type: T.Type, _ value: String) throws -> T { try decoder.decode(type, from: Data(value.utf8)) }
-    private func loadMachineState() throws -> MachineState {
-        let url = runtimeURL.appendingPathComponent("grants.json")
+    private func machineURL(for projectID: UUID) throws -> URL {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw AuthorityFailure.unauthorized }
+        let url = root.appendingPathComponent("Takeform/Authority/\(projectID.uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+    private func loadMachineState(for projectID: UUID) throws -> MachineState {
+        let url = try machineURL(for: projectID).appendingPathComponent("binding.json")
         guard FileManager.default.fileExists(atPath: url.path) else { return MachineState() }
         return try decoder.decode(MachineState.self, from: Data(contentsOf: url))
     }
-    private func saveMachineState(_ state: MachineState) throws { try encoder.encode(state).write(to: runtimeURL.appendingPathComponent("grants.json"), options: .atomic) }
+    private func saveMachineState(_ state: MachineState, for projectID: UUID) throws { try encoder.encode(state).write(to: machineURL(for: projectID).appendingPathComponent("binding.json"), options: .atomic) }
+    private func tokenDigest(_ token: String) -> String { SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined() }
 }
