@@ -58,11 +58,13 @@ query requiring both title and foundation descendants under the unchanged
 three-second budget. It retains query-enter/query-return timestamps and the
 post-gate title/foundation checks, so serial XCTest waits cannot be mistaken
 for product readiness. Appearance selection uses the native Settings picker
-and never changes the runner's System Settings. The contrast check measures
-the Settings Appearance label against its panel background in the retained
-Light and Dark screenshots; the F1 app uses a semantic primary foreground at
-72 percent opacity for all prior normal secondary text, rather than retaining
-the observed Light 3.95:1 body colour.
+and never changes the runner's System Settings. The contrast check derives the
+AX frame of the Settings `Appearance` label, samples its darkest Light or
+brightest Dark sRGB foreground pixels, and compares them with a nearby 12-by-12
+flat panel-background region. It attaches both regions, colors and WCAG
+relative-luminance ratio, requiring at least 4.5:1 in each mode. The F1 app
+uses a semantic primary foreground at 72 percent opacity for all prior normal
+secondary text, rather than retaining the observed Light 3.95:1 body colour.
 
 For the initial-size proof, the harness observes, but does not capture,
 window-server data through public `CGWindowListCopyWindowInfo`. It resolves the

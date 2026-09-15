@@ -7,6 +7,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     private let titleIdentifier = "takeform-title"
     private let foundationText = "Native development foundation"
     private let settingsStatusText = "Appearance is the only application preference available in this development foundation."
+    private let appearanceLabelText = "Appearance"
 
     func testBrandedLaunchIsAccessibleAndCaptured() throws {
         let app = try launchReady()
@@ -130,15 +131,26 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
         app.buttons["open-settings"].click()
         assertSettingsSurface(in: app)
+        let appearanceLabel = app.staticTexts[appearanceLabelText]
+        XCTAssertTrue(appearanceLabel.waitForExistence(timeout: 5), "Appearance label was not exposed")
         selectAppearance("Light", in: app)
         let lightShot = capture(app, named: "f1-07-light")
-        let lightLuminance = try sampledLuminance(lightShot)
+        let lightContrast = try appearanceLabelContrast(
+            in: lightShot,
+            labelFrame: appearanceLabel.frame,
+            mode: "Light"
+        )
 
         selectAppearance("Dark", in: app)
         let darkShot = capture(app, named: "f1-08-dark")
-        let darkLuminance = try sampledLuminance(darkShot)
+        let darkContrast = try appearanceLabelContrast(
+            in: darkShot,
+            labelFrame: appearanceLabel.frame,
+            mode: "Dark"
+        )
 
-        XCTAssertGreaterThan(lightLuminance - darkLuminance, 0.2, "Process-local dark appearance did not produce a distinct readable surface")
+        XCTAssertGreaterThanOrEqual(lightContrast, 4.5, "Light Appearance label contrast is below 4.5:1")
+        XCTAssertGreaterThanOrEqual(darkContrast, 4.5, "Dark Appearance label contrast is below 4.5:1")
         XCTAssertTrue(app.staticTexts[titleIdentifier].isHittable)
         XCTAssertTrue(app.staticTexts[foundationText].isHittable)
         selectAppearance("System", in: app)
@@ -364,12 +376,81 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         add(attachment)
     }
 
-    private func sampledLuminance(_ screenshot: XCUIScreenshot) throws -> CGFloat {
+    private func appearanceLabelContrast(
+        in screenshot: XCUIScreenshot,
+        labelFrame: CGRect,
+        mode: String
+    ) throws -> CGFloat {
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: screenshot.pngRepresentation))
-        let x = Int(CGFloat(bitmap.pixelsWide) * 0.85)
-        let y = Int(CGFloat(bitmap.pixelsHigh) * 0.55)
-        let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
-        return (0.2126 * color.redComponent) + (0.7152 * color.greenComponent) + (0.0722 * color.blueComponent)
+        let labelPixels = pixelRect(for: labelFrame, in: bitmap)
+        let foreground = try extremeColor(in: labelPixels, bitmap: bitmap, preferLight: mode == "Dark")
+        let panelPixels = pixelRect(
+            for: CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12),
+            in: bitmap
+        )
+        let background = try averageColor(in: panelPixels, bitmap: bitmap)
+        let ratio = contrastRatio(foreground, background)
+        attach(
+            """
+            mode: \(mode)
+            foregroundRegionAX: \(labelFrame)
+            backgroundRegionAX: \(CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12))
+            foregroundSRGB: \(foreground)
+            backgroundSRGB: \(background)
+            contrastRatio: \(ratio)
+            """,
+            named: "f1-\(mode.lowercased())-appearance-contrast"
+        )
+        return ratio
+    }
+
+    private func pixelRect(for screenRect: CGRect, in bitmap: NSBitmapImageRep) -> CGRect {
+        CGRect(
+            x: screenRect.minX,
+            y: CGFloat(bitmap.pixelsHigh) - screenRect.maxY,
+            width: screenRect.width,
+            height: screenRect.height
+        ).integral.intersection(CGRect(x: 0, y: 0, width: bitmap.pixelsWide, height: bitmap.pixelsHigh))
+    }
+
+    private func extremeColor(in rect: CGRect, bitmap: NSBitmapImageRep, preferLight: Bool) throws -> NSColor {
+        let colors = try colors(in: rect, bitmap: bitmap)
+        return try XCTUnwrap(colors.max { lhs, rhs in
+            let left = relativeLuminance(lhs)
+            let right = relativeLuminance(rhs)
+            return preferLight ? left < right : left > right
+        })
+    }
+
+    private func averageColor(in rect: CGRect, bitmap: NSBitmapImageRep) throws -> NSColor {
+        let colors = try colors(in: rect, bitmap: bitmap)
+        let count = CGFloat(colors.count)
+        return NSColor(
+            red: colors.map(\.redComponent).reduce(0, +) / count,
+            green: colors.map(\.greenComponent).reduce(0, +) / count,
+            blue: colors.map(\.blueComponent).reduce(0, +) / count,
+            alpha: 1
+        )
+    }
+
+    private func colors(in rect: CGRect, bitmap: NSBitmapImageRep) throws -> [NSColor] {
+        guard !rect.isEmpty else { throw ProbeConfigurationError.invalidContrastRegion }
+        return try rect.pixelCoordinates.map { point in
+            try XCTUnwrap(bitmap.colorAt(x: Int(point.x), y: Int(point.y))?.usingColorSpace(.sRGB))
+        }
+    }
+
+    private func relativeLuminance(_ color: NSColor) -> CGFloat {
+        func linear(_ component: CGFloat) -> CGFloat {
+            component <= 0.04045 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent) + 0.0722 * linear(color.blueComponent)
+    }
+
+    private func contrastRatio(_ foreground: NSColor, _ background: NSColor) -> CGFloat {
+        let first = relativeLuminance(foreground)
+        let second = relativeLuminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
     private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -403,6 +484,7 @@ private enum ProbeConfigurationError: LocalizedError {
     case copiedAppMissing(String)
     case copiedAppNotRunning(String)
     case copiedAppWindowNotFound(pid_t)
+    case invalidContrastRegion
 
     var errorDescription: String? {
         switch self {
@@ -414,7 +496,17 @@ private enum ProbeConfigurationError: LocalizedError {
             return "Copied F1 app is not running from \(path)"
         case .copiedAppWindowNotFound(let pid):
             return "Copied F1 app has no onscreen normal-layer window for PID \(pid)"
+        case .invalidContrastRegion:
+            return "Appearance contrast sample region is outside the screenshot"
         }
+    }
+}
+
+private extension CGRect {
+    var pixelCoordinates: [CGPoint] {
+        let xValues = Int(minX)..<Int(maxX)
+        let yValues = Int(minY)..<Int(maxY)
+        return xValues.flatMap { x in yValues.map { y in CGPoint(x: x, y: y) } }
     }
 }
 
