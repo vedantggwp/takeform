@@ -29,7 +29,11 @@ makes no renderer, preview-export, or media-acceptance claim. Render completion
 remains outside this suite until the reviewed renderer service adapter is in the
 copied bundle.
 
-The first run does not claim drag-and-drop or an in-flight cancellation outcome:
-public XCTest has no file-provider/pasteboard injection route for the native
-drop target, so those need a separately reviewed real-input plan rather than a
-synthetic success. The picker route covers image, video, and audio inspection.
+The first run does not claim drag-and-drop or an in-flight cancellation outcome.
+The next drag case will use XCTest's public
+`click(forDuration:thenDragTo:)` from a Finder element representing a
+runner-temporary fixture onto the identified Takeform drop target, with stage
+screenshots and AX facts. The cancellation case needs a separately bounded,
+parseable runner fixture and a visible in-flight import before it clicks the
+actual Cancel import control and verifies no catalog commit. The picker route
+covers image, video, and audio inspection.
