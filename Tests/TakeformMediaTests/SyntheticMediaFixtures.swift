@@ -66,7 +66,10 @@ final class SyntheticMediaFixtures {
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 8,
-            AVVideoHeightKey: 4
+            AVVideoHeightKey: 4,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAllowFrameReorderingKey: false
+            ]
         ])
         if rotated { input.transform = CGAffineTransform(rotationAngle: .pi / 2) }
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
@@ -184,6 +187,29 @@ final class SyntheticMediaFixtures {
         var buffer: CVPixelBuffer?
         guard CVPixelBufferCreate(kCFAllocatorDefault, 8, 4, kCVPixelFormatType_32BGRA, nil, &buffer) == kCVReturnSuccess,
               let buffer else { throw FixtureError("Could not allocate synthetic pixel buffer") }
+
+        guard
+            CVPixelBufferLockBaseAddress(buffer, []) == kCVReturnSuccess,
+            let baseAddress = CVPixelBufferGetBaseAddress(buffer)
+        else {
+            throw FixtureError("Could not lock synthetic pixel buffer")
+        }
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+        let byteCount = bytesPerRow * CVPixelBufferGetHeight(buffer)
+        baseAddress.initializeMemory(as: UInt8.self, repeating: 0, count: byteCount)
+        let pixels = baseAddress.assumingMemoryBound(to: UInt8.self)
+        for y in 0..<CVPixelBufferGetHeight(buffer) {
+            for x in 0..<CVPixelBufferGetWidth(buffer) {
+                let offset = y * bytesPerRow + x * 4
+                let isLeft = x < CVPixelBufferGetWidth(buffer) / 2
+                pixels[offset] = isLeft ? 204 : 26
+                pixels[offset + 1] = isLeft ? 102 : 178
+                pixels[offset + 2] = isLeft ? 25 : 51
+                pixels[offset + 3] = 255
+            }
+        }
         return buffer
     }
 }

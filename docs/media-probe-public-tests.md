@@ -17,7 +17,7 @@ artifact.
 | Behavior | Public synthetic evidence |
 | --- | --- |
 | Source identity and orientation | An 8-by-4 HEIC with ImageIO orientation 6; the test independently hashes it and checks encoded versus displayed dimensions. |
-| Timing and transforms | A short H.264 MOV written at uneven rational times, plus an 8-by-4 rotated MOV. The probe must read real sample PTS and AVFoundation track transforms. |
+| Timing and transforms | A short H.264 MOV written at authored `0,20,73,160,230,400 / 600` PTS, plus an 8-by-4 rotated MOV. The probe retains that exact ordered subsequence. It also asserts the full deterministic Apple writer/reader observation `0,0,20,73,160,230,400,570 / 600`, preserving rather than hiding its leading and terminal samples, and reads the AVFoundation track transform. |
 | Audio facts | Silent mono 22,050 Hz PCM AIFF and stereo 48,000 Hz AAC M4A, verified through probed track format facts. |
 | Duplicate and corrupt sources | A byte-for-byte copied PNG under a distinct name, and a malformed PNG with the typed per-file error. |
 | Live Photo evidence | HEIC MakerApple key 17 and QuickTime content identifiers on separate MOVs: matching, mismatched, image/image wrong-kind, and absent-ID cases. Pairing uses the probe's independently read facts. |

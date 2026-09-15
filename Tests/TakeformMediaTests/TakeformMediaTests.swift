@@ -30,9 +30,21 @@ struct TakeformMediaTests {
         defer { fixtures.cleanup() }
         let facts = try success(await probe.inspect(try await fixtures.video(named: "vfr.mov")))
         let video = try #require(facts.video)
+        let authoredTimestamps = [0, 20, 73, 160, 230, 400].map {
+            RationalTime(value: Int64($0), timescale: 600)!
+        }
+        let expectedObservedTimestamps = [0, 0, 20, 73, 160, 230, 400, 570].map {
+            RationalTime(value: Int64($0), timescale: 600)!
+        }
         #expect(video.nominalFrameRate != nil)
         #expect(video.codecFourCC == "avc1")
-        #expect(video.presentationTimestamps.count > 2)
+        #expect(video.presentationTimestamps == expectedObservedTimestamps)
+        #expect(containsOrderedSubsequence(authoredTimestamps, in: video.presentationTimestamps))
+        let authoredDeltas = zip(authoredTimestamps.dropFirst(), authoredTimestamps)
+            .map { later, earlier in
+                Double(later.value) / Double(later.timescale) - Double(earlier.value) / Double(earlier.timescale)
+            }
+        #expect(Set(authoredDeltas).count > 1)
         #expect(video.observedPresentationDeltaCount > 0)
         #expect(video.isVariableFrameRate == true)
         #expect(video.timeRange?.duration.timescale ?? 0 > 0)
@@ -175,6 +187,16 @@ struct TakeformMediaTests {
         let digest = SHA256.hash(data: try Data(contentsOf: url))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
+}
+
+private func containsOrderedSubsequence(_ expected: [RationalTime], in observed: [RationalTime]) -> Bool {
+    var expectedIndex = expected.startIndex
+    for timestamp in observed where expectedIndex < expected.endIndex {
+        if timestamp == expected[expectedIndex] {
+            expected.formIndex(after: &expectedIndex)
+        }
+    }
+    return expectedIndex == expected.endIndex
 }
 
 private actor ProgressGate {
