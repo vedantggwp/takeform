@@ -11,7 +11,7 @@ public enum CreatorAuthorityService {
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .execute), (.app, .pair), (.app, .revoke), (.cli, .pairedExecute): true
+        case (.app, .open), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
         default: false
         }
     }
@@ -46,6 +46,9 @@ public enum CreatorAuthorityService {
             let authority = try ProjectAuthority(packageURL: url)
             try authority.revokePairedCLIGrant(credential: String(decoding: credential, as: UTF8.self), grantID: grantID)
             return .success
+        case let .listGrants(url, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .grants(try authority.pairedCLIGrants(credential: String(decoding: credential, as: UTF8.self)))
         case let .pairedExecute(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.execute(envelope, grantID: grantID, token: token))

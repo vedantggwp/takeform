@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import TakeformAuthorityEngine
 import TakeformCore
+import TakeformWorkspace
 
 public enum AuthorityFailure: Error, Equatable, LocalizedError {
     case corruptDatabase
@@ -278,6 +279,12 @@ extension ProjectAuthority {
         guard let index = state.grants.firstIndex(where: { $0.id == grantID }) else { throw AuthorityFailure.unauthorized }
         state.grants[index].revokedAt = Date()
         try saveMachineState(state, for: opened.document.projectID)
+    }
+
+    public func pairedCLIGrants(credential: String) throws -> [CLIPairingSummary] {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let state = try loadMachineState(for: opened.document.projectID)
+        return state.grants.map { CLIPairingSummary(id: $0.id, label: $0.label, scopes: $0.scopes, expiresAt: $0.expiresAt, revokedAt: $0.revokedAt) }
     }
 
     private func portableProjectID() throws -> UUID {

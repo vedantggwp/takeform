@@ -35,11 +35,21 @@ public struct WorkspaceSnapshot: Equatable, Sendable, Codable {
     }
 }
 
+public struct CLIPairingSummary: Equatable, Sendable, Codable, Identifiable {
+    public let id: UUID
+    public let label: String
+    public let scopes: Set<GrantScope>
+    public let expiresAt: Date
+    public let revokedAt: Date?
+    public init(id: UUID, label: String, scopes: Set<GrantScope>, expiresAt: Date, revokedAt: Date?) { self.id = id; self.label = label; self.scopes = scopes; self.expiresAt = expiresAt; self.revokedAt = revokedAt }
+}
+
 public protocol WorkspaceClient: Sendable {
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult
     func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws
-    func revokeCLI(packageURL: URL) async throws
+    func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary]
+    func revokeCLI(packageURL: URL, grantID: UUID) async throws
 }
 
 /// Deliberately refuses to simulate authority writes until the app-owned service is available.
@@ -58,7 +68,10 @@ public struct UnavailableWorkspaceClient: WorkspaceClient {
         throw WorkspaceFailure.authorityUnavailable
     }
 
-    public func revokeCLI(packageURL: URL) async throws {
+    public func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary] {
+        throw WorkspaceFailure.authorityUnavailable
+    }
+    public func revokeCLI(packageURL: URL, grantID: UUID) async throws {
         throw WorkspaceFailure.authorityUnavailable
     }
 }
@@ -76,4 +89,3 @@ public enum WorkspacePresentation {
         }
     }
 }
-

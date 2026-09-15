@@ -59,6 +59,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var showRename = false
     @Published var showPairing = false
     @Published var showNewChannel = false
+    @Published var pendingRebindURL: URL?
+    @Published private(set) var cliGrants: [CLIPairingSummary] = []
+    @Published var selectedGrantID: UUID?
 
     private let client: any WorkspaceClient
 
@@ -88,9 +91,11 @@ final class WorkspaceModel: ObservableObject {
             do {
                 let result = try await client.open(packageURL: url, rebindMovedPackage: rebind)
                 snapshot = result
+                cliGrants = (try? await client.listCLIGrants(packageURL: url)) ?? []
                 selectedEpisodeID = result.document.episodes.first?.id
                 status = "Opened revision \(result.document.revision.value)."
             } catch let failure as WorkspaceFailure {
+                pendingRebindURL = failure == .copyDecisionRequired ? url : nil
                 error = failure; status = failure.errorDescription ?? "Unable to open project."
             } catch {
                 status = "Unable to open project. No changes were made."
@@ -99,6 +104,37 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func beginNewChannel() { showNewChannel = true }
+
+    func createChannel(name: String, initialRecipe: [String: String]) {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(name).takeform"
+        panel.message = "Choose where to create this Takeform project"
+        panel.prompt = "Create Project"
+        panel.begin { [weak self] response in
+            guard let self else { return }
+            guard response == .OK, let url = panel.url else { self.status = "Channel creation cancelled."; return }
+            guard !FileManager.default.fileExists(atPath: url.path) else { self.error = .rejected("Choose a new project folder; that destination already exists"); self.status = self.error?.errorDescription ?? "Channel creation failed."; return }
+            Task {
+                self.isWorking = true; self.error = nil
+                defer { self.isWorking = false }
+                do {
+                    let opened = try await self.client.open(packageURL: url, rebindMovedPackage: false)
+                    let result = try await self.client.execute(packageURL: url, envelope: CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: name, initialRecipe: initialRecipe)))
+                    guard case let .applied(document) = result.outcome else { throw WorkspaceFailure.rejected("channel creation was not committed") }
+                    self.snapshot = WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: url)
+                    self.cliGrants = (try? await self.client.listCLIGrants(packageURL: url)) ?? []
+                    self.status = "Created \(name) at revision \(document.revision.value)."
+                } catch let failure as WorkspaceFailure { self.error = failure; self.status = failure.errorDescription ?? "Channel creation failed." }
+                catch { self.status = "Channel creation failed. No project changes were committed." }
+            }
+        }
+    }
+
+    func rebindPendingProject() {
+        guard let pendingRebindURL else { return }
+        open(pendingRebindURL, rebind: true)
+    }
 
     func submit(_ command: ProjectCommand) {
         guard let document, let packageURL else { return }
@@ -124,6 +160,7 @@ final class WorkspaceModel: ObservableObject {
             isWorking = true; defer { isWorking = false }
             do {
                 try await client.pairCLI(packageURL: packageURL, label: "Takeform CLI", expiresAt: Date().addingTimeInterval(60 * 60 * 24 * 30))
+                cliGrants = try await client.listCLIGrants(packageURL: packageURL)
                 status = "CLI access paired for this project."
             } catch let failure as WorkspaceFailure { error = failure; status = failure.errorDescription ?? "CLI pairing failed." }
             catch { status = "CLI pairing failed." }
@@ -131,10 +168,10 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func revokeCLI() {
-        guard let packageURL else { return }
+        guard let packageURL, let selectedGrantID else { error = .rejected("Select a CLI grant to revoke"); return }
         Task {
             isWorking = true; defer { isWorking = false }
-            do { try await client.revokeCLI(packageURL: packageURL); status = "CLI access revoked." }
+            do { try await client.revokeCLI(packageURL: packageURL, grantID: selectedGrantID); cliGrants = try await client.listCLIGrants(packageURL: packageURL); self.selectedGrantID = nil; status = "CLI access revoked." }
             catch let failure as WorkspaceFailure { error = failure; status = failure.errorDescription ?? "CLI revocation failed." }
             catch { status = "CLI revocation failed." }
         }
@@ -183,6 +220,10 @@ private struct WorkspaceView: View {
         .sheet(isPresented: $model.showNewChannel) { newChannelSheet }
         .sheet(isPresented: $model.showRename) { renameSheet }
         .sheet(isPresented: $model.showPairing) { pairingSheet }
+        .alert("Project needs attention", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            if model.pendingRebindURL != nil { Button("Rebind moved project") { model.rebindPendingProject() } }
+            Button("Dismiss", role: .cancel) { model.error = nil }
+        } message: { Text(model.error?.errorDescription ?? "No project changes were made.") }
     }
 
     @ViewBuilder private var editor: some View {
@@ -257,6 +298,14 @@ private struct WorkspaceView: View {
                 }
                 Section("CLI access") {
                     Button("Pair CLI…") { model.showPairing = true }
+                    if model.cliGrants.isEmpty { Text("No paired CLI grants.").foregroundStyle(.secondary) }
+                    ForEach(model.cliGrants) { grant in
+                        HStack {
+                            Button { model.selectedGrantID = grant.id } label: { Image(systemName: model.selectedGrantID == grant.id ? "checkmark.circle.fill" : "circle") }
+                            VStack(alignment: .leading) { Text(grant.label); Text(grant.revokedAt == nil ? "Expires \(grant.expiresAt.formatted())" : "Revoked").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                    Button("Revoke selected grant") { model.revokeCLI() }.disabled(model.selectedGrantID == nil)
                 }
             }.padding()
         } else {
@@ -278,7 +327,7 @@ private struct WorkspaceView: View {
             TextField("First recipe value name", text: $recipeKey)
             TextField("First recipe value", text: $recipeValue)
             HStack { Spacer(); Button("Cancel") { model.showNewChannel = false }; Button("Create") {
-                model.submit(.createChannel(name: channelName, initialRecipe: recipeKey.isEmpty ? [:] : [recipeKey: recipeValue])); model.showNewChannel = false
+                model.createChannel(name: channelName, initialRecipe: recipeKey.isEmpty ? [:] : [recipeKey: recipeValue]); model.showNewChannel = false
             }.keyboardShortcut(.defaultAction).disabled(channelName.isEmpty) }
         }.padding().frame(width: 400)
     }
@@ -308,26 +357,42 @@ private struct SettingsView: View {
 }
 
 
-private struct NativeAuthorityClient: WorkspaceClient {
+private actor NativeAuthorityClient: WorkspaceClient {
+    private var ownedService: Process?
+
+    deinit {
+        if ownedService?.isRunning == true { ownedService?.terminate() }
+    }
     private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
     private func verifiedRequest(_ request: AppAuthorityRequest) throws -> AppAuthorityResponse {
         guard let service = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService") else { throw WorkspaceFailure.authorityUnavailable }
         return try AppAuthoritySocket.verifiedRequest(request, expectedService: service)
     }
     private func request(_ r: AppAuthorityRequest) async throws -> AppAuthorityResponse {
-        do { return try await Task.detached { try verifiedRequest(r) }.value }
-        catch {
+        do { return try verifiedRequest(r) }
+        catch is AppAuthoritySocketFailure {
+            throw WorkspaceFailure.creatorAuthorizationRequired
+        } catch {
             guard let here = Bundle.main.executableURL else { throw WorkspaceFailure.authorityUnavailable }
             let service = here.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService")
             guard FileManager.default.isExecutableFile(atPath: service.path) else { throw WorkspaceFailure.authorityUnavailable }
-            let process = Process(); process.executableURL = service; process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice; try process.run()
+            if ownedService?.isRunning != true {
+                let launched = Process(); launched.executableURL = service; launched.standardOutput = FileHandle.nullDevice; launched.standardError = FileHandle.nullDevice
+                launched.terminationHandler = { [weak self, weak launched] _ in
+                    guard let self else { return }
+                    Task { await self.clearOwnedService(launched) }
+                }
+                try launched.run(); ownedService = launched
+            }
             for _ in 0..<100 { if let response = try? verifiedRequest(r) { return response }; try await Task.sleep(for: .milliseconds(20)) }
             throw WorkspaceFailure.authorityUnavailable
         }
     }
+    private func clearOwnedService(_ service: Process?) { if ownedService === service { ownedService = nil } }
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot { let r=try await request(.open(packageURL,rebindMovedPackage,try credential())); if case .snapshot(let x)=r{return x}; if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { let r=try await request(.execute(packageURL,envelope,try credential()));if case .result(let x)=r{return x};if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
     func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws { let r=try await request(.pair(packageURL,label,expiresAt,try credential()));guard case .pairing(let id,let raw)=r else {if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable};try importCredential(id,raw) }
-    func revokeCLI(packageURL: URL) async throws { throw WorkspaceFailure.rejected("Choose the specific CLI grant to revoke.") }
+    func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary] { let r=try await request(.listGrants(packageURL,try credential())); if case .grants(let x)=r{return x}; if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
+    func revokeCLI(packageURL: URL, grantID: UUID) async throws { let r=try await request(.revoke(packageURL,grantID,try credential())); if case .success=r{return}; if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
     private func importCredential(_ id: UUID,_ raw:String)throws{guard let here=Bundle.main.executableURL else{throw WorkspaceFailure.authorityUnavailable};let cli=here.deletingLastPathComponent().appendingPathComponent("takeform");let p=Process();let input=Pipe();p.executableURL=cli;p.arguments=["import-paired-credential",id.uuidString];p.standardInput=input;try p.run();input.fileHandleForWriting.write(Data(raw.utf8));input.fileHandleForWriting.write(Data("\n".utf8));input.fileHandleForWriting.closeFile();p.waitUntilExit();guard p.terminationStatus==0 else{throw WorkspaceFailure.rejected("CLI credential import failed")}}
 }

@@ -8,9 +8,11 @@ public enum AppAuthorityRequest: Codable, Sendable {
     case execute(URL, CommandEnvelope, Data)
     case pair(URL, String, Date, Data)
     case revoke(URL, UUID, Data)
+    case listGrants(URL, Data)
     case pairedExecute(URL, CommandEnvelope, UUID, String)
 }
-public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case success; case failure(WorkspaceFailure) }
+public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case grants([CLIPairingSummary]); case success; case failure(WorkspaceFailure) }
+public enum AppAuthoritySocketFailure: Error { case unverifiedPeer }
 public enum AppAuthoritySocket {
  nonisolated(unsafe) private static var testingPath: String?
  public static var path: String { testingPath ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
@@ -22,7 +24,7 @@ public enum AppAuthoritySocket {
     public static func verifiedRequest(_ request: AppAuthorityRequest, expectedService: URL) throws -> AppAuthorityResponse {
         let fd = try connect()
         defer { close(fd) }
-        guard let requirement = AppAuthorityPeer.requirement(for: expectedService), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else { throw WorkspaceFailure.authorityUnavailable }
+        guard let requirement = AppAuthorityPeer.requirement(for: expectedService), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else { throw AppAuthoritySocketFailure.unverifiedPeer }
         try send(request, fd)
         return try receive(AppAuthorityResponse.self, fd)
     }
