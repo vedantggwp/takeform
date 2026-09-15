@@ -47,11 +47,11 @@ test('rejects duplicate, unknown, mismatched and escaping manifest entries', asy
   t.after(() => rm(temporary, {recursive: true, force: true}));
   const fixtureManifest = JSON.parse(await readFile(join(fixtureRoot, 'M', 'manifest.json'), 'utf8'));
   const expectedOriginals = Object.fromEntries(fixtureManifest.sources.map(source => [source.id, source.sha256]));
-  const manifest = JSON.parse(await readFile(join(process.env.TAKEFORM_DERIVATIVE_ROOT, 'manifest.json'), 'utf8'));
+  const {manifest} = await prepareMedia({fixtureRoot, derivativeRoot: temporary});
   const attempt = async mutate => {
     const value = structuredClone(manifest);
     mutate(value);
-    await validateManifest(value, {derivativeRoot: process.env.TAKEFORM_DERIVATIVE_ROOT, expectedOriginals});
+    await validateManifest(value, {derivativeRoot: temporary, expectedOriginals});
   };
   await assert.rejects(() => attempt(value => value.entries.push(structuredClone(value.entries[0]))), /duplicate/);
   await assert.rejects(() => attempt(value => { value.entries[0].sourceId = 'unknown'; }), /unknown/);
