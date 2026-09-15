@@ -100,9 +100,17 @@ fi
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
-cp "$BIN_DIR/TakeformApp" "$APP_BUNDLE/Contents/MacOS/Takeform"
+# Keep the GUI executable distinct from the lowercase CLI. APFS is commonly
+# case-insensitive, so `Takeform` and `takeform` would otherwise be one path
+# and the second copy would silently replace the app with the CLI.
+cp "$BIN_DIR/TakeformApp" "$APP_BUNDLE/Contents/MacOS/TakeformApp"
 cp "$BIN_DIR/TakeformAuthorityAppService" "$APP_BUNDLE/Contents/MacOS/TakeformAuthorityAppService"
 cp "$BIN_DIR/takeform" "$APP_BUNDLE/Contents/MacOS/takeform"
+# Verify the copied product bytes before the bundle signature changes the main
+# executable. This specifically catches case-folded path replacement.
+[ "$(shasum -a 256 "$BIN_DIR/TakeformApp" | awk '{print $1}')" = "$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/TakeformApp" | awk '{print $1}')" ]
+[ "$(shasum -a 256 "$BIN_DIR/takeform" | awk '{print $1}')" = "$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/takeform" | awk '{print $1}')" ]
+[ "$(stat -f '%d:%i' "$APP_BUNDLE/Contents/MacOS/TakeformApp")" != "$(stat -f '%d:%i' "$APP_BUNDLE/Contents/MacOS/takeform")" ]
 cp "$ROOT_DIR/design/identity/exports/Takeform.icns" "$APP_BUNDLE/Contents/Resources/Takeform.icns"
 
 if [ -n "$RENDERER_NODE_ROOT" ]; then
@@ -127,7 +135,7 @@ cat >"$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>$display_name</string>
   <key>CFBundleExecutable</key>
-  <string>Takeform</string>
+  <string>TakeformApp</string>
   <key>CFBundleIconFile</key>
   <string>Takeform</string>
   <key>CFBundleIdentifier</key>

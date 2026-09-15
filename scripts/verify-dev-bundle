@@ -18,14 +18,22 @@ plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$1" "$COPIED_APP/Contents/Info.plist"
 }
 
-[ -x "$COPIED_APP/Contents/MacOS/Takeform" ]
+[ -x "$COPIED_APP/Contents/MacOS/TakeformApp" ]
 [ -x "$COPIED_APP/Contents/MacOS/TakeformAuthorityAppService" ]
 [ -x "$COPIED_APP/Contents/MacOS/takeform" ]
 [ -f "$COPIED_APP/Contents/Resources/Takeform.icns" ]
 [ "$(plist_value CFBundleIdentifier)" = "com.takeform.app" ]
 [ "$(plist_value CFBundleDisplayName)" = "Takeform" ]
+[ "$(plist_value CFBundleExecutable)" = "TakeformApp" ]
 [ "$(plist_value TakeformDevelopmentVersion)" = "0.1.0-dev" ]
 [ "$(plist_value LSMinimumSystemVersion)" = "14.0" ]
+# On a case-insensitive volume the old Takeform/takeform layout aliased one
+# file and copied the CLI over the GUI executable. A copied bundle must retain
+# distinct app and CLI binaries.
+APP_INODE="$(stat -f '%d:%i' "$COPIED_APP/Contents/MacOS/TakeformApp")"
+CLI_INODE="$(stat -f '%d:%i' "$COPIED_APP/Contents/MacOS/takeform")"
+[ "$APP_INODE" != "$CLI_INODE" ]
+! cmp -s "$COPIED_APP/Contents/MacOS/TakeformApp" "$COPIED_APP/Contents/MacOS/takeform"
 codesign --verify --deep --strict --verbose=2 "$COPIED_APP"
 codesign -dvvv "$COPIED_APP" 2>&1 | grep -F "Identifier=com.takeform.app"
 
