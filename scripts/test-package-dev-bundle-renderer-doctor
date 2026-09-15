@@ -19,7 +19,16 @@ printf '%s\n' '#!/usr/bin/env node' 'process.stderr.write("stale doctor invoked\
   --renderer-runtime-source "$STALE_RUNTIME"
 "$ROOT_DIR/scripts/verify-dev-bundle" "$BUNDLE_ROOT/Takeform.app"
 BUNDLED_DOCTOR="$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime/doctor.mjs"
+BUNDLED_BROWSER_WRAPPER="$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime/tools/secure-browser-launcher.sh"
 "$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime/node/bin/node" "$BUNDLED_DOCTOR" \
   --runtime "$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime" --package-only >/dev/null
 ! cmp -s "$STALE_RUNTIME/doctor.mjs" "$BUNDLED_DOCTOR"
+cmp -s "$ROOT_DIR/renderer/launchers/secure-browser-launcher.sh" "$BUNDLED_BROWSER_WRAPPER"
+# verify-dev-bundle must reject a copied wrapper whose bytes no longer match
+# the package-owned profile before it can be selected as Chrome's launcher.
+printf '%s\n' '# tampered' >> "$BUNDLED_BROWSER_WRAPPER"
+if "$ROOT_DIR/scripts/verify-dev-bundle" "$BUNDLE_ROOT/Takeform.app"; then
+  echo "verify-dev-bundle accepted a modified browser wrapper." >&2
+  exit 1
+fi
 printf '%s\n' 'package-dev-bundle renderer doctor regression: PASS'
