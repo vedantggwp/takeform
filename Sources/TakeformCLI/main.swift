@@ -132,7 +132,7 @@ case "execute":
         FileHandle.standardOutput.write(output)
         FileHandle.standardOutput.write(Data("\n".utf8))
     } catch {
-        fputs("takeform: paired authority request failed\n", stderr)
+        fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr)
         exit(3)
     }
 default:

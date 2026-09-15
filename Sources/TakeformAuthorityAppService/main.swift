@@ -12,23 +12,30 @@ func bundledPeer(_ name: String) -> String? {
 
 let appRequirement = bundledPeer("Takeform")
 let cliRequirement = bundledPeer("takeform")
-let listen = try AppAuthoritySocket.listen()
+let listener = try AppAuthoritySocket.makeListener()
+signal(SIGTERM, SIG_IGN)
+let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+termination.setEventHandler { listener.close(); exit(0) }
+termination.resume()
 
-while true {
-    let fd = accept(listen, nil, nil)
-    guard fd >= 0 else { continue }
-    Thread {
-        defer { close(fd) }
-        let role: CreatorAuthorityService.PeerRole?
-        if let appRequirement, AppAuthorityPeer.matches(fd: fd, requirement: appRequirement) { role = .app }
-        else if let cliRequirement, AppAuthorityPeer.matches(fd: fd, requirement: cliRequirement) { role = .cli }
-        else { role = nil }
-        guard let role else { return }
-        do {
-            let request = try AppAuthoritySocket.receive(AppAuthorityRequest.self, fd)
-            try AppAuthoritySocket.send(CreatorAuthorityService.respond(to: request, from: role), fd)
-        } catch {
-            try? AppAuthoritySocket.send(AppAuthorityResponse.failure(CreatorAuthorityService.workspaceFailure(error)), fd)
-        }
-    }.start()
-}
+Thread {
+    while true {
+        let fd = accept(listener.fileDescriptor, nil, nil)
+        guard fd >= 0 else { return }
+        Thread {
+            defer { close(fd) }
+            let role: CreatorAuthorityService.PeerRole?
+            if let appRequirement, AppAuthorityPeer.matches(fd: fd, requirement: appRequirement) { role = .app }
+            else if let cliRequirement, AppAuthorityPeer.matches(fd: fd, requirement: cliRequirement) { role = .cli }
+            else { role = nil }
+            guard let role else { return }
+            do {
+                let request = try AppAuthoritySocket.receive(AppAuthorityRequest.self, fd)
+                try AppAuthoritySocket.send(CreatorAuthorityService.respond(to: request, from: role), fd)
+            } catch {
+                try? AppAuthoritySocket.send(AppAuthorityResponse.failure(CreatorAuthorityService.workspaceFailure(error)), fd)
+            }
+        }.start()
+    }
+}.start()
+dispatchMain()

@@ -12,7 +12,7 @@ public enum WorkspaceFailure: Error, Equatable, LocalizedError, Sendable, Codabl
 
     public var errorDescription: String? {
         switch self {
-        case .authorityUnavailable: "The project authority is unavailable. No changes were made."
+        case .authorityUnavailable: "The project authority is unavailable. Open Takeform, then try again. No changes were made."
         case .creatorAuthorizationRequired: "Creator authorization is required before Takeform can change this project."
         case .copyDecisionRequired: "This project identity is already bound at another location. Choose how to reopen it before editing."
         case .corruptProject: "Takeform could not read this project. Its files were left unchanged."

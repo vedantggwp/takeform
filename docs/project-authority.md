@@ -36,10 +36,11 @@ app-storage digest, scope, expiry, revocation state and authority epoch. The
 CLI uses bounded background Keychain calls and returns a typed unavailable or
 store failure instead of writing a plaintext fallback.
 
-The grant issuer used by the process integration test is test-only. Neither
-shipping executable can mint creator authority, and this boundary does not
-claim that a native app owns the service or exposes project controls. Those
-native controls and pairing lifecycle belong to F3.
+The app owns its service only for the app session. Quitting Takeform stops the
+child it started; the CLI does not start a daemon, pair itself, or create a
+replacement service, and tells the user to open Takeform when authority is
+unavailable. The grant issuer used by the process integration test is test-only.
+Neither shipping executable can mint creator authority.
 
 Run the focused source and process checks with:
 

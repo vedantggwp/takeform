@@ -14,13 +14,35 @@ public enum AppAuthorityRequest: Codable, Sendable {
 }
 public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case grants([CLIPairingSummary]); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocketFailure: Error { case unverifiedPeer }
+public final class AppAuthoritySocketListener: @unchecked Sendable {
+    public let fileDescriptor: Int32
+    private let path: String
+    private let node: (dev_t, ino_t)
+    private let lock = NSLock()
+    private var isClosed = false
+
+    fileprivate init(fileDescriptor: Int32, path: String, node: (dev_t, ino_t)) {
+        self.fileDescriptor = fileDescriptor; self.path = path; self.node = node
+    }
+
+    public func close() {
+        lock.lock(); defer { lock.unlock() }
+        guard !isClosed else { return }
+        isClosed = true
+        Darwin.close(fileDescriptor)
+        var current = stat()
+        if Darwin.lstat(path, &current) == 0, current.st_dev == node.0, current.st_ino == node.1 { _ = Darwin.unlink(path) }
+    }
+
+    deinit { close() }
+}
 public enum AppAuthoritySocket {
  nonisolated(unsafe) private static var testingPath: String?
- public static var path: String { testingPath ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
+ public static var path: String { testingPath ?? ProcessInfo.processInfo.environment["TAKEFORM_AUTHORITY_SOCKET"] ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
  @_spi(Testing) public static func setTestingPath(_ path: String?) { testingPath = path }
  static func address() -> sockaddr_un { var a=sockaddr_un(); a.sun_family=sa_family_t(AF_UNIX); let b=Array(path.utf8CString); withUnsafeMutableBytes(of:&a.sun_path){ r in for(i,x) in b.enumerated(){r[i]=UInt8(bitPattern:x)} }; a.sun_len=UInt8(MemoryLayout<sockaddr_un>.size); return a }
  public static func connect() throws -> Int32 { let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd >= 0 else {throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.connect(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; return fd }
-    public static func listen() throws -> Int32 { try FileManager.default.createDirectory(at:URL(fileURLWithPath:path).deletingLastPathComponent(),withIntermediateDirectories:true); let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd>=0 else{throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.bind(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 && Darwin.listen(fd,8)==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; chmod(path,S_IRUSR|S_IWUSR);return fd }
+    public static func makeListener() throws -> AppAuthoritySocketListener { try FileManager.default.createDirectory(at:URL(fileURLWithPath:path).deletingLastPathComponent(),withIntermediateDirectories:true); let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd>=0 else{throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.bind(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 && Darwin.listen(fd,8)==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; chmod(path,S_IRUSR|S_IWUSR); var info=stat(); guard Darwin.lstat(path,&info)==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; return AppAuthoritySocketListener(fileDescriptor:fd,path:path,node:(info.st_dev,info.st_ino)) }
     public static func request(_ r:AppAuthorityRequest)throws->AppAuthorityResponse{let fd=try connect();defer{close(fd)};try send(r,fd);return try receive(AppAuthorityResponse.self,fd)}
     public static func verifiedRequest(_ request: AppAuthorityRequest, expectedService: URL) throws -> AppAuthorityResponse {
         let fd = try connect()
