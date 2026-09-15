@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "takeform-hyperframes-episode-renderer",
+  "nodeVersion": "v22.22.1",
+  "worker": "episode-render-worker.mjs",
+  "packages": [
+    {"path": "@hyperframes/producer", "name": "@hyperframes/producer", "version": "0.8.39"},
+    {"path": "@hyperframes/engine", "name": "@hyperframes/engine", "version": "0.8.39"},
+    {"path": "@hyperframes/player", "name": "@hyperframes/player", "version": "0.8.39"},
+    {"path": "@hyperframes/player/node_modules/@hyperframes/core", "name": "@hyperframes/core", "version": "0.8.39"},
+    {"path": "@hyperframes/core", "name": "@hyperframes/core", "version": "0.8.40"}
+  ]
+}
