@@ -1,0 +1,256 @@
+{
+  "kind": "real_model_round_trip",
+  "codexVersion": "0.154.0",
+  "modelTurnStarted": true,
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "configuration": "app-server caller-owned mcp_servers override",
+  "turnStartReturned": true,
+  "phases": {
+    "processStartedAt": "2026-09-14T23:58:48.588Z",
+    "initializedAt": "2026-09-14T23:58:48.934Z",
+    "preflightCompletedAt": "2026-09-14T23:58:49.845Z",
+    "turnStartRequestedAt": "2026-09-14T23:58:49.845Z",
+    "turnStartReturnedAt": "2026-09-14T23:58:49.940Z",
+    "turnCompletedAt": "2026-09-14T23:59:03.941Z",
+    "processReapedAt": "2026-09-14T23:59:03.973Z"
+  },
+  "model": "gpt-5.6-terra",
+  "mcpServers": [
+    "takeform"
+  ],
+  "unrelatedServers": {
+    "count": 9,
+    "configuredForInvocation": "disabled",
+    "exposedTools": 0
+  },
+  "tools": [
+    "takeform_propose_edit",
+    "takeform_snapshot"
+  ],
+  "instructionSources": [],
+  "returnedSettings": {
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "reasoningEffort": "medium",
+    "approvalPolicy": null
+  },
+  "initialSnapshot": {
+    "revision": 1,
+    "scenes": [
+      {
+        "id": "scene-1",
+        "sentence": "Open with the creator's tension."
+      },
+      {
+        "id": "scene-2",
+        "sentence": "Show the one decision that changes the result."
+      },
+      {
+        "id": "scene-3",
+        "sentence": "End with a repeatable takeaway."
+      }
+    ]
+  },
+  "turn": {
+    "id": "01a0a25b-f1f8-7b70-a0a8-2c4d908d516b",
+    "status": "completed",
+    "errorCode": null
+  },
+  "roundTrip": {
+    "proposal": {
+      "expectedRevision": 1,
+      "sceneID": "scene-2",
+      "replacementText": "Show the decision that changes the result.",
+      "commandID": "proposal-live-20260914"
+    },
+    "preAcceptRevision": 1,
+    "acceptance": {
+      "commandID": "proposal-live-20260914",
+      "revision": 2,
+      "state": "accepted"
+    },
+    "postAcceptRevision": 2,
+    "duplicateAcceptance": {
+      "commandID": "proposal-live-20260914",
+      "revision": 2,
+      "state": "accepted"
+    },
+    "staleRejection": "stale_proposal",
+    "malformedRejection": "invalid_proposal",
+    "modelToolEvents": [
+      {
+        "origin": "model",
+        "type": "snapshot_read",
+        "tool": "takeform_snapshot",
+        "revision": 1
+      },
+      {
+        "origin": "model",
+        "type": "proposal_submitted",
+        "tool": "takeform_propose_edit",
+        "commandID": "proposal-live-20260914",
+        "expectedRevision": 1,
+        "sceneID": "scene-2"
+      }
+    ]
+  },
+  "tokenUsage": {
+    "totalTokens": 26945,
+    "inputTokens": 26938,
+    "cachedInputTokens": 26368,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 7,
+    "reasoningOutputTokens": 0
+  },
+  "diagnostics": {
+    "receivedMethodCounts": {
+      "mcpServer/elicitation/request": 2,
+      "other": 34,
+      "thread/started": 1,
+      "thread/status/changed": 6,
+      "thread/tokenUsage/updated": 5,
+      "turn/completed": 1,
+      "turn/started": 1
+    },
+    "pendingRequestKinds": [],
+    "requestOutcomes": {
+      "approved": 2
+    },
+    "approvalEvaluations": [
+      {
+        "sequence": 1,
+        "expectedOperation": "takeform_snapshot",
+        "decision": "approve",
+        "checks": {
+          "method": true,
+          "serverName": true,
+          "activeThread": true,
+          "activeTurn": true,
+          "threadIdMatches": true,
+          "turnIdMatches": true,
+          "modeForm": true,
+          "approvalKind": true,
+          "expectedOperation": true,
+          "toolNameAbsent": true,
+          "toolParamsPresent": true,
+          "toolParamsExact": true,
+          "emptyObjectSchema": true
+        },
+        "types": {
+          "params": "object",
+          "serverName": "string",
+          "threadId": "string",
+          "turnId": "string",
+          "mode": "string",
+          "meta": "object",
+          "toolParams": "object",
+          "requestedSchema": "object"
+        },
+        "fields": {
+          "params": {
+            "keys": [
+              "_meta",
+              "message",
+              "mode",
+              "requestedSchema",
+              "serverName",
+              "threadId",
+              "turnId"
+            ],
+            "otherKeyCount": 0
+          },
+          "meta": {
+            "keys": [
+              "codex_approval_kind",
+              "persist",
+              "tool_description",
+              "tool_params",
+              "tool_params_display"
+            ],
+            "otherKeyCount": 0
+          },
+          "requestedSchema": {
+            "keys": [
+              "properties",
+              "type"
+            ],
+            "otherKeyCount": 0
+          }
+        }
+      },
+      {
+        "sequence": 2,
+        "expectedOperation": "takeform_propose_edit",
+        "decision": "approve",
+        "checks": {
+          "method": true,
+          "serverName": true,
+          "activeThread": true,
+          "activeTurn": true,
+          "threadIdMatches": true,
+          "turnIdMatches": true,
+          "modeForm": true,
+          "approvalKind": true,
+          "expectedOperation": true,
+          "toolNameAbsent": true,
+          "toolParamsPresent": true,
+          "toolParamsExact": true,
+          "emptyObjectSchema": true
+        },
+        "types": {
+          "params": "object",
+          "serverName": "string",
+          "threadId": "string",
+          "turnId": "string",
+          "mode": "string",
+          "meta": "object",
+          "toolParams": "object",
+          "requestedSchema": "object"
+        },
+        "fields": {
+          "params": {
+            "keys": [
+              "_meta",
+              "message",
+              "mode",
+              "requestedSchema",
+              "serverName",
+              "threadId",
+              "turnId"
+            ],
+            "otherKeyCount": 0
+          },
+          "meta": {
+            "keys": [
+              "codex_approval_kind",
+              "persist",
+              "tool_description",
+              "tool_params",
+              "tool_params_display"
+            ],
+            "otherKeyCount": 0
+          },
+          "requestedSchema": {
+            "keys": [
+              "properties",
+              "type"
+            ],
+            "otherKeyCount": 0
+          }
+        }
+      }
+    ]
+  },
+  "result": "passed",
+  "processExit": {
+    "code": 0,
+    "signal": null
+  },
+  "terminalScratchInventory": [
+    {
+      "name": "mcp-events.jsonl",
+      "bytes": 797
+    }
+  ]
+}

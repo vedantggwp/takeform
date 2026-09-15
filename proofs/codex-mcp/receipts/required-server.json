@@ -1,0 +1,7 @@
+{
+  "kind": "required_server_startup",
+  "modelTurnStarted": false,
+  "server": "required_failure",
+  "result": "thread_start_rejected",
+  "failure": "broken_pipe_during_mcp_initialize"
+}

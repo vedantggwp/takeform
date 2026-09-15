@@ -1,0 +1,101 @@
+{
+  "kind": "real_model_round_trip",
+  "codexVersion": "0.154.0",
+  "modelTurnStarted": true,
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "configuration": "app-server caller-owned mcp_servers override",
+  "turnStartReturned": true,
+  "phases": {
+    "processStartedAt": "2026-09-14T23:47:37.899Z",
+    "initializedAt": "2026-09-14T23:47:38.455Z",
+    "preflightCompletedAt": "2026-09-14T23:47:39.476Z",
+    "turnStartRequestedAt": "2026-09-14T23:47:39.476Z",
+    "turnStartReturnedAt": "2026-09-14T23:47:39.592Z",
+    "turnCompletedAt": "2026-09-14T23:47:53.162Z",
+    "failedAt": "2026-09-14T23:47:53.166Z",
+    "processReapedAt": "2026-09-14T23:47:53.186Z"
+  },
+  "model": "gpt-5.6-terra",
+  "mcpServers": [
+    "takeform"
+  ],
+  "unrelatedServers": {
+    "count": 9,
+    "configuredForInvocation": "disabled",
+    "exposedTools": 0
+  },
+  "tools": [
+    "takeform_propose_edit",
+    "takeform_snapshot"
+  ],
+  "instructionSources": [],
+  "returnedSettings": {
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "reasoningEffort": "medium",
+    "approvalPolicy": null
+  },
+  "initialSnapshot": {
+    "revision": 1,
+    "scenes": [
+      {
+        "id": "scene-1",
+        "sentence": "Open with the creator's tension."
+      },
+      {
+        "id": "scene-2",
+        "sentence": "Show the one decision that changes the result."
+      },
+      {
+        "id": "scene-3",
+        "sentence": "End with a repeatable takeaway."
+      }
+    ]
+  },
+  "turn": {
+    "id": "01a0a251-b757-7c00-a641-299a45586948",
+    "status": "completed",
+    "errorCode": null
+  },
+  "result": "failed",
+  "failure": {
+    "category": "assertion_or_runtime_error",
+    "code": "ERR_ASSERTION",
+    "processCategory": null
+  },
+  "modelToolEvents": [],
+  "tokenUsage": {
+    "totalTokens": 27034,
+    "inputTokens": 27027,
+    "cachedInputTokens": 25344,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 7,
+    "reasoningOutputTokens": 0
+  },
+  "diagnostics": {
+    "receivedMethodCounts": {
+      "mcpServer/elicitation/request": 2,
+      "other": 33,
+      "thread/started": 1,
+      "thread/status/changed": 6,
+      "thread/tokenUsage/updated": 4,
+      "turn/completed": 1,
+      "turn/started": 1
+    },
+    "pendingRequestKinds": [],
+    "requestOutcomes": {
+      "declined": 2
+    }
+  },
+  "processExit": {
+    "code": 0,
+    "signal": null
+  },
+  "terminalScratchInventory": [
+    {
+      "name": "mcp-events.jsonl",
+      "bytes": 323
+    }
+  ]
+}

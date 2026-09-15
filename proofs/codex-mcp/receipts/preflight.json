@@ -1,0 +1,75 @@
+{
+  "kind": "no_model_preflight",
+  "codexVersion": "0.154.0",
+  "modelTurnStarted": false,
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "configuration": "app-server caller-owned mcp_servers override",
+  "turnStartReturned": false,
+  "phases": {
+    "processStartedAt": "2026-09-14T23:28:47.066Z",
+    "initializedAt": "2026-09-14T23:28:47.945Z",
+    "preflightCompletedAt": "2026-09-14T23:28:48.799Z",
+    "processReapedAt": "2026-09-14T23:28:48.810Z"
+  },
+  "model": "gpt-5.6-terra",
+  "mcpServers": [
+    "takeform"
+  ],
+  "unrelatedServers": {
+    "count": 9,
+    "configuredForInvocation": "disabled",
+    "exposedTools": 0
+  },
+  "tools": [
+    "takeform_propose_edit",
+    "takeform_snapshot"
+  ],
+  "instructionSources": [],
+  "returnedSettings": {
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "reasoningEffort": "medium",
+    "approvalPolicy": null
+  },
+  "initialSnapshot": {
+    "revision": 1,
+    "scenes": [
+      {
+        "id": "scene-1",
+        "sentence": "Open with the creator's tension."
+      },
+      {
+        "id": "scene-2",
+        "sentence": "Show the one decision that changes the result."
+      },
+      {
+        "id": "scene-3",
+        "sentence": "End with a repeatable takeaway."
+      }
+    ]
+  },
+  "diagnostics": {
+    "receivedMethodCounts": {
+      "other": 6,
+      "thread/started": 1
+    },
+    "pendingRequestKinds": [],
+    "requestOutcomes": {}
+  },
+  "result": "passed_before_model_turn",
+  "processExit": {
+    "code": 0,
+    "signal": null
+  },
+  "terminalScratchInventory": [
+    {
+      "name": "mcp-events.jsonl",
+      "bytes": 296
+    },
+    {
+      "name": "creator.sock",
+      "bytes": 0
+    }
+  ]
+}

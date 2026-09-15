@@ -1,0 +1,46 @@
+{
+  "kind": "installed_approval_contract_diagnosis",
+  "codexVersion": "0.154.0",
+  "releaseTag": "rust-v0.154.0",
+  "releaseCommit": "6b9826e3aa83b1a5947db50f4332cb9c65f1b340",
+  "officialEmitterSource": "https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/mcp_tool_call.rs#L1835-L1965",
+  "officialEmitterSourceSha256": "8971564fc9aaa3e087097f98d629ed731beb490cdc88fea8362ce5cbf65ffca2",
+  "officialCorrelationSource": "https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/session/mcp.rs#L554-L624",
+  "officialCorrelationSourceSha256": "3550c47b82dc68533c24b3de27593a164f3f4c4e3842c5e94bbffb8cfa6e1ab6",
+  "installedGeneratedSchemas": {
+    "requestSha256": "2de50247be60fd8afe1136d90e4fe1cf129b3df695d700824a05960f460f8e14",
+    "responseSha256": "792a012fdfe53ac211575a6c37ffbd492be848d15cb313d1bb4b534ade1f54ac",
+    "requestRequiredFields": ["serverName", "threadId"],
+    "responseRequiredFields": ["action"],
+    "turnIdNullable": true
+  },
+  "emitterContract": {
+    "mode": "form",
+    "requestedSchemaKeys": ["properties", "type"],
+    "requestedSchemaIsEmptyObject": true,
+    "requiredMetadataKeys": ["codex_approval_kind"],
+    "toolParamsIncludedWhenAvailable": true,
+    "toolNameIncluded": false
+  },
+  "identityContract": {
+    "threadId": "active conversation id",
+    "turnId": "active turn sub-id when correlated",
+    "requestId": "app-server pending request id",
+    "associatedToolCallItemIdExposed": false
+  },
+  "priorDeclineExplanation": {
+    "oldMatcherRequiredToolName": true,
+    "emitterSuppliedToolName": false,
+    "thereforeOldToolNamePredicate": false,
+    "bothObservedRequestsNecessarilyDeclinedByThatPredicate": true,
+    "rawPriorRequestBodiesRetained": false
+  },
+  "noModelDirectCallProbe": {
+    "receipt": "preflight-approval-diagnostics.json",
+    "modelTurnStarted": false,
+    "takeformSnapshotRevision": 1,
+    "approvalRequestCount": 0,
+    "approvalEvaluations": 0,
+    "conclusion": "mcpServer/tool/call does not reproduce the model MCP approval boundary"
+  }
+}
