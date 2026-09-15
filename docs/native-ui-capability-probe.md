@@ -34,6 +34,16 @@ identifier, and the visible `Native development foundation` text. It stores an
 `app.screenshot()` attachment with `keepAlways`; it does not call an in-app or
 `CGWindowList` screenshot route.
 
+The full F1 probe keeps those ready sentinels and checks native menu About,
+Settings through its button and Command-Comma shortcut, coordinate-driven
+window resizing, default-light and process-local dark appearance, native menu
+and control reachability, and terminate/relaunch behavior. The warm-ready
+measurement starts immediately before the copied bundle's second `launch()` and
+ends only after the window, title and foundation sentinels are all present. It
+retains raw monotonic timestamps as an XCTest attachment and enforces the
+three-second F1 bound. Appearance uses the per-process `-AppleInterfaceStyle
+Dark` argument; it never changes the runner's System Settings.
+
 The launcher passes the copied-app path only to the XCTest runner as
 `TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test
 reads `TAKEFORM_UI_PROBE_APP`; it is not an app-launch environment variable.
