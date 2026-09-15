@@ -1,8 +1,16 @@
 # Native preview host
 
-This is a native comparison host for issue #26. It is a SwiftUI app with a `WKWebView`, typed frame commands and an app-owned Node loopback helper. It does not contain a renderer, choose a renderer or prove decoded source media.
+This is a native comparison host for issue #26. It is a SwiftUI app with a `WKWebView`, typed frame commands and an app-owned Node loopback helper. It does not contain a renderer or choose a renderer.
 
 The controlled session records a backend, snapshot identity, rational frame rate, frame bounds, requested frame, displayed frame and acknowledged playback state. Every command has a monotonic request ID. Only the response for the current request can update displayed frame or playback. Superseded responses set the stale notice and preserve displayed state. The host records matched monotonic request and acknowledgement instants and shows the latest latency. The diagnostic page acknowledges after `requestAnimationFrame`. Its accessible delay control holds only the next acknowledgement for 150 ms to exercise stale-response handling. That demonstrates a web-paint callback only. It is not a decoded-frame or renderer output acknowledgement.
+
+## Rendered preview
+
+The **Rendered preview** panel remains unavailable until an authority-backed renderer supplies a verified artifact for the current plan revision. It accepts a typed descriptor containing the plan and snapshot identities, immutable renderer/settings/input digests, output hash and bytes, rational rate, frame count, expected audio/video stream counts, and validation-receipt reference. Its private cache copies into an owned staging directory, rejects symlinks and paths outside that root, verifies hash and byte count, and uses no-clobber publication.
+
+Native playback uses `AVPlayerItemVideoOutput`. A `decoded` acknowledgement means the requested frame was accepted only after `hasNewPixelBuffer(forItemTime:)` and a copied pixel buffer; readiness or a host-time conversion alone does not count. Old revision/job/session results are refused, and cancellation removes only owned staging data. The panel does not expose a generic file picker or substitute an older cached result for the current plan.
+
+The existing retained M and diagnostic T MP4s are developer-only test inputs. M contains no audio; T remains a diagnostic artifact. Neither establishes a creator workflow, source-composition parity, native listening evidence, or final A/V acceptance. No L artifact exists.
 
 ## Developer build
 

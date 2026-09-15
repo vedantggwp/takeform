@@ -3,13 +3,20 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: PreviewStore
+    @Bindable var renderedStore: RenderedPreviewStore
+    @Bindable var renderedPlayback: RenderedPreviewPlaybackStore
+    let renderedPlayer: RenderedPreviewPlayer
 
     var body: some View {
         VStack(spacing: 0) {
             controls
             Divider()
-            PreviewWebView(store: store)
-                .accessibilityLabel("Native preview page")
+            if store.selectedPage == "rendered" {
+                RenderedPreviewPanel(store: renderedStore, playback: renderedPlayback, player: renderedPlayer)
+            } else {
+                PreviewWebView(store: store)
+                    .accessibilityLabel("Native preview page")
+            }
             Divider()
             status
         }
@@ -25,23 +32,26 @@ struct ContentView: View {
                 Picker("Backend", selection: $store.selectedPage) {
                     Text("Diagnostic").tag("diagnostic")
                     Text("Renderer bundle").tag("bundle")
+                    Text("Rendered preview").tag("rendered")
                 }
                 .accessibilityLabel("Preview backend")
                 Spacer()
                 Button("Load page") { store.startDiagnostic() }
                     .keyboardShortcut("l", modifiers: [.command])
                     .accessibilityHint("Starts the local loopback helper and loads the selected page")
+                    .disabled(store.selectedPage == "rendered")
                 Button("Stop helper") { store.stopHelper() }
                     .accessibilityHint("Stops the app-owned loopback helper")
             }
-            HStack {
+            if store.selectedPage != "rendered" {
+                HStack {
                 Button("Choose Node") { store.nodeURL = chooseFile(title: "Choose Node executable", directories: false) ?? store.nodeURL }
                 Button("Choose bundle root") { store.bundleRoot = chooseFile(title: "Choose comparison bundle root", directories: true) ?? store.bundleRoot }
                 Button("Choose fixture root") { store.fixtureRoot = chooseFile(title: "Choose fixture root", directories: true) ?? store.fixtureRoot }
                 Text(configurationSummary).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .accessibilityElement(children: .contain)
-            HStack {
+                }
+                .accessibilityElement(children: .contain)
+                HStack {
                 Text("Frame \(store.session.requestedFrame + 1) / \(store.session.totalFrames)")
                     .monospacedDigit()
                     .frame(width: 140, alignment: .leading)
@@ -55,8 +65,8 @@ struct ContentView: View {
                 Button(store.session.playback == .playing ? "Pause" : "Play") {
                     store.session.playback == .playing ? store.pause() : store.play()
                 }
-            }
-            HStack {
+                }
+                HStack {
                 Text("Timecode \(timecode(frame: store.session.requestedFrame))")
                 Text("Snapshot \(store.session.snapshotID)").textSelection(.enabled)
                 if let acknowledged = store.session.acknowledgedFrame {
@@ -74,18 +84,19 @@ struct ContentView: View {
                         .accessibilityValue(store.acknowledgementLog.joined(separator: ", "))
                         .monospacedDigit()
                 }
+                }
+                .font(.caption)
             }
-            .font(.caption)
         }
         .padding()
     }
 
     private var status: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(store.helperStatus)
+            Text(store.selectedPage == "rendered" ? renderedStatus : store.helperStatus)
             if let stale = store.session.staleNotice { Text(stale).foregroundStyle(.orange) }
             if let error = store.session.error { Text(error).foregroundStyle(.red) }
-            Text("Page acknowledgements mean a web paint callback. They do not prove decoded source media or renderer output.")
+            Text(store.selectedPage == "rendered" ? "A rendered preview is available only after a verified artifact is bound to the current plan revision. It is not source-composition playback." : "Page acknowledgements mean a web paint callback. They do not prove decoded source media or renderer output.")
                 .foregroundStyle(.secondary)
         }
         .font(.caption)
@@ -105,6 +116,18 @@ struct ContentView: View {
         let bundle = store.bundleRoot == nil ? "bundle root missing" : "bundle root selected"
         let fixtures = store.fixtureRoot == nil ? "fixture root missing" : "fixture root selected"
         return "\(node), \(bundle), \(fixtures)"
+    }
+
+    private var renderedStatus: String {
+        switch renderedStore.status {
+        case let .unavailable(message): message
+        case .queued: "Rendered preview queued."
+        case .running: "Rendered preview is waiting for a renderer callback."
+        case .succeeded: "Rendered preview artifact is verified for the current revision."
+        case .cancelled: "Rendered preview cancelled."
+        case .superseded: "Rendered preview superseded by a newer revision."
+        case let .failed(message): message
+        }
     }
 
     private func chooseFile(title: String, directories: Bool) -> URL? {
