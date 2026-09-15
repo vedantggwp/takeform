@@ -45,6 +45,7 @@ public struct CLIPairingSummary: Equatable, Sendable, Codable, Identifiable {
 }
 
 public protocol WorkspaceClient: Sendable {
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome]
     func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult
@@ -56,6 +57,7 @@ public protocol WorkspaceClient: Sendable {
 /// Deliberately refuses to simulate authority writes until the app-owned service is available.
 public struct UnavailableWorkspaceClient: WorkspaceClient {
     public init() {}
+    public func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] { throw WorkspaceFailure.authorityUnavailable }
 
     public func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot {
         throw WorkspaceFailure.authorityUnavailable
@@ -82,6 +84,14 @@ public struct UnavailableWorkspaceClient: WorkspaceClient {
 }
 
 public enum WorkspacePresentation {
+    /// A preview has no file URL until this returns an asset from the current
+    /// authority-opened snapshot. The app sets `selectedAssetID` only after a
+    /// fresh `open` has revalidated the catalog object's digest and length.
+    public static func assetForVerifiedPreview(document: ProjectDocument?, selectedAssetID: UUID?) -> ManagedAsset? {
+        guard let selectedAssetID else { return nil }
+        return document?.assets.first { $0.id == selectedAssetID }
+    }
+
     public static func resolvedValues(document: ProjectDocument, episodeID: UUID) -> [EffectiveValue] {
         document.effectiveValues(for: episodeID) ?? []
     }

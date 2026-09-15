@@ -86,6 +86,7 @@ public final class ProjectAuthority {
             try openDatabase()
             document = try loadDocument()
             try validateManifest(document, manifest: manifest)
+            try validateManagedAssets(document)
         } else {
             guard !FileManager.default.fileExists(atPath: stateURL.appendingPathComponent("project.sqlite").path) else { throw AuthorityFailure.corruptDatabase }
             document = ProjectDocument(projectID: initialProjectID ?? UUID())
@@ -118,6 +119,54 @@ public final class ProjectAuthority {
         let presentedTokenDigest = token.map({ tokenDigest($0) })
         guard grant?.isActive == true, grant?.authorityEpoch == binding?.epoch, grant?.tokenDigest == presentedTokenDigest, grant?.scopes.contains(envelope.command.requiredScope) == true else { return CommandResult(id: envelope.id, outcome: .rejected(reason: "unauthorized")) }
         return try executeAuthorized(envelope)
+    }
+
+    func importManagedSources(_ sources: [URL], credential: String, shouldCancel: (() -> Bool)? = nil) throws -> [ManagedImportOutcome] {
+        try importManagedSources(sources, shouldCancel: shouldCancel, authorize: {
+            try self.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        }, commit: { asset, opened in
+            try self.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .addManagedAsset(asset)), credential: credential)
+        })
+    }
+
+    func importManagedSources(_ sources: [URL], grantID: UUID, token: String, shouldCancel: (() -> Bool)? = nil) throws -> [ManagedImportOutcome] {
+        try importManagedSources(sources, shouldCancel: shouldCancel, authorize: {
+            try self.openForPairedImport(grantID: grantID, token: token)
+        }, commit: { asset, _ in
+            let current = try self.openForPairedImport(grantID: grantID, token: token)
+            return try self.executeAuthorized(CommandEnvelope(expectedRevision: current.document.revision, command: .addManagedAsset(asset)))
+        })
+    }
+
+    private func importManagedSources(_ sources: [URL], shouldCancel: (() -> Bool)?, authorize: () throws -> ProjectOpenState, commit: (ManagedAsset, ProjectOpenState) throws -> CommandResult) throws -> [ManagedImportOutcome] {
+        var outcomes: [ManagedImportOutcome] = []
+        for (index, source) in sources.enumerated() {
+            do {
+                // Authenticate before allocating staging or touching package state.
+                let opened = try authorize()
+                let asset = try ManagedImport.stageAndPromoteSync(source: source, package: packageURL, shouldCancel: shouldCancel)
+                if opened.document.assets.contains(where: { $0.digest == asset.digest }) { outcomes.append(.duplicate(digest: asset.digest, filename: asset.filename)); continue }
+                let result = try commit(asset, opened)
+                if case .applied = result.outcome { outcomes.append(.imported(asset)) } else { outcomes.append(.failed(filename: asset.filename, reason: "catalog conflict")) }
+            } catch is CancellationError {
+                outcomes.append(.cancelled(filename: source.lastPathComponent))
+                outcomes.append(contentsOf: sources.dropFirst(index + 1).map { .cancelled(filename: $0.lastPathComponent) })
+                break
+            }
+            catch { outcomes.append(.failed(filename: source.lastPathComponent, reason: String(describing: error))) }
+        }
+        return outcomes
+    }
+
+    private func openForPairedImport(grantID: UUID, token: String) throws -> ProjectOpenState {
+        let opened = try open()
+        let state = try loadMachineState(for: opened.document.projectID)
+        let grant = state.grants.first(where: { $0.id == grantID })
+        guard grant?.isActive == true,
+              grant?.authorityEpoch == state.binding?.epoch,
+              grant?.tokenDigest == tokenDigest(token),
+              grant?.scopes.contains(.editProject) == true else { throw AuthorityFailure.unauthorized }
+        return opened
     }
 
     private func executeAuthorized(_ envelope: CommandEnvelope) throws -> CommandResult {
@@ -174,6 +223,17 @@ public final class ProjectAuthority {
         }
     }
 
+    /// The SQLite document is the portable catalog. Object paths are never
+    /// stored in it: each is derived from the validated digest and hashed on
+    /// reopen so a damaged package cannot quietly appear empty.
+    private func validateManagedAssets(_ document: ProjectDocument) throws {
+        var digests = Set<String>()
+        for asset in document.assets {
+            guard digests.insert(asset.digest).inserted else { throw AuthorityFailure.corruptDatabase }
+            try ManagedImport.verifyObject(asset, package: packageURL)
+        }
+    }
+
     private func apply(_ command: ProjectCommand, to document: ProjectDocument) throws -> ProjectDocument {
         var next = document
         switch command {
@@ -196,6 +256,9 @@ public final class ProjectAuthority {
             next.overrides.append(Override(episodeID: episodeID, key: key, value: value))
         case .resetOverride(let episodeID, let key):
             next.overrides.removeAll { $0.episodeID == episodeID && $0.key == key }
+        case .addManagedAsset(let asset):
+            guard asset.digest.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil, asset.byteLength > 0, !asset.filename.isEmpty, !next.assets.contains(where: { $0.digest == asset.digest }) else { return document }
+            next.assets.append(asset)
         case .undo:
             guard let row = try database.row("SELECT before_state FROM history WHERE undone = 0 ORDER BY revision DESC LIMIT 1") else { return document }
             var restored = try decode(ProjectDocument.self, row[0])

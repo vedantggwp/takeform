@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "TakeformCore", targets: ["TakeformCore"]),
         .library(name: "TakeformWorkspace", targets: ["TakeformWorkspace"]),
         .library(name: "TakeformAppAuthorityWire", targets: ["TakeformAppAuthorityWire"]),
+        .library(name: "TakeformMedia", targets: ["TakeformMedia"]),
         .executable(name: "TakeformAuthorityAppService", targets: ["TakeformAuthorityAppService"]),
         // Keep the native app executable distinct from the lowercase CLI on
         // case-insensitive volumes, where Takeform/takeform are one path.
@@ -22,9 +23,10 @@ let package = Package(
         .target(name: "TakeformSupport"),
         .target(name: "TakeformCore"),
         .target(name: "TakeformAuthorityEngine", dependencies: ["CSQLite", "TakeformCore"], path: "Sources/TakeformAuthority"),
-        .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformMedia"]),
         .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
         .target(name: "TakeformAppAuthorityWire", dependencies: ["TakeformCore", "TakeformWorkspace"]),
+        .target(name: "TakeformMedia"),
         .target(name: "TakeformAppServiceClient", dependencies: ["TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient"]),
         .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
@@ -35,6 +37,7 @@ let package = Package(
         .executableTarget(name: "TakeformAuthorityFaultHarness", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore"]),
         .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"]),
         .testTarget(name: "TakeformAuthorityTests", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformAppAuthorityWire", "TakeformCore"]),
-        .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore", "TakeformAppServiceClient", "TakeformAppAuthorityWire", "TakeformAuthorityAppServiceCore"])
+        .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore", "TakeformAppServiceClient", "TakeformAppAuthorityWire", "TakeformAuthorityAppServiceCore", "TakeformApp"]),
+        .testTarget(name: "TakeformMediaTests", dependencies: ["TakeformMedia"])
     ]
 )

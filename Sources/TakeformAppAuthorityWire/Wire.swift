@@ -4,6 +4,8 @@ import TakeformCore
 import TakeformWorkspace
 
 public enum AppAuthorityRequest: Codable, Sendable {
+    case importMedia(URL, [URL], UUID, Data)
+    case cancelImport(URL, UUID, Data)
     case open(URL, Bool, Data)
     case create(URL, String, [String: String], Data)
     case execute(URL, CommandEnvelope, Data)
@@ -11,8 +13,9 @@ public enum AppAuthorityRequest: Codable, Sendable {
     case revoke(URL, UUID, Data)
     case listGrants(URL, Data)
     case pairedExecute(URL, CommandEnvelope, UUID, String)
+    case pairedImport(URL, [URL], UUID, String)
 }
-public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case grants([CLIPairingSummary]); case success; case failure(WorkspaceFailure) }
+public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case importOutcomes([ManagedImportOutcome]); case pairing(UUID, String); case grants([CLIPairingSummary]); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocketFailure: Error { case unverifiedPeer }
 public final class AppAuthoritySocketListener: @unchecked Sendable {
     public let fileDescriptor: Int32
