@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {compositionModule, validateRequest} from './episode-render-worker.mjs';
+import {mkdtemp, lstat, readFile, rm, writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {compositionModule, validateRequest, writeProject} from './episode-render-worker.mjs';
 
 const rational = (value, timescale = 1) => ({value, timescale});
 const range = (start, duration) => ({start: rational(start), duration: rational(duration)});
@@ -30,4 +33,26 @@ test('generated composition uses one element per occurrence and top-left output 
   assert.match(source, /node\.style\.left=\(seconds\(occurrence\.outputRect\.x\)\*100\)/);
   assert.match(source, /videoTime\(occurrence,time\)/);
   assert.match(source, /node\.muted=true/);
+});
+
+test('worker stages distinct occurrence links without mutating source media', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-episode-worker-'));
+  try {
+    const still = join(root, 'still.png');
+    const video = join(root, 'clip.mp4');
+    await writeFile(still, 'still-source');
+    await writeFile(video, 'video-source');
+    const value = request();
+    value.stageDirectory = join(root, 'stage');
+    value.resolvedObjects[0].localPath = still;
+    value.resolvedObjects[1].localPath = video;
+    const project = await writeProject(value);
+    assert.equal((await lstat(join(project.project, 'media', 'left.png'))).isSymbolicLink(), true);
+    assert.equal((await lstat(join(project.project, 'media', 'right.mp4'))).isSymbolicLink(), true);
+    assert.match(await readFile(join(project.project, 'composition.mjs'), 'utf8'), /media\/left\.png/);
+    assert.equal(await readFile(still, 'utf8'), 'still-source');
+    assert.equal(await readFile(video, 'utf8'), 'video-source');
+  } finally {
+    await rm(root, {force: true, recursive: true});
+  }
 });
