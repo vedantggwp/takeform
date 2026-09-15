@@ -81,8 +81,9 @@ public struct CompositionCrop: Codable, Equatable, Sendable {
     }
 }
 
-/// A normalized destination rectangle on the composition canvas. This is
-/// distinct from `CompositionCrop`, which selects a source region.
+/// A normalized destination rectangle on the composition canvas. Coordinates
+/// use a top-left origin: x grows right and y grows down. This is distinct from
+/// `CompositionCrop`, which selects a source region.
 public struct CompositionOutputRect: Codable, Equatable, Sendable {
     public let x: CompositionTime
     public let y: CompositionTime

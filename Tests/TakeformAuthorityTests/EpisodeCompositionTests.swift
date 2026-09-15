@@ -61,6 +61,12 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertEqual(composition.occurrences[0].outputRect, try outputRect(0, 1, 0, 1, width: 1, 2, height: 1, 1))
         XCTAssertEqual(composition.occurrences[1].outputRect, try outputRect(1, 2, 0, 1, width: 1, 2, height: 1, 1))
 
+        let lowerPanel = CompositionOccurrence(id: UUID(), assetID: image.id, assetDigest: image.digest, source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop(), outputRect: try outputRect(2, 8, 2, 8, width: 4, 8, height: 4, 8))
+        let nonzeroY = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1920, height: 1080, frameRate: try time(30), duration: try time(1)), occurrences: [lowerPanel], captions: [])
+        XCTAssertNoThrow(try nonzeroY.validate(episodes: [episode], assets: [image]))
+        let canonicalNonzeroY = try JSONDecoder().decode(EpisodeComposition.self, from: nonzeroY.canonicalData())
+        XCTAssertEqual(canonicalNonzeroY.occurrences[0].outputRect, try outputRect(1, 4, 1, 4, width: 1, 2, height: 1, 2))
+
         let ambiguous = try makeComposition(episodeID: episode.id, asset: image, second: second, secondLayer: 0)
         XCTAssertThrowsError(try ambiguous.validate(episodes: [episode], assets: [image, second])) { XCTAssertEqual($0 as? CompositionValidationFailure, .sameLayerOverlap) }
 
