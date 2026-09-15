@@ -6,9 +6,10 @@ ordinary pull request. A maintainer applies the exact `native-creator-walkthroug
 label, or manually dispatches an already-merged workflow with a reviewed SHA.
 The job has read-only repository permission, an eight-minute job cap, and a
 180-second owned XCTest process cap. It uploads only facts, the xcodebuild log,
-the xcresult, direct runner-owned PNG captures, and XCTest attachments for
-three days. The direct captures preserve launch, New Channel, and system-panel
-state even when XCTest represents an attachment in a non-PNG export format.
+the xcresult and XCTest attachments for three days. The retained attachment
+export includes the direct PNG captures from launch, New Channel, and file
+panels; the sandboxed XCTest runner does not write into the workflow artifact
+directory itself.
 
 Every run uses a fresh runner-temporary root. The test target directly reuses
 the cleared public media fixture builder for an 8×4 PNG, a VFR MOV, and a mono

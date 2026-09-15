@@ -37,12 +37,12 @@ test ! -e "$RUNNER/valid/test-inputs"
 
 # The copied bundle is intentionally launched through XCUIApplication(url:).
 # A default proxy needs an Xcode Target Application, which this portable test
-# target deliberately does not configure.
+# target deliberately does not configure. The retained hosted AX hierarchy
+# exposes NSSavePanel as the copied app's `save-panel` window.
 if grep -Eq '=([[:space:]]*)XCUIApplication\(\)' "$TEST_SOURCE"; then
   echo "creator walkthrough must not construct a default XCUIApplication proxy" >&2
   exit 1
 fi
 grep -Eq 'presentedSystemPanel\(in: app' "$TEST_SOURCE"
-grep -Eq 'app\.sheets\.firstMatch' "$TEST_SOURCE"
-grep -Eq 'app\.dialogs\.firstMatch' "$TEST_SOURCE"
-grep -Eq 'TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT' "$LAUNCHER"
+grep -Eq 'app\.windows\["save-panel"\]' "$TEST_SOURCE"
+grep -Eq 'panel\.buttons\[confirmation\]\.exists' "$TEST_SOURCE"

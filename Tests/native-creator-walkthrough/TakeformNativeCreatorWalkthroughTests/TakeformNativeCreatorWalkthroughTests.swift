@@ -6,7 +6,6 @@ import XCTest
 @MainActor
 final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     private let appPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_APP"
-    private let outputPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT"
     private let rootPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_ROOT"
 
     func testCreateImportInspectComposeSaveAndReopen() async throws {
@@ -192,7 +191,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     /// panel AX tree before interacting with it; a changed system hierarchy is
     /// a test failure with evidence, never a product-route fallback.
     private func acceptSystemPanel(path: URL, confirmation: String, app: XCUIApplication, named: String) throws {
-        let panel = try presentedSystemPanel(in: app, named: named)
+        let panel = try presentedSystemPanel(in: app, confirmation: confirmation, named: named)
         attach(app.debugDescription, named: "\(named)-ax")
         capture(panel, named: named)
         panel.typeKey("g", modifierFlags: [.command, .shift])
@@ -210,13 +209,20 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     /// launches the copied bundle by URL. NSOpenPanel/NSSavePanel presentation
     /// therefore remains a descendant of that explicit app proxy instead of
     /// creating XCUIApplication(), which would require a Target Application.
-    private func presentedSystemPanel(in app: XCUIApplication, named: String) throws -> XCUIElement {
+    /// The retained macOS 26 AX hierarchy identifies NSSavePanel as a window
+    /// named `save-panel`, not a sheet or dialog.
+    private func presentedSystemPanel(in app: XCUIApplication, confirmation: String, named: String) throws -> XCUIElement {
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
-            let sheet = app.sheets.firstMatch
-            if sheet.exists { return sheet }
-            let dialog = app.dialogs.firstMatch
-            if dialog.exists { return dialog }
+            let savePanel = app.windows["save-panel"]
+            if savePanel.exists, savePanel.buttons[confirmation].exists { return savePanel }
+
+            // Other AppKit file panels are still app-owned windows. Select one
+            // only when it exposes the expected visible action, rather than by
+            // position or by creating an unconfigured application proxy.
+            for panel in app.windows.allElementsBoundByIndex where panel.buttons[confirmation].exists {
+                return panel
+            }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
         attach(app.debugDescription, named: "\(named)-missing-panel-ax")
@@ -265,29 +271,10 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     }
 
     private func capture(_ object: some XCUIScreenshotProviding, named: String) {
-        let screenshot = object.screenshot()
-        persist(screenshot, named: named)
-        let attachment = XCTAttachment(screenshot: screenshot)
+        let attachment = XCTAttachment(screenshot: object.screenshot())
         attachment.name = named
         attachment.lifetime = .keepAlways
         add(attachment)
-    }
-
-    private func persist(_ screenshot: XCUIScreenshot, named: String) {
-        guard let outputPath = ProcessInfo.processInfo.environment[outputPathKey], !outputPath.isEmpty else {
-            XCTFail("The opt-in workflow did not provide a runner-owned evidence output path.")
-            return
-        }
-        let output = URL(fileURLWithPath: outputPath, isDirectory: true)
-            .appendingPathComponent("captures", isDirectory: true)
-        let safeName = named.replacingOccurrences(of: "/", with: "-")
-        let file = output.appendingPathComponent("\(safeName)-\(UUID().uuidString).png")
-        do {
-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-            try screenshot.pngRepresentation.write(to: file, options: .atomic)
-        } catch {
-            XCTFail("Could not retain \(named) screenshot: \(error.localizedDescription)")
-        }
     }
 
     private func attach(_ value: String, named: String) {
