@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "TakeformWorkspace", targets: ["TakeformWorkspace"]),
         .library(name: "TakeformAppAuthorityWire", targets: ["TakeformAppAuthorityWire"]),
         .library(name: "TakeformMedia", targets: ["TakeformMedia"]),
+        .library(name: "TakeformRenderedPreview", targets: ["TakeformRenderedPreview"]),
         .executable(name: "TakeformAuthorityAppService", targets: ["TakeformAuthorityAppService"]),
         // Keep the native app executable distinct from the lowercase CLI on
         // case-insensitive volumes, where Takeform/takeform are one path.
@@ -27,6 +28,7 @@ let package = Package(
         .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
         .target(name: "TakeformAppAuthorityWire", dependencies: ["TakeformCore", "TakeformWorkspace"]),
         .target(name: "TakeformMedia"),
+        .target(name: "TakeformRenderedPreview", dependencies: ["TakeformCore", "TakeformAppAuthorityWire"]),
         .target(name: "TakeformAppServiceClient", dependencies: ["TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient"]),
         .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
@@ -38,6 +40,7 @@ let package = Package(
         .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"]),
         .testTarget(name: "TakeformAuthorityTests", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformAppAuthorityWire", "TakeformCore"]),
         .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore", "TakeformAppServiceClient", "TakeformAppAuthorityWire", "TakeformAuthorityAppServiceCore", "TakeformApp"]),
-        .testTarget(name: "TakeformMediaTests", dependencies: ["TakeformMedia"])
+        .testTarget(name: "TakeformMediaTests", dependencies: ["TakeformMedia"]),
+        .testTarget(name: "TakeformRenderedPreviewTests", dependencies: ["TakeformRenderedPreview", "TakeformCore", "TakeformAppAuthorityWire"])
     ]
 )
