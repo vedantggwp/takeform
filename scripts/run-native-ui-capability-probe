@@ -71,9 +71,9 @@ command=(
 )
 if [ "$FAILED_LANES_ONLY" = "1" ]; then
   command+=(
-    '-only-testing:TakeformNativeUICapabilityTests/testKeyboardMenuTraversalOpensNativeAbout'
-    '-only-testing:TakeformNativeUICapabilityTests/testLightAndDarkAppearanceRemainLegible'
-    '-only-testing:TakeformNativeUICapabilityTests/testResizePreservesReachableNativeControls'
+    '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testKeyboardMenuTraversalOpensNativeAbout'
+    '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testLightAndDarkAppearanceRemainLegible'
+    '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testResizePreservesReachableNativeControls'
   )
 fi
 
@@ -137,6 +137,21 @@ while kill -0 "$pid" 2>/dev/null; do
 done
 wait "$pid"
 status=$?
+
+if [ "$MODE" = run ] && [ "$FAILED_LANES_ONLY" = "1" ]; then
+  expected_test_count=3
+  executed_test_count="$(awk '
+    /Test Suite .Selected tests./ { selected = 1; next }
+    selected && /Executed [0-9]+ tests/ { count = $2; selected = 0 }
+    END { print count + 0 }
+  ' "$LOG")"
+  echo "expected_selected_test_count: $expected_test_count" >> "$FACTS"
+  echo "observed_selected_test_count: $executed_test_count" >> "$FACTS"
+  if [ "$executed_test_count" -ne "$expected_test_count" ]; then
+    echo "probe_selection: expected $expected_test_count selected tests, observed $executed_test_count" >> "$FACTS"
+    status=1
+  fi
+fi
 
 if [ "$timed_out" -eq 1 ]; then
   echo "probe_timeout_seconds: $TIMEOUT_SECONDS" >> "$FACTS"
