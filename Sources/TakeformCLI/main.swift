@@ -119,6 +119,9 @@ case "execute":
     }
     do {
         let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: Data(arguments[3].utf8))
+        // Do not wake Keychain or expose a paired token until the fixed bundled
+        // service is present and its peer identity has been verified.
+        try AppAuthoritySocket.verifyService(expectedService: service)
         let authenticationContext = LAContext()
         authenticationContext.interactionNotAllowed = true
         var query = credentialQuery(for: grantID)
@@ -127,6 +130,8 @@ case "execute":
         guard let tokenData = readCredential(query: query), let token = String(data: tokenData, encoding: .utf8), !token.isEmpty else {
             throw NSError(domain: "TakeformCLI", code: 2)
         }
+        // Re-verify on the request connection so a peer replacement between the
+        // availability check and token read cannot receive the token.
         guard case let .result(result) = try AppAuthoritySocket.verifiedRequest(.pairedExecute(URL(fileURLWithPath: arguments[1]), envelope, grantID, token), expectedService: service) else { throw NSError(domain: "TakeformCLI", code: 3) }
         let output = try JSONEncoder().encode(result)
         FileHandle.standardOutput.write(output)

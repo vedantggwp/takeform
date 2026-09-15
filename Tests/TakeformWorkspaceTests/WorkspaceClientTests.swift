@@ -120,7 +120,13 @@ final class WorkspaceClientTests: XCTestCase {
         let process = Process(); let stderr = Pipe(); process.executableURL = root.appendingPathComponent("takeform")
         process.arguments = ["execute", package.path, UUID().uuidString, String(decoding: try JSONEncoder().encode(command), as: UTF8.self)]
         process.environment = ["TAKEFORM_AUTHORITY_SOCKET": socket.path]
-        process.standardError = stderr; try process.run(); process.waitUntilExit()
+        process.standardError = stderr; try process.run()
+        for _ in 0..<100 where process.isRunning { try? await Task.sleep(for: .milliseconds(10)) }
+        if process.isRunning {
+            process.terminate()
+            for _ in 0..<100 where process.isRunning { try? await Task.sleep(for: .milliseconds(10)) }
+            XCTFail("copied CLI did not complete within the bounded unavailable check")
+        }
         let message = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         XCTAssertNotEqual(process.terminationStatus, 0)
         XCTAssertTrue(message.contains("open Takeform"))
