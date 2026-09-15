@@ -151,6 +151,25 @@ fi
 log_pid=""
 attempt_marker=""
 attempt_start_epoch=""
+reap_log_sidecar() {
+  [ -n "$log_pid" ] || return 0
+  if kill -0 "$log_pid" 2>/dev/null; then
+    kill -TERM "$log_pid" 2>/dev/null || true
+    for _ in 1 2; do
+      kill -0 "$log_pid" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$log_pid" 2>/dev/null; then
+      kill -KILL "$log_pid" 2>/dev/null || true
+      [ -f "$FACTS" ] && echo "launch_diagnostic_cleanup: forced reaping of owned log sidecar" >> "$FACTS"
+    fi
+  fi
+  wait "$log_pid" 2>/dev/null || true
+  log_pid=""
+}
+trap 'reap_log_sidecar' EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 if [ "$MODE" = run ]; then
   mkdir -p "$LAUNCH_DIAGNOSTICS/crash-reports"
   attempt_marker="$LAUNCH_DIAGNOSTICS/attempt-start"
@@ -225,10 +244,7 @@ done
 wait "$pid"
 status=$?
 
-if [ -n "$log_pid" ]; then
-  kill -TERM "$log_pid" 2>/dev/null || true
-  wait "$log_pid" 2>/dev/null || true
-fi
+reap_log_sidecar
 if [ "$MODE" = run ]; then
   attempt_end_epoch="$(date +%s)"
   {
