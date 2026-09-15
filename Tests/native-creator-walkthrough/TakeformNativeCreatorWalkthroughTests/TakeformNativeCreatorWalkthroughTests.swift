@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import XCTest
 
 /// Exercises only the copied app's public creator controls. Test input files
@@ -328,13 +329,24 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         process.arguments = arguments
         process.standardOutput = stdout
         process.standardError = stderr
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         try process.run()
-        let timeout = DispatchWorkItem {
-            if process.isRunning { process.terminate() }
+        if exited.wait(timeout: .now() + 10) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                let pid = process.processIdentifier
+                guard pid > 0 else {
+                    throw NSError(domain: "TakeformCreatorWalkthrough", code: 5, userInfo: [NSLocalizedDescriptionKey: "Copied CLI exceeded its deadline without a recorded child PID"])
+                }
+                if Darwin.kill(pid, SIGKILL) != 0, errno != ESRCH {
+                    throw NSError(domain: "TakeformCreatorWalkthrough", code: 6, userInfo: [NSLocalizedDescriptionKey: "Copied CLI did not accept bounded cleanup"])
+                }
+                guard exited.wait(timeout: .now() + 2) == .success else {
+                    throw NSError(domain: "TakeformCreatorWalkthrough", code: 7, userInfo: [NSLocalizedDescriptionKey: "Copied CLI did not exit after bounded TERM/KILL cleanup"])
+                }
+            }
         }
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 10, execute: timeout)
-        process.waitUntilExit()
-        timeout.cancel()
         return (process.terminationStatus, String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
     }
 

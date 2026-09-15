@@ -80,6 +80,12 @@ if grep -Eq 'textFields\.firstMatch' "$TEST_SOURCE"; then
   echo "creator walkthrough must not use an ambiguous system-panel text field" >&2
   exit 1
 fi
+if grep -Eq 'process\.waitUntilExit\(\)' "$TEST_SOURCE"; then
+  echo "creator walkthrough copied CLI must use bounded TERM/KILL reaping" >&2
+  exit 1
+fi
+grep -Eq 'Darwin\.kill\(pid, SIGKILL\)' "$TEST_SOURCE"
+grep -Eq 'exited\.wait\(timeout: \.now\(\) \+ 10\)' "$TEST_SOURCE"
 grep -Eq 'accessibilityElement\(children: \.contain\)' "$APP_SOURCE"
 grep -Eq 'accessibilityIdentifier\("managed-media-drop-target"\)' "$APP_SOURCE"
 grep -Eq 'accessibilityIdentifier\("workspace-import-footage"\)' "$APP_SOURCE"
