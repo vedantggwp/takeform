@@ -44,7 +44,7 @@ The full F1 probe keeps those ready sentinels and checks native menu About,
 Settings through its button and Command-Comma shortcut, coordinate-driven
 window resizing, the visible app-owned System/Light/Dark Appearance preference,
 native menu and control reachability, and terminate/relaunch behavior. It uses
-the documented Control-F2 menu-bar focus shortcut followed by Right Arrow,
+the documented Control-Fn-F2 menu-bar focus shortcut followed by Right Arrow,
 Return and Return to activate the initially selected About item through the
 keyboard, retaining
 AX and screenshot evidence of the focused/open-menu stages and the native
@@ -97,9 +97,11 @@ with its facts attached; it never substitutes a smaller threshold. This path is
 enabled only by the workflow's test-runner environment, is not used by a local
 structural build, and changes neither runner defaults nor a personal Mac.
 
-The failed-lane retry limits XCTest to keyboard menu traversal, outer-window
-resize, and Appearance contrast, plus each case's existing copied-app launch
-preflight. Previously successful launch, About, Settings, and relaunch evidence
+The first failed-lane retry limits XCTest to keyboard menu traversal,
+outer-window resize, and Appearance contrast, plus each case's existing
+copied-app launch preflight. Once resize and contrast have passed, a subsequent
+keyboard-only retry requires exactly one selected test to execute. Previously
+successful launch, About, Settings, resize, contrast, and relaunch evidence
 remains retained rather than being rerun unchanged.
 
 The full walkthrough has 180 seconds for `xcodebuild` and the job has an

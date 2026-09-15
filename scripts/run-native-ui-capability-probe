@@ -72,8 +72,6 @@ command=(
 if [ "$FAILED_LANES_ONLY" = "1" ]; then
   command+=(
     '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testKeyboardMenuTraversalOpensNativeAbout'
-    '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testLightAndDarkAppearanceRemainLegible'
-    '-only-testing:TakeformNativeUICapabilityTests/TakeformNativeUICapabilityTests/testResizePreservesReachableNativeControls'
   )
 fi
 
@@ -139,7 +137,7 @@ wait "$pid"
 status=$?
 
 if [ "$MODE" = run ] && [ "$FAILED_LANES_ONLY" = "1" ]; then
-  expected_test_count=3
+  expected_test_count=1
   executed_test_count="$(awk '
     /Test Suite .Selected tests./ { selected = 1; next }
     selected && /Executed [0-9]+ tests/ { count = $2; selected = 0 }

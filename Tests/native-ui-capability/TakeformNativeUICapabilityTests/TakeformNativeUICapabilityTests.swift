@@ -53,7 +53,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let app = try launchReady()
         defer { finishCase(app, named: "f1-09-keyboard-menu-final") }
 
-        app.typeKey(.F2, modifierFlags: .control)
+        app.typeKey(.F2, modifierFlags: [.control, .function])
         app.typeKey(.rightArrow, modifierFlags: [])
         let appMenu = app.menuBars.menuBarItems["Takeform"]
         XCTAssertTrue(appMenu.waitForExistence(timeout: 5))
@@ -61,7 +61,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
         app.typeKey(.return, modifierFlags: [])
         let about = app.menuItems["About Takeform"]
-        XCTAssertTrue(about.waitForExistence(timeout: 5), "Keyboard activation did not open the Takeform menu")
+        XCTAssertTrue(waitForHittable(about, timeout: 5), "Keyboard activation did not open a hittable Takeform menu item")
         attach(app.debugDescription, named: "f1-09-about-menu-open-ax")
         capture(app, named: "f1-09-keyboard-menu")
 
@@ -535,6 +535,11 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let first = relativeLuminance(foreground)
         let second = relativeLuminance(background)
         return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = expectation(for: NSPredicate(format: "exists == true AND hittable == true"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval) -> Bool {
