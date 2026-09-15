@@ -70,6 +70,14 @@ function errorSummary(error, stderr) {
   };
 }
 
+function tokenUsageSummary(app) {
+  const tokenUsage = app.notifications("thread/tokenUsage/updated").at(-1)?.params?.tokenUsage;
+  return {
+    totalTurnUsage: tokenUsage?.total ?? null,
+    lastRequestUsage: tokenUsage?.last ?? null
+  };
+}
+
 async function listAll(app, method, params) {
   const data = [];
   let cursor;
@@ -260,8 +268,6 @@ try {
     }
     assert.equal(malformedCode, "invalid_proposal");
 
-    const usageMessages = app.notifications("thread/tokenUsage/updated");
-    const usage = usageMessages.at(-1)?.params?.tokenUsage?.last ?? null;
     receipt.roundTrip = {
       proposal: PROPOSAL,
       preAcceptRevision: beforeAcceptance.revision,
@@ -272,7 +278,7 @@ try {
       malformedRejection: malformedCode,
       modelToolEvents: events.map((event) => ({ origin: "model", ...event }))
     };
-    receipt.tokenUsage = usage;
+    receipt.tokenUsage = tokenUsageSummary(app);
     receipt.diagnostics = app.diagnostics();
     receipt.result = "passed";
   } else {
@@ -288,7 +294,7 @@ try {
   }
   if (modelEventCursor !== null) {
     receipt.modelToolEvents = readEvents(eventPath).slice(modelEventCursor).map((event) => event.type);
-    receipt.tokenUsage = app.notifications("thread/tokenUsage/updated").at(-1)?.params?.tokenUsage?.last ?? null;
+    receipt.tokenUsage = tokenUsageSummary(app);
   }
   receipt.diagnostics = app.diagnostics();
   process.exitCode = 1;
