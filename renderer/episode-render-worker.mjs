@@ -1,16 +1,11 @@
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {access, mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const schemaVersion = 1;
-const runtimePackages = [
-  ['@hyperframes/producer', '@hyperframes/producer', '0.8.39'],
-  ['@hyperframes/engine', '@hyperframes/engine', '0.8.39'],
-  ['@hyperframes/player', '@hyperframes/player', '0.8.39'],
-  ['@hyperframes/player/node_modules/@hyperframes/core', '@hyperframes/core', '0.8.39'],
-  ['@hyperframes/core', '@hyperframes/core', '0.8.40'],
-];
+export const runtimeProfile = JSON.parse(readFileSync(new URL('./runtime-profile.json', import.meta.url), 'utf8'));
 
 function fail(code, message) {
   const error = new Error(message);
@@ -27,10 +22,6 @@ function seconds(value) {
 
 function hash(value) {
   return createHash('sha256').update(value).digest('hex');
-}
-
-function requestHash(request) {
-  return hash(JSON.stringify(request.snapshot));
 }
 
 function normalizedSource(source) {
@@ -55,7 +46,7 @@ function sortedCaptions(composition) {
 
 export function validateRequest(request) {
   if (!request || request.schemaVersion !== schemaVersion) fail('UNSUPPORTED_SCHEMA', 'Worker request schema is unsupported');
-  if (!request.jobID || !request.attemptID || !request.snapshot || !request.stageDirectory || !request.outputFileName || basename(request.outputFileName) !== request.outputFileName) {
+  if (!request.jobID || !request.attemptID || !request.snapshot || !/^[a-f0-9]{64}$/.test(request.snapshotSHA256 ?? '') || !request.stageDirectory || !request.outputFileName || basename(request.outputFileName) !== request.outputFileName) {
     fail('INVALID_REQUEST', 'Worker request is missing its required identity or stage fields');
   }
   const {snapshot} = request;
@@ -146,10 +137,10 @@ async function requireExecutable(path, label) {
 
 export async function validateRuntime(runtime) {
   if (!runtime || typeof runtime.runtimeRoot !== 'string' || !runtime.runtimeRoot.startsWith('/')) fail('INVALID_RUNTIME', 'Runtime root must be an absolute path');
-  if (runtime.nodeVersion !== process.version) fail('NODE_VERSION_MISMATCH', 'Worker Node version does not match its selected runtime profile');
+  if (runtime.nodeVersion !== runtimeProfile.nodeVersion || process.version !== runtimeProfile.nodeVersion) fail('NODE_VERSION_MISMATCH', 'Worker Node version does not match the pinned runtime profile');
   const root = resolve(runtime.runtimeRoot);
   const packages = [];
-  for (const [path, name, version] of runtimePackages) {
+  for (const {path, name, version} of runtimeProfile.packages) {
     let metadata;
     try {
       metadata = JSON.parse(await readFile(join(root, 'node_modules', path, 'package.json'), 'utf8'));
@@ -172,7 +163,7 @@ export async function validateRuntime(runtime) {
 function receiptInput(request) {
   return {
     compositionDigest: request.snapshot.compositionDigest,
-    snapshotSHA256: requestHash(request),
+    snapshotSHA256: request.snapshotSHA256,
     assets: request.snapshot.assets.map(({id, digest}) => ({id, digest})),
   };
 }
