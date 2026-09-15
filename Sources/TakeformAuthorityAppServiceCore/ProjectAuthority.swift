@@ -14,6 +14,7 @@ public enum AuthorityFailure: Error, Equatable, LocalizedError {
     case unauthorized
     case creationCollision
     case creationCleanupFailed
+    case invalidComposition(CompositionValidationFailure)
     public var errorDescription: String? { String(describing: self) }
 }
 
@@ -87,6 +88,7 @@ public final class ProjectAuthority {
             document = try loadDocument()
             try validateManifest(document, manifest: manifest)
             try validateManagedAssets(document)
+            try validateEpisodeCompositions(document)
         } else {
             guard !FileManager.default.fileExists(atPath: stateURL.appendingPathComponent("project.sqlite").path) else { throw AuthorityFailure.corruptDatabase }
             document = ProjectDocument(projectID: initialProjectID ?? UUID())
@@ -184,7 +186,14 @@ public final class ProjectAuthority {
                 try store(result, id: envelope.id, fingerprint: fingerprint)
                 return result
             }
-            let after = try apply(envelope.command, to: before)
+            let after: ProjectDocument
+            do {
+                after = try apply(envelope.command, to: before)
+            } catch let failure as CompositionValidationFailure {
+                let result = CommandResult(id: envelope.id, outcome: .rejected(reason: failure.reason))
+                try store(result, id: envelope.id, fingerprint: fingerprint)
+                return result
+            }
             let result = CommandResult(id: envelope.id, outcome: .applied(document: after))
             try save(after)
             if case .undo = envelope.command {
@@ -234,6 +243,15 @@ public final class ProjectAuthority {
         }
     }
 
+    private func validateEpisodeCompositions(_ document: ProjectDocument) throws {
+        var episodeIDs = Set<UUID>()
+        for composition in document.episodeCompositions {
+            guard episodeIDs.insert(composition.episodeID).inserted else { throw AuthorityFailure.corruptDatabase }
+            do { try composition.validate(episodes: document.episodes, assets: document.assets) }
+            catch { throw AuthorityFailure.corruptDatabase }
+        }
+    }
+
     private func apply(_ command: ProjectCommand, to document: ProjectDocument) throws -> ProjectDocument {
         var next = document
         switch command {
@@ -259,6 +277,11 @@ public final class ProjectAuthority {
         case .addManagedAsset(let asset):
             guard asset.digest.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil, asset.byteLength > 0, !asset.filename.isEmpty, !next.assets.contains(where: { $0.digest == asset.digest }) else { return document }
             next.assets.append(asset)
+        case .replaceEpisodeComposition(let episodeID, let composition):
+            guard episodeID == composition.episodeID else { throw CompositionValidationFailure.episodeMismatch }
+            try composition.validate(episodes: next.episodes, assets: next.assets)
+            next.episodeCompositions.removeAll { $0.episodeID == episodeID }
+            next.episodeCompositions.append(composition)
         case .undo:
             guard let row = try database.row("SELECT before_state FROM history WHERE undone = 0 ORDER BY revision DESC LIMIT 1") else { return document }
             var restored = try decode(ProjectDocument.self, row[0])
