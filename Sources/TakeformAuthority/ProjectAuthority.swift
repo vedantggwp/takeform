@@ -227,4 +227,3 @@ public final class ProjectAuthority {
     private func saveMachineState(_ state: MachineState, for projectID: UUID) throws { try encoder.encode(state).write(to: machineURL(for: projectID).appendingPathComponent("binding.json"), options: .atomic) }
     private func tokenDigest(_ token: String) -> String { SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined() }
 }
-
