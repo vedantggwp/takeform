@@ -25,7 +25,7 @@ try {
   process.stdout.write(`${JSON.stringify({status: 'error', message: 'An explicitly granted local root is unavailable.'})}\n`);
   process.exit(1);
 }
-const types = new Map([['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'], ['.mjs', 'text/javascript; charset=utf-8'], ['.css', 'text/css; charset=utf-8'], ['.json', 'application/json'], ['.mov', 'video/quicktime'], ['.mp4', 'video/mp4'], ['.webm', 'video/webm'], ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.svg', 'image/svg+xml'], ['.woff2', 'font/woff2']]);
+const types = new Map([['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'], ['.mjs', 'text/javascript; charset=utf-8'], ['.css', 'text/css; charset=utf-8'], ['.json', 'application/json'], ['.m4a', 'audio/mp4'], ['.mov', 'video/quicktime'], ['.mp4', 'video/mp4'], ['.webm', 'video/webm'], ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.svg', 'image/svg+xml'], ['.woff2', 'font/woff2']]);
 
 function reject(response, status) {
   response.writeHead(status, {'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store'});
