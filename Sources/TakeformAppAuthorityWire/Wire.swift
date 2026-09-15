@@ -1,0 +1,16 @@
+import Darwin
+import Foundation
+import TakeformCore
+import TakeformWorkspace
+
+public enum AppAuthorityRequest: Codable, Sendable { case open(URL, Bool, Data); case execute(URL, CommandEnvelope, Data); case pair(URL, String, Date, Data); case revoke(URL, UUID, Data) }
+public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case success; case failure(WorkspaceFailure) }
+public enum AppAuthoritySocket {
+ public static var path: String { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
+ static func address() -> sockaddr_un { var a=sockaddr_un(); a.sun_family=sa_family_t(AF_UNIX); let b=Array(path.utf8CString); withUnsafeMutableBytes(of:&a.sun_path){ r in for(i,x) in b.enumerated(){r[i]=UInt8(bitPattern:x)} }; a.sun_len=UInt8(MemoryLayout<sockaddr_un>.size); return a }
+ public static func connect() throws -> Int32 { let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd >= 0 else {throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.connect(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; return fd }
+ public static func listen() throws -> Int32 { try FileManager.default.createDirectory(at:URL(fileURLWithPath:path).deletingLastPathComponent(),withIntermediateDirectories:true); unlink(path); let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd>=0 else{throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.bind(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 && Darwin.listen(fd,8)==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; chmod(path,S_IRUSR|S_IWUSR);return fd }
+ public static func request(_ r:AppAuthorityRequest)throws->AppAuthorityResponse{let fd=try connect();defer{close(fd)};try send(r,fd);return try receive(AppAuthorityResponse.self,fd)}
+ public static func send<T:Encodable>(_ x:T,_ fd:Int32)throws{var d=try JSONEncoder().encode(x);d.append(10);guard d.withUnsafeBytes({Darwin.write(fd,$0.baseAddress!,d.count)})==d.count else{throw WorkspaceFailure.authorityUnavailable}}
+ public static func receive<T:Decodable>(_ t:T.Type,_ fd:Int32)throws->T{var d=Data();var b:UInt8=0;while d.count<1_000_000{guard Darwin.read(fd,&b,1)>0 else{throw WorkspaceFailure.authorityUnavailable};if b==10{return try JSONDecoder().decode(t,from:d)};d.append(b)};throw WorkspaceFailure.authorityUnavailable}
+}

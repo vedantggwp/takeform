@@ -1,7 +1,7 @@
 import Foundation
 import TakeformCore
 
-public enum WorkspaceFailure: Error, Equatable, LocalizedError, Sendable {
+public enum WorkspaceFailure: Error, Equatable, LocalizedError, Sendable, Codable {
     case authorityUnavailable
     case creatorAuthorizationRequired
     case copyDecisionRequired
@@ -23,7 +23,7 @@ public enum WorkspaceFailure: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-public struct WorkspaceSnapshot: Equatable, Sendable {
+public struct WorkspaceSnapshot: Equatable, Sendable, Codable {
     public let document: ProjectDocument
     public let projectionMatches: Bool
     public let packageURL: URL
@@ -76,3 +76,4 @@ public enum WorkspacePresentation {
         }
     }
 }
+

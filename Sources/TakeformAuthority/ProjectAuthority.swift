@@ -20,6 +20,7 @@ public struct ProjectOpenState: Equatable, Sendable {
 private struct MachineState: Codable {
     var binding: MachineBinding?
     var grants: [Grant] = []
+    var creatorCredentialDigest: String?
 }
 
 private struct MachineBinding: Codable {
@@ -226,4 +227,45 @@ public final class ProjectAuthority {
     }
     private func saveMachineState(_ state: MachineState, for projectID: UUID) throws { try encoder.encode(state).write(to: machineURL(for: projectID).appendingPathComponent("binding.json"), options: .atomic) }
     private func tokenDigest(_ token: String) -> String { SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined() }
+}
+
+@_spi(AuthorityAppService)
+public struct AuthorityCreatorSession: Sendable {
+    fileprivate let credential: String
+    fileprivate init(credential: String) { self.credential = credential }
+}
+
+@_spi(AuthorityAppService)
+public enum AuthorityAppServiceGate {
+    /// Only the UDS service invokes this after code-identity and connection checks.
+    public static func session(creatorCredential: String) -> AuthorityCreatorSession { AuthorityCreatorSession(credential: creatorCredential) }
+}
+
+extension ProjectAuthority {
+    @_spi(AuthorityAppService)
+    public func establishCreator(_ session: AuthorityCreatorSession) throws {
+        let openState = try open()
+        var state = try loadMachineState(for: openState.document.projectID)
+        let digest = tokenDigest(session.credential)
+        if let existing = state.creatorCredentialDigest, existing != digest { throw AuthorityFailure.unauthorized }
+        state.creatorCredentialDigest = digest
+        try saveMachineState(state, for: openState.document.projectID)
+    }
+
+    @_spi(AuthorityAppService)
+    public func issueCLIGrant(_ session: AuthorityCreatorSession, label: String, scopes: Set<GrantScope>, expiresAt: Date, rawToken: String) throws -> Grant {
+        let openState = try open()
+        var state = try loadMachineState(for: openState.document.projectID)
+        guard state.creatorCredentialDigest == tokenDigest(session.credential), let epoch = state.binding?.epoch else { throw AuthorityFailure.unauthorized }
+        let grant = Grant(label: label, scopes: scopes, expiresAt: expiresAt, authorityEpoch: epoch, tokenDigest: tokenDigest(rawToken))
+        state.grants.append(grant); try saveMachineState(state, for: openState.document.projectID); return grant
+    }
+
+    @_spi(AuthorityAppService)
+    public func revokeCLIGrant(_ session: AuthorityCreatorSession, grantID: UUID) throws {
+        let openState = try open(); var state = try loadMachineState(for: openState.document.projectID)
+        guard state.creatorCredentialDigest == tokenDigest(session.credential) else { throw AuthorityFailure.unauthorized }
+        guard let i = state.grants.firstIndex(where: { $0.id == grantID }) else { return }
+        state.grants[i].revokedAt = Date(); try saveMachineState(state, for: openState.document.projectID)
+    }
 }

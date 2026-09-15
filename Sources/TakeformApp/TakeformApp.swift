@@ -3,6 +3,7 @@ import SwiftUI
 import TakeformCore
 import TakeformSupport
 import TakeformWorkspace
+import TakeformAppAuthorityWire
 
 final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -14,7 +15,7 @@ final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct TakeformApp: App {
     @NSApplicationDelegateAdaptor(TakeformAppDelegate.self) private var appDelegate
-    @StateObject private var workspace = WorkspaceModel(client: UnavailableWorkspaceClient())
+    @StateObject private var workspace = WorkspaceModel(client: NativeAuthorityClient())
 
     var body: some Scene {
         WindowGroup("Takeform", id: "main") {
@@ -307,4 +308,25 @@ private struct SettingsView: View {
         TabView { Form { Text("Project authority and CLI access are managed per project.").foregroundStyle(.secondary) }.padding().tabItem { Label("General", systemImage: "gearshape") } }
             .frame(width: 460, height: 240)
     }
+}
+
+
+private struct NativeAuthorityClient: WorkspaceClient {
+    private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
+    private func request(_ r: AppAuthorityRequest) async throws -> AppAuthorityResponse {
+        do { return try await Task.detached { try AppAuthoritySocket.request(r) }.value }
+        catch {
+            guard let here = Bundle.main.executableURL else { throw WorkspaceFailure.authorityUnavailable }
+            let service = here.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService")
+            guard FileManager.default.isExecutableFile(atPath: service.path) else { throw WorkspaceFailure.authorityUnavailable }
+            let process = Process(); process.executableURL = service; process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice; try process.run()
+            for _ in 0..<100 { if let response = try? AppAuthoritySocket.request(r) { return response }; try await Task.sleep(for: .milliseconds(20)) }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+    }
+    func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot { let r=try await request(.open(packageURL,rebindMovedPackage,try credential())); if case .snapshot(let x)=r{return x}; if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
+    func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { let r=try await request(.execute(packageURL,envelope,try credential()));if case .result(let x)=r{return x};if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
+    func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws { let r=try await request(.pair(packageURL,label,expiresAt,try credential()));guard case .pairing(let id,let raw)=r else {if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable};try importCredential(id,raw) }
+    func revokeCLI(packageURL: URL) async throws { throw WorkspaceFailure.rejected("Choose the specific CLI grant to revoke.") }
+    private func importCredential(_ id: UUID,_ raw:String)throws{guard let here=Bundle.main.executableURL else{throw WorkspaceFailure.authorityUnavailable};let cli=here.deletingLastPathComponent().appendingPathComponent("takeform");let p=Process();let input=Pipe();p.executableURL=cli;p.arguments=["import-paired-credential",id.uuidString];p.standardInput=input;try p.run();input.fileHandleForWriting.write(Data(raw.utf8));input.fileHandleForWriting.write(Data("\n".utf8));input.fileHandleForWriting.closeFile();p.waitUntilExit();guard p.terminationStatus==0 else{throw WorkspaceFailure.rejected("CLI credential import failed")}}
 }
