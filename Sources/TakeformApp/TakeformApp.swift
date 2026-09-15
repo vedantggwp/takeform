@@ -37,6 +37,7 @@ private struct ContentView: View {
             HStack(alignment: .firstTextBaseline) {
                 Label(identity.displayName, systemImage: "rectangle.3.group")
                     .font(.system(size: 32, weight: .semibold))
+                    .accessibilityLabel(identity.displayName)
                     .accessibilityIdentifier("takeform-title")
                 Spacer()
                 Text(identity.developmentVersion)
