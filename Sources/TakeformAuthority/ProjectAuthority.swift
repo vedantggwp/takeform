@@ -203,7 +203,7 @@ public final class ProjectAuthority {
         if let binding, binding.canonicalPath != packageURL.path, !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
         if binding?.canonicalPath != packageURL.path {
             state.binding = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
-            if binding != nil { state.grants = [] }
+            if binding != nil { state.grants = []; state.creatorCredentialDigest = nil }
             try saveMachineState(state, for: projectID)
         }
         return state
