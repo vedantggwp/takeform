@@ -257,6 +257,12 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertEqual(browser, "FakeTool 1.0")
         XCTAssertEqual(ffmpeg, "FakeTool 1.0")
         XCTAssertEqual(ffprobe, "FakeTool 1.0")
+        let browserWithEquivalentSpelling = runtime.browser.deletingLastPathComponent()
+            .appendingPathComponent("unused")
+            .appendingPathComponent("..")
+            .appendingPathComponent(runtime.browser.lastPathComponent)
+        let equivalentSelectors = RenderRuntimeSelectors(browser: browserWithEquivalentSpelling, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        guard case .renderRuntimeReadiness(.ready) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, equivalentSelectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("equivalent canonical selector paths must replay one setup operation") }
         guard case let .renderRuntimeReadiness(.ready(replayedNode, replayedBrowser, replayedFFmpeg, replayedFFprobe)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("an exact setup replay did not return its stored readiness") }
         XCTAssertEqual(replayedNode, node)
         XCTAssertEqual(replayedBrowser, browser)

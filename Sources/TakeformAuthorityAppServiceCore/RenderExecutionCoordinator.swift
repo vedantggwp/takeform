@@ -279,14 +279,21 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let operationsURL = root.appendingPathComponent("runtime-operations.json")
         var operations = try loadRuntimeOperations(at: operationsURL)
-        let fingerprint = configurationFingerprint(selectors: selectors, machineBindingDigest: machineBindingDigest)
+        // An operation identifies the canonical machine selection, not the
+        // spelling the panel used to reach it.  In particular, two absolute
+        // paths that normalize to the same non-symlink executable must replay
+        // the same configuration operation.
+        let canonical = canonicalSelectors(selectors)
+        let fingerprint = canonical.map {
+            configurationFingerprint(selectors: $0, machineBindingDigest: machineBindingDigest)
+        } ?? rejectedConfigurationFingerprint(selectors: selectors, machineBindingDigest: machineBindingDigest)
         if let previous = operations[operationID.value.uuidString] {
             guard previous.fingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
             return previous.readiness
         }
 
         let readiness: RenderRuntimeReadiness
-        if let canonical = canonicalSelectors(selectors), let runtime = candidateRuntime(projectID: projectID, selectors: canonical) {
+        if let canonical, let runtime = candidateRuntime(projectID: projectID, selectors: canonical) {
             readiness = self.readiness(for: runtime)
             if case .ready = readiness {
                 let record = PersistedRenderRuntimeSelectors(
@@ -564,9 +571,17 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         return standardized.path
     }
 
-    private func configurationFingerprint(selectors: RenderRuntimeSelectors, machineBindingDigest: String) -> String {
+    private func configurationFingerprint(selectors: PersistedRenderRuntimeSelectors, machineBindingDigest: String) -> String {
         let data = (try? JSONEncoder.sorted.encode(selectors)) ?? Data()
         return digest(Data(machineBindingDigest.utf8) + data)
+    }
+
+    /// Invalid input has no canonical selector set.  Retaining a deterministic
+    /// rejected-input fingerprint still makes an exact retry observable while
+    /// preventing it from aliasing a later valid canonical selection.
+    private func rejectedConfigurationFingerprint(selectors: RenderRuntimeSelectors, machineBindingDigest: String) -> String {
+        let data = (try? JSONEncoder.sorted.encode(selectors)) ?? Data()
+        return digest(Data("invalid-runtime-selectors:".utf8) + Data(machineBindingDigest.utf8) + data)
     }
 
     private func loadRuntimeOperations(at url: URL) throws -> [String: RenderRuntimeOperation] {
