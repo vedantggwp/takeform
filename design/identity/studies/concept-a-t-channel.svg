@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Private study only. Rejected: three bars need the written T explanation at 16px. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Takeform T-channel study">
+  <rect width="64" height="64" rx="15" fill="#F4F2EC"/>
+  <path fill="#202124" fill-rule="evenodd" d="M8 10h48v12H37v33H27V22H8z"/>
+  <path fill="#E85C3C" d="M9 32h16v10H9zM39 32h16v10H39z"/>
+</svg>
