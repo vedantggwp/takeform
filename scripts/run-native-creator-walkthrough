@@ -37,6 +37,26 @@ if [ "$MODE" = run ] && [ -z "$TEST_ROOT" ]; then
   exit 2
 fi
 
+APP_EXECUTABLE_NAME=""
+APP_EXECUTABLE=""
+if [ "$MODE" = run ]; then
+  APP_EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist")" || {
+    echo "Copied Takeform app is missing CFBundleExecutable" >&2
+    exit 2
+  }
+  case "$APP_EXECUTABLE_NAME" in
+    ""|.|..|*/*)
+      echo "Copied Takeform app has an invalid CFBundleExecutable" >&2
+      exit 2
+      ;;
+  esac
+  APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/$APP_EXECUTABLE_NAME"
+  if [ ! -x "$APP_EXECUTABLE" ]; then
+    echo "Copied Takeform app's declared executable is missing or not executable" >&2
+    exit 2
+  fi
+fi
+
 RUNNER_TEMP_PHYSICAL=""
 canonical_runner_descendant() {
   local candidate="$1"
@@ -127,6 +147,9 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS" "$LAUNCH_DIAGNOSTICS"
   uname -m
   if [ "$MODE" = run ]; then
     /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_BUNDLE/Contents/Info.plist"
+    echo "declared_app_executable: $APP_EXECUTABLE_NAME"
+    echo "declared_app_executable_path: $APP_EXECUTABLE"
+    file "$APP_EXECUTABLE"
     codesign -dvvv "$APP_BUNDLE" 2>&1 | grep -E 'Identifier=|CDHash=' || true
   fi
 } > "$FACTS" 2>&1
