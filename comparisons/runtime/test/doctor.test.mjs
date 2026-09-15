@@ -36,6 +36,8 @@ test('validates the exact public bundle API needed before renderMedia', () => {
   const result = run();
   assert.equal(result.code, 0);
   assert.equal(result.output.packages['@remotion/bundler'].version, '4.0.524');
+  assert.equal(result.output.packages['@hyperframes/player/node_modules/@hyperframes/core'].version, '0.8.39');
+  assert.equal(result.output.packages['@hyperframes/core'].version, '0.8.40');
   assert.deepEqual(result.output.imports.remotion.bundlerPublicApis, ['bundle']);
 });
 
