@@ -27,6 +27,30 @@ public struct Override: Codable, Equatable, Sendable {
     public init(episodeID: UUID, key: String, value: String) { self.episodeID = episodeID; self.key = key; self.value = value }
 }
 
+public struct ManagedAssetProbe: Codable, Equatable, Sendable {
+    public struct Rational: Codable, Equatable, Sendable { public let value: Int64; public let timescale: Int32; public init(_ value: Int64, _ timescale: Int32) { self.value = value; self.timescale = timescale } }
+    public struct Video: Codable, Equatable, Sendable { public let codec: String?; public let encodedWidth: Int; public let encodedHeight: Int; public let displayedWidth: Int; public let displayedHeight: Int; public let transform: [Double]; public let nominalFrameRate: Double?; public let timeRange: [Rational]?; public let presentationTimestamps: [Rational]; public let observedPresentationDeltaCount: Int; public let isVariableFrameRate: Bool?; public init(codec: String?, encodedWidth: Int, encodedHeight: Int, displayedWidth: Int, displayedHeight: Int, transform: [Double], nominalFrameRate: Double?, timeRange: [Rational]?, presentationTimestamps: [Rational], observedPresentationDeltaCount: Int, isVariableFrameRate: Bool?) { self.codec=codec; self.encodedWidth=encodedWidth; self.encodedHeight=encodedHeight; self.displayedWidth=displayedWidth; self.displayedHeight=displayedHeight; self.transform=transform; self.nominalFrameRate=nominalFrameRate; self.timeRange=timeRange; self.presentationTimestamps=presentationTimestamps; self.observedPresentationDeltaCount=observedPresentationDeltaCount; self.isVariableFrameRate=isVariableFrameRate } }
+    public struct Audio: Codable, Equatable, Sendable { public let codec: String?; public let channels: Int?; public let sampleRate: Double?; public let timeRange: [Rational]?; public init(codec: String?, channels: Int?, sampleRate: Double?, timeRange: [Rational]?) { self.codec=codec; self.channels=channels; self.sampleRate=sampleRate; self.timeRange=timeRange } }
+    public let containerIdentifier: String?
+    public let durationValue: Int64?
+    public let durationTimescale: Int32?
+    public let imageEncodedWidth: Int?
+    public let imageEncodedHeight: Int?
+    public let imageDisplayedWidth: Int?
+    public let imageDisplayedHeight: Int?
+    public let imageOrientation: Int?
+    public let video: Video?
+    public let audio: [Audio]
+    public let livePhotoIdentifier: String?
+    public let livePhotoComparisonIdentifier: String?
+    public let livePhotoProvenance: String?
+    public let livePhotoNormalization: String?
+    public init(containerIdentifier: String? = nil, durationValue: Int64? = nil, durationTimescale: Int32? = nil, imageEncodedWidth: Int? = nil, imageEncodedHeight: Int? = nil, imageDisplayedWidth: Int? = nil, imageDisplayedHeight: Int? = nil, imageOrientation: Int? = nil, video: Video? = nil, audio: [Audio] = [], livePhotoIdentifier: String? = nil, livePhotoComparisonIdentifier: String? = nil, livePhotoProvenance: String? = nil, livePhotoNormalization: String? = nil) { self.containerIdentifier = containerIdentifier; self.durationValue = durationValue; self.durationTimescale = durationTimescale; self.imageEncodedWidth = imageEncodedWidth; self.imageEncodedHeight = imageEncodedHeight; self.imageDisplayedWidth = imageDisplayedWidth; self.imageDisplayedHeight = imageDisplayedHeight; self.imageOrientation = imageOrientation; self.video = video; self.audio = audio; self.livePhotoIdentifier = livePhotoIdentifier; self.livePhotoComparisonIdentifier = livePhotoComparisonIdentifier; self.livePhotoProvenance = livePhotoProvenance; self.livePhotoNormalization = livePhotoNormalization }
+
+    private enum CodingKeys: String, CodingKey { case containerIdentifier, durationValue, durationTimescale, imageEncodedWidth, imageEncodedHeight, imageDisplayedWidth, imageDisplayedHeight, imageOrientation, video, audio, livePhotoIdentifier, livePhotoComparisonIdentifier, livePhotoProvenance, livePhotoNormalization }
+    public init(from decoder: Decoder) throws { let c = try decoder.container(keyedBy: CodingKeys.self); containerIdentifier = try c.decodeIfPresent(String.self, forKey: .containerIdentifier); durationValue = try c.decodeIfPresent(Int64.self, forKey: .durationValue); durationTimescale = try c.decodeIfPresent(Int32.self, forKey: .durationTimescale); imageEncodedWidth = try c.decodeIfPresent(Int.self, forKey: .imageEncodedWidth); imageEncodedHeight = try c.decodeIfPresent(Int.self, forKey: .imageEncodedHeight); imageDisplayedWidth = try c.decodeIfPresent(Int.self, forKey: .imageDisplayedWidth); imageDisplayedHeight = try c.decodeIfPresent(Int.self, forKey: .imageDisplayedHeight); imageOrientation = try c.decodeIfPresent(Int.self, forKey: .imageOrientation); video = try c.decodeIfPresent(Video.self, forKey: .video); audio = try c.decodeIfPresent([Audio].self, forKey: .audio) ?? []; livePhotoIdentifier = try c.decodeIfPresent(String.self, forKey: .livePhotoIdentifier); livePhotoComparisonIdentifier = try c.decodeIfPresent(String.self, forKey: .livePhotoComparisonIdentifier); livePhotoProvenance = try c.decodeIfPresent(String.self, forKey: .livePhotoProvenance); livePhotoNormalization = try c.decodeIfPresent(String.self, forKey: .livePhotoNormalization) }
+}
+
 /// Portable catalog entry. The object path is derived from this canonical digest.
 public struct ManagedAsset: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
@@ -34,7 +58,8 @@ public struct ManagedAsset: Codable, Equatable, Sendable, Identifiable {
     public let byteLength: UInt64
     public let filename: String
     public let mediaType: String
-    public init(id: UUID = UUID(), digest: String, byteLength: UInt64, filename: String, mediaType: String) { self.id = id; self.digest = digest; self.byteLength = byteLength; self.filename = filename; self.mediaType = mediaType }
+    public let probe: ManagedAssetProbe?
+    public init(id: UUID = UUID(), digest: String, byteLength: UInt64, filename: String, mediaType: String, probe: ManagedAssetProbe? = nil) { self.id = id; self.digest = digest; self.byteLength = byteLength; self.filename = filename; self.mediaType = mediaType; self.probe = probe }
 }
 
 public enum ManagedImportOutcome: Codable, Equatable, Sendable, Identifiable {

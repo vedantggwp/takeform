@@ -469,6 +469,12 @@ final class ProjectAuthorityTests: XCTestCase {
         let imported = outcomes.compactMap { if case let .imported(asset) = $0 { asset } else { nil } }
         XCTAssertEqual(imported.map(\.mediaType).sorted(), ["audio", "image", "video"])
         XCTAssertEqual(try authority.open().document.assets, imported)
+        XCTAssertTrue(imported.allSatisfy { $0.probe != nil })
+    }
+
+    func testManagedAssetWithoutProbeStillDecodes() throws {
+        let legacy = "{\"id\":\"00000000-0000-0000-0000-000000000000\",\"digest\":\"" + String(repeating: "a", count: 64) + "\",\"byteLength\":1,\"filename\":\"old.png\",\"mediaType\":\"image\"}"
+        XCTAssertNil(try JSONDecoder().decode(ManagedAsset.self, from: Data(legacy.utf8)).probe)
     }
 
     func testManagedImportCancellationAndSourceChangeLeaveNoCatalogReference() throws {

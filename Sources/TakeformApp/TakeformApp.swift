@@ -167,6 +167,21 @@ final class WorkspaceModel: ObservableObject {
         status = "Cancelling media import after the current file boundary…"
     }
 
+    func selectAsset(_ asset: ManagedAsset) {
+        guard let packageURL else { return }
+        Task {
+            do {
+                // `open` is the authority's digest/length verification gate;
+                // never hand a selected filesystem URL straight to a preview.
+                let verified = try await client.open(packageURL: packageURL, rebindMovedPackage: false)
+                snapshot = verified
+                selectedAssetID = verified.document.assets.contains(where: { $0.id == asset.id }) ? asset.id : nil
+                if selectedAssetID == nil { error = .missingObject("selected managed asset") }
+            } catch let failure as WorkspaceFailure { self.error = failure; selectedAssetID = nil }
+            catch { self.error = .corruptProject; selectedAssetID = nil }
+        }
+    }
+
     private func importMedia(_ urls: [URL], into packageURL: URL) {
         guard !urls.isEmpty else { return }
         importTask?.cancel()
@@ -362,7 +377,7 @@ private struct WorkspaceView: View {
                     GroupBox("Managed media") {
                         if document.assets.isEmpty { Text("No managed media yet. Imported originals are copied into this project unchanged.").foregroundStyle(.secondary) }
                         ForEach(document.assets) { asset in
-                            Button { model.selectedAssetID = asset.id } label: { HStack(alignment: .top, spacing: 12) {
+                            Button { model.selectAsset(asset) } label: { HStack(alignment: .top, spacing: 12) {
                                 ManagedAssetPreview(asset: asset, packageURL: model.packageURL)
                                 VStack(alignment: .leading) {
                                     Text(asset.filename)
