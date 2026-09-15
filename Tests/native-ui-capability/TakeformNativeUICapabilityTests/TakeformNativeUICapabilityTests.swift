@@ -136,16 +136,18 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         selectAppearance("Light", in: app)
         let lightShot = capture(app, named: "f1-07-light")
         let lightContrast = try appearanceLabelContrast(
+            in: app,
             in: lightShot,
-            labelFrame: appearanceLabel.frame,
+            label: appearanceLabel,
             mode: "Light"
         )
 
         selectAppearance("Dark", in: app)
         let darkShot = capture(app, named: "f1-08-dark")
         let darkContrast = try appearanceLabelContrast(
+            in: app,
             in: darkShot,
-            labelFrame: appearanceLabel.frame,
+            label: appearanceLabel,
             mode: "Dark"
         )
 
@@ -376,25 +378,53 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         add(attachment)
     }
 
+    func testScreenshotCoordinateTransformPreservesOriginAndScale() {
+        let pixels = screenshotPixels(
+            for: CGRect(x: 150, y: 350, width: 50, height: 25),
+            captureFrame: CGRect(x: 100, y: 200, width: 400, height: 300),
+            bitmapSize: CGSize(width: 800, height: 600)
+        )
+        XCTAssertEqual(pixels, CGRect(x: 100, y: 250, width: 100, height: 50))
+    }
+
     private func appearanceLabelContrast(
+        in app: XCUIApplication,
         in screenshot: XCUIScreenshot,
-        labelFrame: CGRect,
+        label: XCUIElement,
         mode: String
     ) throws -> CGFloat {
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: screenshot.pngRepresentation))
-        let labelPixels = pixelRect(for: labelFrame, in: bitmap)
+        let labelFrame = label.frame
+        let captureFrame = app.frame
+        let settingsWindowFrame = app.windows.allElementsBoundByIndex
+            .map(\.frame)
+            .first(where: { $0.contains(labelFrame) })
+        let labelPixels = screenshotPixels(
+            for: labelFrame,
+            captureFrame: captureFrame,
+            bitmapSize: CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+        )
         let foreground = try extremeColor(in: labelPixels, bitmap: bitmap, preferLight: mode == "Dark")
-        let panelPixels = pixelRect(
-            for: CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12),
-            in: bitmap
+        let backgroundScreenRect = CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12)
+        XCTAssertFalse(backgroundScreenRect.intersects(labelFrame), "Panel background sample overlaps the Appearance label frame")
+        let panelPixels = screenshotPixels(
+            for: backgroundScreenRect,
+            captureFrame: captureFrame,
+            bitmapSize: CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
         )
         let background = try averageColor(in: panelPixels, bitmap: bitmap)
         let ratio = contrastRatio(foreground, background)
         attach(
             """
             mode: \(mode)
+            screenshotPixels: \(bitmap.pixelsWide)x\(bitmap.pixelsHigh)
+            appCaptureFrameAX: \(captureFrame)
+            settingsWindowFrameAX: \(String(describing: settingsWindowFrame))
             foregroundRegionAX: \(labelFrame)
-            backgroundRegionAX: \(CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12))
+            foregroundRegionPixels: \(labelPixels)
+            backgroundRegionAX: \(backgroundScreenRect)
+            backgroundRegionPixels: \(panelPixels)
+            backgroundOutsideLabelFrame: \(!backgroundScreenRect.intersects(labelFrame))
             foregroundSRGB: \(foreground)
             backgroundSRGB: \(background)
             contrastRatio: \(ratio)
@@ -404,13 +434,16 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         return ratio
     }
 
-    private func pixelRect(for screenRect: CGRect, in bitmap: NSBitmapImageRep) -> CGRect {
+    private func screenshotPixels(for screenRect: CGRect, captureFrame: CGRect, bitmapSize: CGSize) -> CGRect {
+        guard captureFrame.width > 0, captureFrame.height > 0 else { return .null }
+        let xScale = bitmapSize.width / captureFrame.width
+        let yScale = bitmapSize.height / captureFrame.height
         CGRect(
-            x: screenRect.minX,
-            y: CGFloat(bitmap.pixelsHigh) - screenRect.maxY,
-            width: screenRect.width,
-            height: screenRect.height
-        ).integral.intersection(CGRect(x: 0, y: 0, width: bitmap.pixelsWide, height: bitmap.pixelsHigh))
+            x: (screenRect.minX - captureFrame.minX) * xScale,
+            y: (captureFrame.maxY - screenRect.maxY) * yScale,
+            width: screenRect.width * xScale,
+            height: screenRect.height * yScale
+        ).integral.intersection(CGRect(origin: .zero, size: bitmapSize))
     }
 
     private func extremeColor(in rect: CGRect, bitmap: NSBitmapImageRep, preferLight: Bool) throws -> NSColor {
