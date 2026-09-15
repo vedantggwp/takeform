@@ -105,6 +105,14 @@ final class WorkspaceClientTests: XCTestCase {
         return (process.terminationStatus, output.fileHandleForReading.readDataToEndOfFile(), error.fileHandleForReading.readDataToEndOfFile())
     }
 
+    private func stopBounded(_ process: Process, exited: DispatchSemaphore) -> Bool {
+        guard process.isRunning else { return true }
+        process.terminate()
+        if exited.wait(timeout: .now() + 2) == .success { return true }
+        _ = Darwin.kill(process.processIdentifier, SIGKILL)
+        return exited.wait(timeout: .now() + 1) == .success
+    }
+
     func testUnavailableClientNeverSimulatesAnEdit() async {
         let client = UnavailableWorkspaceClient()
         let envelope = CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "North", initialRecipe: [:]))
@@ -281,9 +289,9 @@ final class WorkspaceClientTests: XCTestCase {
         let importedReadOnly = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", readOnlyGrant.id.uuidString], input: readOnlyToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(importedReadOnly.status, 0, String(decoding: importedReadOnly.error, as: UTF8.self))
 
-        let service = Process(); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }
+        let service = Process(); let serviceExited = DispatchSemaphore(value: 0); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }; service.terminationHandler = { _ in serviceExited.signal() }
         try service.run()
-        defer { if service.isRunning { service.terminate(); service.waitUntilExit() } }
+        defer { XCTAssertTrue(stopBounded(service, exited: serviceExited), "copied service did not terminate after TERM/KILL") }
         for _ in 0..<100 where !FileManager.default.fileExists(atPath: socket.path) { try? await Task.sleep(for: .milliseconds(10)) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
         try AppAuthoritySocket.verifyService(expectedService: artifacts.appendingPathComponent("TakeformAuthorityAppService"))
