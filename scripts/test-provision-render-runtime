@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SCRIPT="$ROOT_DIR/scripts/provision-render-runtime"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/takeform-provision-paths.XXXXXX")"
+trap 'rm -rf "$TEST_ROOT"' EXIT
+
+bash -n "$SCRIPT"
+grep -Fq 'node-v22.22.1-darwin-arm64.tar.gz' "$SCRIPT"
+grep -Fq '679ad4966339e4ef4900f57996714864e4211b898825bb840c3086c419fbcef2' "$SCRIPT"
+grep -Fq 'npm" ci --ignore-scripts' "$SCRIPT"
+grep -Fq 'PATH="$NODE_ROOT/bin:$PATH" NPM_CONFIG_CACHE' "$SCRIPT"
+grep -Fq 'node_modules/@remotion/compositor-darwin-arm64' "$SCRIPT"
+grep -Fq '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' "$SCRIPT"
+grep -Fq 'require_regular_executable "Lock-derived FFmpeg"' "$SCRIPT"
+grep -Fq 'require_regular_executable "Lock-derived FFprobe"' "$SCRIPT"
+grep -Fq '"$FFMPEG_LAUNCHER" -version' "$SCRIPT"
+grep -Fq '"$FFPROBE_LAUNCHER" -version' "$SCRIPT"
+grep -Fq 'FFMPEG_BUILD_CONFIGURATION' "$SCRIPT"
+grep -Fq 'launchers are the CI test selectors' "$SCRIPT"
+grep -Fq 'emit renderer_ffmpeg "$FFMPEG_LAUNCHER"' "$SCRIPT"
+grep -Fq 'emit renderer_ffprobe "$FFPROBE_LAUNCHER"' "$SCRIPT"
+grep -Fq 'test-only CI renderer runtime provisioning; not distribution approval' "$SCRIPT"
+grep -Fq 'use a fresh output root' "$SCRIPT"
+grep -Fq 'require_fresh_output_root' "$SCRIPT"
+grep -Fq -- '--output-root must not be the filesystem root' "$SCRIPT"
+if grep -Eq '/Users/|/opt/homebrew' "$SCRIPT"; then
+  echo "Provisioner must not use developer paths or Homebrew." >&2
+  exit 1
+fi
+
+# A pre-existing output root, even one whose tools child would redirect the
+# launcher write, must fail before the provisioner considers its Node archive.
+OUTPUT_ROOT="$TEST_ROOT/existing"
+ESCAPE="$TEST_ROOT/escape"
+mkdir "$OUTPUT_ROOT" "$ESCAPE"
+ln -s "$ESCAPE" "$OUTPUT_ROOT/tools"
+if "$SCRIPT" --output-root "$OUTPUT_ROOT" --node-archive /dev/null >/dev/null 2>&1; then
+  echo "Provisioner accepted a pre-existing output root." >&2
+  exit 1
+fi
+test ! -e "$ESCAPE/takeform-ffmpeg"
+test ! -e "$ESCAPE/takeform-ffprobe"
+printf '%s\n' 'provision-render-runtime static contract: PASS'

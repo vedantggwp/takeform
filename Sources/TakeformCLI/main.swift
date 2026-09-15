@@ -7,6 +7,40 @@ import TakeformCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
+private let usage = """
+usage: takeform <command> ...
+
+Pairing:
+  import-paired-credential <grant-id> < token-on-stdin
+  forget-paired-credential <grant-id>
+
+Paired project commands:
+  execute <package> <grant-id> <request-json>
+  import <package> <grant-id> <source>...
+
+Paired render commands (require an app-issued editProject grant):
+  render-context <package> <grant-id> <episode-id>
+  render-request <package> <grant-id> <request-json>
+  render-status <package> <grant-id> <job-id>
+  render-cancel <package> <grant-id> <job-id> <operation-id>
+  render-materialize <package> <grant-id> <job-id> <operation-id>
+  render-export <package> <grant-id> <job-id> <operation-id> <destination>
+
+render-request request-json:
+  {"id":{"value":"<command-uuid>"},"expectedRevision":{"value":<revision>},"command":{"requestEpisodeRender":{"episodeID":"<episode-uuid>","compositionDigest":"<lowercase-sha256>","format":"mp4"}}}
+
+render-context returns the current episode ID, revision, canonical composition
+digest, and output. Use it to form a matching render-request envelope.
+
+Takeform must be open with its bundled authority service available. The CLI cannot
+start that service, pair itself, or issue a grant.
+"""
+
+private func printUsage(status: Int32) -> Never {
+    fputs(usage, stderr)
+    exit(status)
+}
+
 private final class KeychainResult<Value>: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Value?
@@ -106,7 +140,24 @@ func bundledAppService() -> URL? {
     return FileManager.default.isExecutableFile(atPath: service.path) ? service : nil
 }
 
+/// Verify the fixed bundled service before Keychain access and again on the
+/// request connection before the paired token crosses the socket.
+func pairedResponse(service: URL, grantID: UUID, makeRequest: (String) -> AppAuthorityRequest) throws -> AppAuthorityResponse {
+    try AppAuthoritySocket.verifyService(expectedService: service)
+    var query = credentialQuery(for: grantID)
+    query[kSecReturnData] = true
+    query[kSecUseAuthenticationContext] = nonInteractiveContext()
+    guard let tokenData = readCredential(query: query), let token = String(data: tokenData, encoding: .utf8), !token.isEmpty else { throw ExecuteFailurePhase.credentialRead }
+    let descriptor = try AppAuthoritySocket.connect()
+    defer { Darwin.close(descriptor) }
+    guard let requirement = AppAuthorityPeer.requirement(for: service), AppAuthorityPeer.matches(fd: descriptor, requirement: requirement) else { throw ExecuteFailurePhase.requestPeer }
+    try AppAuthoritySocket.send(makeRequest(token), descriptor)
+    return try AppAuthoritySocket.receive(AppAuthorityResponse.self, descriptor)
+}
+
 switch arguments.first {
+case "help", "--help", "-h":
+    printUsage(status: 0)
 case "import-paired-credential":
     guard arguments.count == 2, let grantID = UUID(uuidString: arguments[1]), let token = readLine(), !token.isEmpty else {
         fputs("usage: takeform import-paired-credential <grant-id> < token-on-stdin\n", stderr)
@@ -203,7 +254,61 @@ case "import":
         fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr)
         exit(3)
     }
+case "render-request":
+    guard arguments.count == 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]) else {
+        fputs("usage: takeform render-request <package> <grant-id> <request-json>\n", stderr)
+        exit(1)
+    }
+    do {
+        let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: Data(arguments[3].utf8))
+        guard case let .result(result) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedRequestRender(URL(fileURLWithPath: arguments[1]), envelope, grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(result)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3)
+    }
+case "render-context":
+    guard arguments.count == 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let episodeID = UUID(uuidString: arguments[3]) else {
+        fputs("usage: takeform render-context <package> <grant-id> <episode-id>\n", stderr)
+        exit(1)
+    }
+    do {
+        guard case let .renderContext(context) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedRenderContext(URL(fileURLWithPath: arguments[1]), episodeID, grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(context)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3)
+    }
+case "render-status":
+    guard arguments.count == 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let jobID = UUID(uuidString: arguments[3]) else {
+        fputs("usage: takeform render-status <package> <grant-id> <job-id>\n", stderr); exit(1)
+    }
+    do {
+        guard case let .renderStatus(status) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedRenderStatus(URL(fileURLWithPath: arguments[1]), jobID, grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(status)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch { fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3) }
+case "render-cancel":
+    guard arguments.count == 5, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let jobID = UUID(uuidString: arguments[3]), let operationID = UUID(uuidString: arguments[4]) else {
+        fputs("usage: takeform render-cancel <package> <grant-id> <job-id> <operation-id>\n", stderr); exit(1)
+    }
+    do {
+        guard case let .renderStatus(status) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedCancelRender(URL(fileURLWithPath: arguments[1]), jobID, CommandID(operationID), grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(status)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch { fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3) }
+case "render-materialize":
+    guard arguments.count == 5, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let jobID = UUID(uuidString: arguments[3]), let operationID = UUID(uuidString: arguments[4]) else {
+        fputs("usage: takeform render-materialize <package> <grant-id> <job-id> <operation-id>\n", stderr); exit(1)
+    }
+    do {
+        guard case let .renderMaterialization(result) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedMaterializeRender(URL(fileURLWithPath: arguments[1]), jobID, CommandID(operationID), grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(result)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch { fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3) }
+case "render-export":
+    guard arguments.count == 6, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let jobID = UUID(uuidString: arguments[3]), let operationID = UUID(uuidString: arguments[4]) else {
+        fputs("usage: takeform render-export <package> <grant-id> <job-id> <operation-id> <destination>\n", stderr); exit(1)
+    }
+    do {
+        guard case let .renderExport(result) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedExportRender(URL(fileURLWithPath: arguments[1]), jobID, CommandID(operationID), URL(fileURLWithPath: arguments[5]), .refuseExisting, grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(result)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch { fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3) }
 default:
-    fputs("usage: takeform <import-paired-credential|forget-paired-credential|execute|import> ...\n", stderr)
-    exit(2)
+    printUsage(status: 2)
 }

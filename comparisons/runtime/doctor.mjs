@@ -11,6 +11,8 @@ const packages = [
   ['@hyperframes/producer', '0.8.39'],
   ['@hyperframes/engine', '0.8.39'],
   ['@hyperframes/player', '0.8.39'],
+  ['@hyperframes/player/node_modules/@hyperframes/core', '0.8.39'],
+  ['@hyperframes/core', '0.8.40'],
   ['@remotion/bundler', '4.0.524'],
   ['remotion', '4.0.524'],
   ['@remotion/renderer', '4.0.524'],
@@ -25,6 +27,7 @@ function parseArgs(argv) {
     bootstrapBrowser: false,
     ffmpeg: 'ffmpeg',
     nodeVersion: process.version,
+    packageOnly: false,
     runtime: here,
     timeoutMs: 5000,
   };
@@ -33,6 +36,10 @@ function parseArgs(argv) {
     const argument = argv[index];
     if (argument === '--bootstrap-browser') {
       options.bootstrapBrowser = true;
+      continue;
+    }
+    if (argument === '--package-only') {
+      options.packageOnly = true;
       continue;
     }
     if (argument === '--browser' || argument === '--ffmpeg' || argument === '--node-version' || argument === '--runtime' || argument === '--timeout-ms') {
@@ -290,16 +297,20 @@ async function main() {
     result.packages[name] = await packageStatus(options.runtime, name, version);
   }
   result.imports = await importsStatus(options.runtime);
-  result.ffmpeg = await executableStatus(options.ffmpeg, options.timeoutMs);
-  result.browser = await browserStatus(options, result.imports);
+  result.ffmpeg = options.packageOnly
+    ? {status: 'not-requested'}
+    : await executableStatus(options.ffmpeg, options.timeoutMs);
+  result.browser = options.packageOnly
+    ? {candidate: {status: 'not-requested'}, hyperframes: {status: 'not-requested'}, remotion: {status: 'not-requested'}}
+    : await browserStatus(options, result.imports);
   result.ok = [
     result.runtime.status,
     result.node.status,
-    result.ffmpeg.status,
+    result.ffmpeg.status === 'not-requested' ? 'ok' : result.ffmpeg.status,
     ...Object.values(result.packages).map((entry) => entry.status),
     result.imports.hyperframes.status,
     result.imports.remotion.status,
-    result.browser.candidate.status === 'not-provided' ? 'ok' : result.browser.candidate.status,
+    result.browser.candidate.status === 'not-provided' || result.browser.candidate.status === 'not-requested' ? 'ok' : result.browser.candidate.status,
     result.browser.remotion.status === 'not-requested' ? 'ok' : result.browser.remotion.status,
   ].every((status) => status === 'ok');
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

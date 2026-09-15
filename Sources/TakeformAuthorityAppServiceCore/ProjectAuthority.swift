@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import Darwin
 import TakeformAuthorityEngine
+import TakeformAppAuthorityWire
 import TakeformCore
 import TakeformWorkspace
 
@@ -15,6 +16,8 @@ public enum AuthorityFailure: Error, Equatable, LocalizedError {
     case creationCollision
     case creationCleanupFailed
     case invalidComposition(CompositionValidationFailure)
+    case missingRenderRequest
+    case renderUnavailable
     public var errorDescription: String? { String(describing: self) }
 }
 
@@ -40,6 +43,35 @@ private struct PortableManifest: Codable {
     let objects: [String]
 }
 
+private struct RenderCommandFingerprint: Codable {
+    let expectedRevision: Revision
+    let episodeID: UUID
+    let requestedDigest: String
+    let format: EpisodeRenderFormat
+}
+
+/// The operation table is portable, so it retains only a digest of a chosen
+/// export location, never the location itself. This still prevents a caller
+/// from reusing one operation ID for a different export request.
+private struct RenderOperationFingerprint: Codable {
+    let kind: String
+    let jobID: UUID
+    let destinationDigest: String?
+    let exportDecision: EpisodeRenderExportDecision?
+}
+
+/// This is internal service input, not a portable public descriptor. The JSON
+/// bytes are exactly those stored in project.sqlite and are hashed verbatim in
+/// the worker request/receipt handshake.
+struct RenderAttemptInput: Sendable {
+    let status: EpisodeRenderRequestStatus
+    let snapshot: EpisodeRenderSnapshot
+    let snapshotJSON: Data
+    /// Digest of the current machine binding, retained only by the service to
+    /// prevent a machine-local artifact being reused after rebind or move.
+    let machineBindingDigest: String
+}
+
 public final class ProjectAuthority {
     private let packageURL: URL
     private let initialProjectID: UUID?
@@ -47,6 +79,10 @@ public final class ProjectAuthority {
     private var database: SQLiteDatabase!
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+
+    /// Internal to the app-service core. The worker coordinator resolves only
+    /// assets that this authority has already revalidated for its package.
+    var packageURLForRender: URL { packageURL }
 
     public convenience init(packageURL: URL) throws {
         try self.init(packageURL: packageURL, initialProjectID: nil, afterInitialBind: nil)
@@ -171,18 +207,36 @@ public final class ProjectAuthority {
         return opened
     }
 
+    func openForPairedRender(grantID: UUID, token: String) throws -> ProjectOpenState {
+        try openForPairedImport(grantID: grantID, token: token)
+    }
+
     private func executeAuthorized(_ envelope: CommandEnvelope) throws -> CommandResult {
         let result = try database.transaction {
-            let fingerprint = try encode(envelope)
+            let before = try loadDocument()
+            let fingerprint = try commandFingerprint(envelope, document: before)
             if let stored = try database.value("SELECT result FROM command_results WHERE id = ?", bindings: [envelope.id.value.uuidString]) {
                 guard let existing = try database.value("SELECT fingerprint FROM command_results WHERE id = ?", bindings: [envelope.id.value.uuidString]), existing == fingerprint else {
                     return CommandResult(id: envelope.id, outcome: .rejected(reason: "command-id-reused-with-different-request"))
                 }
                 return try decode(CommandResult.self, stored)
             }
-            let before = try loadDocument()
             guard before.revision == envelope.expectedRevision else {
                 let result = CommandResult(id: envelope.id, outcome: .conflict(currentRevision: before.revision))
+                try store(result, id: envelope.id, fingerprint: fingerprint)
+                return result
+            }
+            if case let .requestEpisodeRender(episodeID, requestedDigest, format) = envelope.command {
+                let result: CommandResult
+                do {
+                    result = try requestEpisodeRender(envelopeID: envelope.id, document: before, episodeID: episodeID, requestedDigest: requestedDigest, format: format)
+                } catch let failure as CompositionValidationFailure {
+                    result = CommandResult(id: envelope.id, outcome: .rejected(reason: failure.reason))
+                } catch {
+                    // The immutable snapshot cannot be handed to a worker when
+                    // a referenced managed object fails authority verification.
+                    result = CommandResult(id: envelope.id, outcome: .rejected(reason: "render-input-unavailable"))
+                }
                 try store(result, id: envelope.id, fingerprint: fingerprint)
                 return result
             }
@@ -208,6 +262,38 @@ public final class ProjectAuthority {
         }
         if case .applied(let document) = result.outcome { try writeProjection(document) }
         return result
+    }
+
+    /// The only portable render operation is the logical request. It does not
+    /// start a process or claim that an artifact is available on this machine.
+    private func requestEpisodeRender(envelopeID: CommandID, document: ProjectDocument, episodeID: UUID, requestedDigest: String, format: EpisodeRenderFormat) throws -> CommandResult {
+        guard let composition = document.episodeCompositions.first(where: { $0.episodeID == episodeID }) else {
+            return CommandResult(id: envelopeID, outcome: .rejected(reason: "render-composition-missing"))
+        }
+        try composition.validate(episodes: document.episodes, assets: document.assets)
+        let digest = digest(of: try composition.canonicalData())
+        guard requestedDigest == digest else {
+            return CommandResult(id: envelopeID, outcome: .rejected(reason: "render-composition-digest-mismatch"))
+        }
+        let referencedIDs = Set(composition.occurrences.map(\.assetID))
+        let assets = document.assets.filter { referencedIDs.contains($0.id) }.sorted { $0.id.uuidString < $1.id.uuidString }
+        guard assets.count == referencedIDs.count else {
+            return CommandResult(id: envelopeID, outcome: .rejected(reason: "render-asset-missing"))
+        }
+        for asset in assets { try ManagedImport.verifyObject(asset, package: packageURL) }
+        let snapshot = EpisodeRenderSnapshot(projectID: document.projectID, episodeID: episodeID, requestedRevision: document.revision, compositionDigest: digest, format: format, composition: composition, assets: assets.map(EpisodeRenderSnapshot.Asset.init(asset:)))
+        let status = EpisodeRenderRequestStatus(jobID: UUID(), episodeID: episodeID, requestedRevision: document.revision, compositionDigest: digest, format: format, logicalState: .requested, progress: .indeterminate, availability: .unavailable)
+        try database.execute("INSERT INTO render_requests(job_id, command_id, episode_id, expected_revision, composition_digest, format, snapshot, logical_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", bindings: [status.jobID.uuidString, envelopeID.value.uuidString, episodeID.uuidString, String(document.revision.value), digest, format.rawValue, try encode(snapshot), status.logicalState.rawValue])
+        return CommandResult(id: envelopeID, outcome: .renderRequested(status))
+    }
+
+    private func commandFingerprint(_ envelope: CommandEnvelope, document: ProjectDocument) throws -> String {
+        guard case let .requestEpisodeRender(episodeID, requestedDigest, format) = envelope.command else { return try encode(envelope) }
+        return try encode(RenderCommandFingerprint(expectedRevision: envelope.expectedRevision, episodeID: episodeID, requestedDigest: requestedDigest, format: format))
+    }
+
+    private func digest(of data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func initialize(_ document: ProjectDocument) throws {
@@ -282,6 +368,8 @@ public final class ProjectAuthority {
             try composition.validate(episodes: next.episodes, assets: next.assets)
             next.episodeCompositions.removeAll { $0.episodeID == episodeID }
             next.episodeCompositions.append(composition)
+        case .requestEpisodeRender:
+            return document
         case .undo:
             guard let row = try database.row("SELECT before_state FROM history WHERE undone = 0 ORDER BY revision DESC LIMIT 1") else { return document }
             var restored = try decode(ProjectDocument.self, row[0])
@@ -295,6 +383,128 @@ public final class ProjectAuthority {
         }
         next.revision = Revision(document.revision.value + 1)
         return next
+    }
+
+    /// Internal app-service input for the machine worker. It stays outside the
+    /// portable public authority API and carries no local worker descriptor.
+    func renderAttemptInput(jobID: UUID) throws -> RenderAttemptInput {
+        guard let row = try database.row("SELECT episode_id, expected_revision, composition_digest, format, logical_state, snapshot FROM render_requests WHERE job_id = ?", bindings: [jobID.uuidString]),
+              row.count == 6,
+              let episodeID = UUID(uuidString: row[0]),
+              let revision = Int64(row[1]),
+              let format = EpisodeRenderFormat(rawValue: row[3]),
+              let logicalState = EpisodeRenderLogicalState(rawValue: row[4]) else { throw AuthorityFailure.missingRenderRequest }
+        let snapshotJSON = Data(row[5].utf8)
+        let snapshot = try decode(EpisodeRenderSnapshot.self, row[5])
+        guard snapshot.episodeID == episodeID,
+              snapshot.requestedRevision == Revision(revision),
+              snapshot.compositionDigest == row[2],
+              snapshot.format == format else { throw AuthorityFailure.corruptDatabase }
+        let machine = try loadMachineState(for: snapshot.projectID)
+        guard let binding = machine.binding, binding.canonicalPath == packageURL.path else { throw AuthorityFailure.copyDecisionRequired }
+        let status = EpisodeRenderRequestStatus(jobID: jobID, episodeID: episodeID, requestedRevision: Revision(revision), compositionDigest: row[2], format: format, logicalState: logicalState, progress: .indeterminate, availability: .unavailable)
+        return RenderAttemptInput(status: status, snapshot: snapshot, snapshotJSON: snapshotJSON, machineBindingDigest: digest(of: try encoder.encode(binding)))
+    }
+
+    private func renderStatus(jobID: UUID) throws -> EpisodeRenderRequestStatus {
+        try renderAttemptInput(jobID: jobID).status
+    }
+
+    private func renderContext(episodeID: UUID, document: ProjectDocument) throws -> EpisodeRenderContext {
+        guard let composition = document.episodeCompositions.first(where: { $0.episodeID == episodeID }) else {
+            throw AuthorityFailure.invalidComposition(.episodeMismatch)
+        }
+        try composition.validate(episodes: document.episodes, assets: document.assets)
+        return EpisodeRenderContext(
+            episodeID: episodeID,
+            revision: document.revision,
+            compositionDigest: digest(of: try composition.canonicalData()),
+            output: composition.output
+        )
+    }
+
+    /// Called only by the app-service-owned worker coordinator. A late receipt
+    /// cannot change a cancelled or superseded logical request.
+    func transitionRenderRequest(jobID: UUID, snapshotSHA256: String, to state: EpisodeRenderLogicalState) throws -> EpisodeRenderRequestStatus {
+        try database.transaction {
+            let input = try renderAttemptInput(jobID: jobID)
+            guard digest(of: input.snapshotJSON) == snapshotSHA256 else { throw AuthorityFailure.unauthorized }
+            guard input.status.logicalState == .requested else { return input.status }
+            try database.execute("UPDATE render_requests SET logical_state = ? WHERE job_id = ?", bindings: [state.rawValue, jobID.uuidString])
+            return EpisodeRenderRequestStatus(jobID: input.status.jobID, episodeID: input.status.episodeID, requestedRevision: input.status.requestedRevision, compositionDigest: input.status.compositionDigest, format: input.status.format, logicalState: state, progress: .indeterminate, availability: .unavailable)
+        }
+    }
+
+    /// Used on app-service recovery. The coordinator supplies the only
+    /// machine-local evidence it accepts; this method exposes no PID or path.
+    func requestedRenderAttemptInputs() throws -> [RenderAttemptInput] {
+        try database.rows("SELECT job_id FROM render_requests WHERE logical_state = ?", bindings: [EpisodeRenderLogicalState.requested.rawValue]).compactMap { row in
+            guard let value = row.first, let jobID = UUID(uuidString: value) else { return nil }
+            return try renderAttemptInput(jobID: jobID)
+        }
+    }
+
+    private func cancelRender(jobID: UUID, operationID: CommandID) throws -> EpisodeRenderRequestStatus {
+        try database.transaction {
+            let fingerprint = "cancel:\(jobID.uuidString)"
+            if let stored = try database.value("SELECT result FROM render_operation_results WHERE id = ?", bindings: [operationID.value.uuidString]) {
+                guard let previousFingerprint = try database.value("SELECT fingerprint FROM render_operation_results WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+                return try decode(EpisodeRenderRequestStatus.self, stored)
+            }
+            let current = try renderStatus(jobID: jobID)
+            let nextState: EpisodeRenderLogicalState = current.logicalState == .requested ? .cancelled : current.logicalState
+            try database.execute("UPDATE render_requests SET logical_state = ? WHERE job_id = ?", bindings: [nextState.rawValue, jobID.uuidString])
+            let status = EpisodeRenderRequestStatus(jobID: current.jobID, episodeID: current.episodeID, requestedRevision: current.requestedRevision, compositionDigest: current.compositionDigest, format: current.format, logicalState: nextState, progress: .indeterminate, availability: .unavailable)
+            try database.execute("INSERT INTO render_operation_results(id, fingerprint, result) VALUES (?, ?, ?)", bindings: [operationID.value.uuidString, fingerprint, try encode(status)])
+            return status
+        }
+    }
+
+    private func recordReadOperation(jobID: UUID, operationID: CommandID, kind: String, destination: URL? = nil, exportDecision: EpisodeRenderExportDecision? = nil) throws -> EpisodeRenderRequestStatus {
+        try database.transaction {
+            let destinationDigest = destination.map { digest(of: Data($0.standardizedFileURL.path.utf8)) }
+            let fingerprint = try encode(RenderOperationFingerprint(kind: kind, jobID: jobID, destinationDigest: destinationDigest, exportDecision: exportDecision))
+            if let stored = try database.value("SELECT result FROM render_operation_results WHERE id = ?", bindings: [operationID.value.uuidString]) {
+                guard let previousFingerprint = try database.value("SELECT fingerprint FROM render_operation_results WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+                return try decode(EpisodeRenderRequestStatus.self, stored)
+            }
+            let status = try renderStatus(jobID: jobID)
+            try database.execute("INSERT INTO render_operation_results(id, fingerprint, result) VALUES (?, ?, ?)", bindings: [operationID.value.uuidString, fingerprint, try encode(status)])
+            return status
+        }
+    }
+
+    /// Materialization and export persist their own typed operation result so
+    /// an idempotent retry never changes from an unavailable response into a
+    /// descriptor merely because a later worker attempt finished.
+    func recordRenderMaterialization(jobID: UUID, operationID: CommandID, result: EpisodeRenderMaterialization) throws -> EpisodeRenderMaterialization {
+        try recordTypedRenderOperation(table: "render_materialization_results", jobID: jobID, operationID: operationID, fingerprint: try encode(RenderOperationFingerprint(kind: "materialize", jobID: jobID, destinationDigest: nil, exportDecision: nil)), result: result)
+    }
+
+    func recordRenderExport(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision, result: EpisodeRenderExportResult) throws -> EpisodeRenderExportResult {
+        let destinationDigest = digest(of: Data(destination.standardizedFileURL.path.utf8))
+        let fingerprint = try encode(RenderOperationFingerprint(kind: "export", jobID: jobID, destinationDigest: destinationDigest, exportDecision: decision))
+        return try recordTypedRenderOperation(table: "render_export_results", jobID: jobID, operationID: operationID, fingerprint: fingerprint, result: result)
+    }
+
+    func existingRenderExport(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision) throws -> EpisodeRenderExportResult? {
+        let destinationDigest = digest(of: Data(destination.standardizedFileURL.path.utf8))
+        let fingerprint = try encode(RenderOperationFingerprint(kind: "export", jobID: jobID, destinationDigest: destinationDigest, exportDecision: decision))
+        guard let stored = try database.value("SELECT result FROM render_export_results WHERE id = ?", bindings: [operationID.value.uuidString]) else { return nil }
+        guard let previousFingerprint = try database.value("SELECT fingerprint FROM render_export_results WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+        return try decode(EpisodeRenderExportResult.self, stored)
+    }
+
+    private func recordTypedRenderOperation<Result: Codable>(table: String, jobID: UUID, operationID: CommandID, fingerprint: String, result: Result) throws -> Result {
+        try database.transaction {
+            if let stored = try database.value("SELECT result FROM \(table) WHERE id = ?", bindings: [operationID.value.uuidString]) {
+                guard let previousFingerprint = try database.value("SELECT fingerprint FROM \(table) WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+                return try decode(Result.self, stored)
+            }
+            _ = try renderStatus(jobID: jobID)
+            try database.execute("INSERT INTO \(table)(id, fingerprint, result) VALUES (?, ?, ?)", bindings: [operationID.value.uuidString, fingerprint, try encode(result)])
+            return result
+        }
     }
 
     private func loadDocument() throws -> ProjectDocument {
@@ -337,6 +547,10 @@ public final class ProjectAuthority {
             try opened.execute("CREATE TABLE IF NOT EXISTS project_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             try opened.execute("CREATE TABLE IF NOT EXISTS command_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
             try opened.execute("CREATE TABLE IF NOT EXISTS history (revision INTEGER PRIMARY KEY, before_state TEXT NOT NULL, after_state TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_requests (job_id TEXT PRIMARY KEY, command_id TEXT UNIQUE NOT NULL, episode_id TEXT NOT NULL, expected_revision INTEGER NOT NULL, composition_digest TEXT NOT NULL, format TEXT NOT NULL, snapshot TEXT NOT NULL, logical_state TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_operation_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_materialization_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_export_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
             database = opened
         } catch { throw AuthorityFailure.corruptDatabase }
     }
@@ -428,6 +642,107 @@ extension ProjectAuthority {
         let state = try loadMachineState(for: opened.document.projectID)
         guard state.creatorCredentialDigest == tokenDigest(credential) else { throw AuthorityFailure.unauthorized }
         return try executeAuthorized(envelope)
+    }
+
+    public func requestEpisodeRenderForAuthenticatedCreator(_ envelope: CommandEnvelope, credential: String) throws -> CommandResult {
+        guard case .requestEpisodeRender = envelope.command else { throw AuthorityFailure.unauthorized }
+        return try executeForAuthenticatedCreator(envelope, credential: credential)
+    }
+
+    public func requestEpisodeRenderForPairedCLI(_ envelope: CommandEnvelope, grantID: UUID, token: String) throws -> CommandResult {
+        guard case .requestEpisodeRender = envelope.command else { throw AuthorityFailure.unauthorized }
+        return try execute(envelope, grantID: grantID, token: token)
+    }
+
+    public func renderStatusForAuthenticatedCreator(jobID: UUID, credential: String) throws -> EpisodeRenderRequestStatus {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return try renderStatus(jobID: jobID)
+    }
+
+    func renderAttemptInputForAuthenticatedCreator(jobID: UUID, credential: String) throws -> RenderAttemptInput {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return try renderAttemptInput(jobID: jobID)
+    }
+
+    public func renderStatusForPairedCLI(jobID: UUID, grantID: UUID, token: String) throws -> EpisodeRenderRequestStatus {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return try renderStatus(jobID: jobID)
+    }
+
+    func renderAttemptInputForPairedCLI(jobID: UUID, grantID: UUID, token: String) throws -> RenderAttemptInput {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return try renderAttemptInput(jobID: jobID)
+    }
+
+    /// A paired caller may obtain only the current portable render context it
+    /// needs to form a revision- and digest-bound request. It receives no
+    /// machine-local artifact or object path.
+    public func renderContextForPairedCLI(episodeID: UUID, grantID: UUID, token: String) throws -> EpisodeRenderContext {
+        let opened = try openForPairedImport(grantID: grantID, token: token)
+        return try renderContext(episodeID: episodeID, document: opened.document)
+    }
+
+    /// This app-only read operation is separately fingerprinted from
+    /// materialize and export. The returned input contains no persisted
+    /// machine path; the coordinator revalidates its artifact immediately.
+    func playbackAttemptInputForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> RenderAttemptInput {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        _ = try recordReadOperation(jobID: jobID, operationID: operationID, kind: "playback")
+        return try renderAttemptInput(jobID: jobID)
+    }
+
+    /// Runtime selection is an app-only machine-state operation. The logical
+    /// project database never receives executable locations or readiness.
+    func configureRenderRuntimeForAuthenticatedCreator(selectors: RenderRuntimeSelectors, operationID: CommandID, credential: String) throws -> RenderRuntimeReadiness {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machine = try loadMachineState(for: opened.document.projectID)
+        guard let binding = machine.binding else { throw AuthorityFailure.unauthorized }
+        return try RenderExecutionCoordinator.shared.configureRuntime(
+            projectID: opened.document.projectID,
+            machineBindingDigest: digest(of: try encoder.encode(binding)),
+            selectors: selectors,
+            operationID: operationID
+        )
+    }
+
+    func renderRuntimeReadinessForAuthenticatedCreator(credential: String) throws -> RenderRuntimeReadiness {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machine = try loadMachineState(for: opened.document.projectID)
+        guard let binding = machine.binding else { throw AuthorityFailure.unauthorized }
+        return RenderExecutionCoordinator.shared.runtimeReadiness(
+            projectID: opened.document.projectID,
+            machineBindingDigest: digest(of: try encoder.encode(binding))
+        )
+    }
+
+    public func cancelEpisodeRenderForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> EpisodeRenderRequestStatus {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return try cancelRender(jobID: jobID, operationID: operationID)
+    }
+
+    public func cancelEpisodeRenderForPairedCLI(jobID: UUID, operationID: CommandID, grantID: UUID, token: String) throws -> EpisodeRenderRequestStatus {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return try cancelRender(jobID: jobID, operationID: operationID)
+    }
+
+    public func materializeEpisodeRenderForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> EpisodeRenderMaterialization {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return .unavailable(try recordReadOperation(jobID: jobID, operationID: operationID, kind: "materialize"))
+    }
+
+    public func materializeEpisodeRenderForPairedCLI(jobID: UUID, operationID: CommandID, grantID: UUID, token: String) throws -> EpisodeRenderMaterialization {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return .unavailable(try recordReadOperation(jobID: jobID, operationID: operationID, kind: "materialize"))
+    }
+
+    public func exportEpisodeRenderForAuthenticatedCreator(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision, credential: String) throws -> EpisodeRenderExportResult {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return .unavailable(try recordReadOperation(jobID: jobID, operationID: operationID, kind: "export", destination: destination, exportDecision: decision))
+    }
+
+    public func exportEpisodeRenderForPairedCLI(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision, grantID: UUID, token: String) throws -> EpisodeRenderExportResult {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return .unavailable(try recordReadOperation(jobID: jobID, operationID: operationID, kind: "export", destination: destination, exportDecision: decision))
     }
 
     public func issuePairedCLIGrant(credential: String, label: String, scopes: Set<GrantScope>, expiresAt: Date, rawToken: String) throws -> Grant {

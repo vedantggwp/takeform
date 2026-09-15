@@ -110,12 +110,13 @@ public enum ProjectCommand: Codable, Equatable, Sendable {
     case resetOverride(episodeID: UUID, key: String)
     case addManagedAsset(ManagedAsset)
     case replaceEpisodeComposition(episodeID: UUID, composition: EpisodeComposition)
+    case requestEpisodeRender(episodeID: UUID, compositionDigest: String, format: EpisodeRenderFormat)
     case undo
     case redo
 
     public var requiredScope: GrantScope {
         switch self {
-        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride, .addManagedAsset, .replaceEpisodeComposition: return .editProject
+        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride, .addManagedAsset, .replaceEpisodeComposition, .requestEpisodeRender: return .editProject
         }
     }
 }
@@ -177,6 +178,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable {
 
 public enum CommandOutcome: Codable, Equatable, Sendable {
     case applied(document: ProjectDocument)
+    case renderRequested(EpisodeRenderRequestStatus)
     case conflict(currentRevision: Revision)
     case rejected(reason: String)
 }

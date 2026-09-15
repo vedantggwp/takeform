@@ -60,6 +60,28 @@ public final class SQLiteDatabase {
         }
     }
 
+    /// Streaming result sets are unnecessary for Takeform's small durable
+    /// catalogs, but recovery needs every pending logical request rather than
+    /// an arbitrary first row.
+    public func rows(_ sql: String, bindings: [String] = []) throws -> [[String]] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
+        defer { sqlite3_finalize(statement) }
+        for (index, value) in bindings.enumerated() {
+            guard sqlite3_bind_text(statement, Int32(index + 1), value, -1, sqliteTransient) == SQLITE_OK else { throw failure() }
+        }
+        var result: [[String]] = []
+        var outcome = sqlite3_step(statement)
+        while outcome == SQLITE_ROW {
+            result.append((0..<sqlite3_column_count(statement)).map { index in
+                sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
+            })
+            outcome = sqlite3_step(statement)
+        }
+        guard outcome == SQLITE_DONE else { throw failure() }
+        return result
+    }
+
     public func transaction<T>(_ work: () throws -> T) throws -> T {
         try execute("BEGIN IMMEDIATE")
         do {

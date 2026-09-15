@@ -33,14 +33,29 @@ Pass a destination directory when a separate output location is useful:
 ./scripts/verify-dev-bundle "/tmp/Takeform build/Takeform.app"
 ```
 
+To package the render-capable developer build, supply both an explicit,
+self-contained Node 22.22.1 runtime root and the installed lock-derived
+renderer runtime. The packager neither discovers a Node installation nor
+installs dependencies. It rejects non-system dynamic-library paths before
+copying the runtime into `Contents/Resources/RendererRuntime`; copied-bundle
+verification then runs its bundled Node against the copied package doctor.
+
+```sh
+./scripts/package-dev-bundle "/tmp/Takeform build" \
+  --renderer-node-root /absolute/node-22-runtime \
+  --renderer-runtime-source /absolute/installed-renderer-runtime
+```
+
 `scripts/verify-dev-bundle` copies the selected app before checking its bundle
 identity, icon, and signature. It does not prove Developer ID signing,
 notarization, Gatekeeper acceptance, or visual app behavior.
 
-The source has no third-party runtime dependencies. The application icon and
-its source assets are original work in `design/identity`; see that directory's
-README for its asset provenance. The [licence inventory](docs/license-inventory.md)
-records the F1 bundle inputs. Takeform source is MIT-licensed under `LICENSE`.
+The Swift sources have no third-party runtime dependency. A renderer runtime
+is copied only through the explicit developer-build command above. The
+application icon and its source assets are original work in `design/identity`;
+see that directory's README for its asset provenance. The [licence
+inventory](docs/license-inventory.md) records the F1 bundle inputs. Takeform
+source is MIT-licensed under `LICENSE`.
 
 ## Product direction
 

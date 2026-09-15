@@ -84,6 +84,14 @@ public struct UnavailableWorkspaceClient: WorkspaceClient {
 }
 
 public enum WorkspacePresentation {
+    /// A preview has no file URL until this returns an asset from the current
+    /// authority-opened snapshot. The app sets `selectedAssetID` only after a
+    /// fresh `open` has revalidated the catalog object's digest and length.
+    public static func assetForVerifiedPreview(document: ProjectDocument?, selectedAssetID: UUID?) -> ManagedAsset? {
+        guard let selectedAssetID else { return nil }
+        return document?.assets.first { $0.id == selectedAssetID }
+    }
+
     public static func resolvedValues(document: ProjectDocument, episodeID: UUID) -> [EffectiveValue] {
         document.effectiveValues(for: episodeID) ?? []
     }
@@ -91,6 +99,7 @@ public enum WorkspacePresentation {
     public static func commandMessage(_ result: CommandResult) -> String {
         switch result.outcome {
         case .applied(let document): "Committed revision \(document.revision.value)."
+        case let .renderRequested(status): "Render request \(status.jobID.uuidString) is queued; its local renderer is currently unavailable."
         case .conflict(let revision): "This project changed first. Reload revision \(revision.value) and try again."
         case .rejected(let reason): "No change was committed: \(reason)."
         }

@@ -18,14 +18,44 @@ plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$1" "$COPIED_APP/Contents/Info.plist"
 }
 
-[ -x "$COPIED_APP/Contents/MacOS/Takeform" ]
+[ -x "$COPIED_APP/Contents/MacOS/TakeformApp" ]
 [ -x "$COPIED_APP/Contents/MacOS/TakeformAuthorityAppService" ]
 [ -x "$COPIED_APP/Contents/MacOS/takeform" ]
 [ -f "$COPIED_APP/Contents/Resources/Takeform.icns" ]
 [ "$(plist_value CFBundleIdentifier)" = "com.takeform.app" ]
 [ "$(plist_value CFBundleDisplayName)" = "Takeform" ]
+[ "$(plist_value CFBundleExecutable)" = "TakeformApp" ]
 [ "$(plist_value TakeformDevelopmentVersion)" = "0.1.0-dev" ]
 [ "$(plist_value LSMinimumSystemVersion)" = "14.0" ]
+# On a case-insensitive volume the old Takeform/takeform layout aliased one
+# file and copied the CLI over the GUI executable. A copied bundle must retain
+# distinct app and CLI binaries.
+APP_INODE="$(stat -f '%d:%i' "$COPIED_APP/Contents/MacOS/TakeformApp")"
+CLI_INODE="$(stat -f '%d:%i' "$COPIED_APP/Contents/MacOS/takeform")"
+[ "$APP_INODE" != "$CLI_INODE" ]
+! cmp -s "$COPIED_APP/Contents/MacOS/TakeformApp" "$COPIED_APP/Contents/MacOS/takeform"
 codesign --verify --deep --strict --verbose=2 "$COPIED_APP"
 codesign -dvvv "$COPIED_APP" 2>&1 | grep -F "Identifier=com.takeform.app"
+
+RENDERER_RUNTIME="$COPIED_APP/Contents/Resources/RendererRuntime"
+if [ -e "$RENDERER_RUNTIME" ]; then
+  [ -x "$RENDERER_RUNTIME/node/bin/node" ]
+  [ -f "$RENDERER_RUNTIME/episode-render-worker.mjs" ]
+  [ -f "$RENDERER_RUNTIME/runtime-profile.json" ]
+  [ -f "$RENDERER_RUNTIME/doctor.mjs" ]
+  [ -x "$RENDERER_RUNTIME/tools/secure-browser-launcher.sh" ]
+  EXPECTED_NODE_VERSION="$("$RENDERER_RUNTIME/node/bin/node" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).nodeVersion)' "$RENDERER_RUNTIME/runtime-profile.json")"
+  [ "$("$RENDERER_RUNTIME/node/bin/node" --version)" = "$EXPECTED_NODE_VERSION" ]
+  EXPECTED_RENDERER_HASHES="$("$RENDERER_RUNTIME/node/bin/node" -e '
+    const fs = require("node:fs");
+    const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const entry = profile.launchers?.find((candidate) => candidate.kind === "browser");
+    if (!entry || entry.path !== "tools/secure-browser-launcher.sh" || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? "") || profile.worker?.path !== "episode-render-worker.mjs" || !/^[a-f0-9]{64}$/.test(profile.worker.sha256 ?? "")) process.exit(64);
+    process.stdout.write(`${entry.sha256} ${profile.worker.sha256}`);
+  ' "$RENDERER_RUNTIME/runtime-profile.json")"
+  read -r EXPECTED_BROWSER_WRAPPER_SHA EXPECTED_WORKER_SHA <<< "$EXPECTED_RENDERER_HASHES"
+  [ "$(shasum -a 256 "$RENDERER_RUNTIME/tools/secure-browser-launcher.sh" | awk '{print $1}')" = "$EXPECTED_BROWSER_WRAPPER_SHA" ]
+  [ "$(shasum -a 256 "$RENDERER_RUNTIME/episode-render-worker.mjs" | awk '{print $1}')" = "$EXPECTED_WORKER_SHA" ]
+  "$RENDERER_RUNTIME/node/bin/node" "$RENDERER_RUNTIME/doctor.mjs" --runtime "$RENDERER_RUNTIME" --package-only
+fi
 echo "Verified copied bundle: $COPIED_APP"
