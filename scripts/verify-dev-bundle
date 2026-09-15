@@ -43,8 +43,17 @@ if [ -e "$RENDERER_RUNTIME" ]; then
   [ -f "$RENDERER_RUNTIME/episode-render-worker.mjs" ]
   [ -f "$RENDERER_RUNTIME/runtime-profile.json" ]
   [ -f "$RENDERER_RUNTIME/doctor.mjs" ]
+  [ -x "$RENDERER_RUNTIME/tools/secure-browser-launcher.sh" ]
   EXPECTED_NODE_VERSION="$("$RENDERER_RUNTIME/node/bin/node" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).nodeVersion)' "$RENDERER_RUNTIME/runtime-profile.json")"
   [ "$("$RENDERER_RUNTIME/node/bin/node" --version)" = "$EXPECTED_NODE_VERSION" ]
+  EXPECTED_BROWSER_WRAPPER_SHA="$("$RENDERER_RUNTIME/node/bin/node" -e '
+    const fs = require("node:fs");
+    const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const entry = profile.launchers?.find((candidate) => candidate.kind === "browser");
+    if (!entry || entry.path !== "tools/secure-browser-launcher.sh" || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? "")) process.exit(64);
+    process.stdout.write(entry.sha256);
+  ' "$RENDERER_RUNTIME/runtime-profile.json")"
+  [ "$(shasum -a 256 "$RENDERER_RUNTIME/tools/secure-browser-launcher.sh" | awk '{print $1}')" = "$EXPECTED_BROWSER_WRAPPER_SHA" ]
   "$RENDERER_RUNTIME/node/bin/node" "$RENDERER_RUNTIME/doctor.mjs" --runtime "$RENDERER_RUNTIME" --package-only
 fi
 echo "Verified copied bundle: $COPIED_APP"

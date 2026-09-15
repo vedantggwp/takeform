@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {chmod, mkdtemp, lstat, readFile, rm, writeFile} from 'node:fs/promises';
+import {chmod, copyFile, mkdtemp, lstat, readFile, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {compositionModule, runAttempt, runtimeProfile, validateRequest, validateRuntime, writeProject} from './episode-render-worker.mjs';
@@ -67,12 +67,16 @@ test('runtime rejects a forged pinned package identity before a renderer import'
   const root = await mkdtemp(join(tmpdir(), 'takeform-runtime-profile-'));
   try {
     const browser = join(root, 'browser');
+    const browserWrapper = join(root, 'tools', 'secure-browser-launcher.sh');
     const ffmpeg = join(root, 'ffmpeg');
     const ffprobe = join(root, 'ffprobe');
     await Promise.all([browser, ffmpeg, ffprobe].map(async (path) => {
       await writeFile(path, '#!/bin/sh\nexit 0\n');
       await chmod(path, 0o755);
     }));
+    await import('node:fs/promises').then(({mkdir}) => mkdir(join(root, 'tools'), {recursive: true}));
+    await copyFile(new URL('./launchers/secure-browser-launcher.sh', import.meta.url), browserWrapper);
+    await chmod(browserWrapper, 0o755);
     await Promise.all(runtimeProfile.packages.map(async ({path, name, version}) => {
       const packagePath = join(root, 'node_modules', path, 'package.json');
       await writeFile(packagePath, JSON.stringify({name, version}), {flag: 'w'}).catch(async (error) => {
@@ -82,10 +86,37 @@ test('runtime rejects a forged pinned package identity before a renderer import'
         await writeFile(packagePath, JSON.stringify({name, version}));
       });
     }));
-    const runtime = {runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserExecutable: browser, ffmpegExecutable: ffmpeg, ffprobeExecutable: ffprobe};
+    const runtime = {runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserTargetExecutable: browser, ffmpegExecutable: ffmpeg, ffprobeExecutable: ffprobe};
     assert.equal((await validateRuntime(runtime)).packages.length, 5);
     await writeFile(join(root, 'node_modules/@hyperframes/engine/package.json'), JSON.stringify({name: '@hyperframes/not-engine', version: '0.8.39'}));
     await assert.rejects(validateRuntime(runtime), {code: 'RUNTIME_PACKAGE_MISMATCH'});
+  } finally {
+    await rm(root, {force: true, recursive: true});
+  }
+});
+
+test('runtime rejects a modified packaged browser wrapper before renderer import', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-runtime-launcher-'));
+  try {
+    const browser = join(root, 'browser');
+    const ffmpeg = join(root, 'ffmpeg');
+    const ffprobe = join(root, 'ffprobe');
+    await Promise.all([browser, ffmpeg, ffprobe].map(async (path) => {
+      await writeFile(path, '#!/bin/sh\nexit 0\n');
+      await chmod(path, 0o755);
+    }));
+    const {mkdir} = await import('node:fs/promises');
+    await mkdir(join(root, 'tools'), {recursive: true});
+    const wrapper = join(root, 'tools', 'secure-browser-launcher.sh');
+    await copyFile(new URL('./launchers/secure-browser-launcher.sh', import.meta.url), wrapper);
+    await chmod(wrapper, 0o755);
+    for (const {path, name, version} of runtimeProfile.packages) {
+      const packageDirectory = join(root, 'node_modules', path);
+      await mkdir(packageDirectory, {recursive: true});
+      await writeFile(join(packageDirectory, 'package.json'), JSON.stringify({name, version}));
+    }
+    await writeFile(wrapper, '#!/bin/sh\nexit 0\n');
+    await assert.rejects(validateRuntime({runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserTargetExecutable: browser, ffmpegExecutable: ffmpeg, ffprobeExecutable: ffprobe}), {code: 'RUNTIME_LAUNCHER_MISMATCH'});
   } finally {
     await rm(root, {force: true, recursive: true});
   }
@@ -96,7 +127,7 @@ test('runtime preflight failure writes a failed receipt before project staging o
   try {
     const value = request();
     value.stageDirectory = root;
-    value.runtime = {runtimeRoot: join(root, 'missing'), nodeVersion: runtimeProfile.nodeVersion, browserExecutable: join(root, 'browser'), ffmpegExecutable: join(root, 'ffmpeg'), ffprobeExecutable: join(root, 'ffprobe')};
+    value.runtime = {runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserTargetExecutable: join(root, 'browser'), ffmpegExecutable: join(root, 'ffmpeg'), ffprobeExecutable: join(root, 'ffprobe')};
     await assert.rejects(runAttempt(value), {code: 'RUNTIME_PACKAGE_UNAVAILABLE'});
     const receipt = JSON.parse(await readFile(join(root, 'attempt-receipt.json'), 'utf8'));
     assert.equal(receipt.outcome, 'failed');
