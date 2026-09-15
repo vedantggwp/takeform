@@ -83,13 +83,13 @@ private struct ContentView: View {
                 Spacer()
                 Text(identity.developmentVersion)
                     .font(.callout.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary.opacity(0.72))
                     .accessibilityLabel("Development version \(identity.developmentVersion)")
             }
 
             Text("Native development foundation")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary.opacity(0.72))
 
             GroupBox("Available in this build") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -135,7 +135,7 @@ private struct SettingsView: View {
 
                 Text("Appearance is the only application preference available in this development foundation.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary.opacity(0.72))
             }
             .padding()
             .tabItem { Label("General", systemImage: "gearshape") }
