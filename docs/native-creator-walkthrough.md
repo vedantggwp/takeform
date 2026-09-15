@@ -8,8 +8,9 @@ The job has read-only repository permission, an eight-minute job cap, and a
 180-second owned XCTest process cap. It uploads only facts, the xcodebuild log,
 the xcresult, and XCTest attachments for three days.
 
-Every run uses a fresh runner-temporary root. The test generates one 8×4 PNG
-there, then uses the app's actual New Channel Save panel, Open Project panel,
+Every run uses a fresh runner-temporary root. The test target directly reuses
+the cleared public media fixture builder for an 8×4 PNG, a VFR MOV, and a mono
+AIFF, then uses the app's actual New Channel Save panel, Open Project panel,
 and Import footage panel. It never injects a project document, calls
 `ProjectAuthority` directly, changes host preferences, or uses personal media.
 
@@ -27,3 +28,8 @@ Each transition keeps a real screenshot and AX hierarchy attachment. The probe
 makes no renderer, preview-export, or media-acceptance claim. Render completion
 remains outside this suite until the reviewed renderer service adapter is in the
 copied bundle.
+
+The first run does not claim drag-and-drop or an in-flight cancellation outcome:
+public XCTest has no file-provider/pasteboard injection route for the native
+drop target, so those need a separately reviewed real-input plan rather than a
+synthetic success. The picker route covers image, video, and audio inspection.
