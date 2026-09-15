@@ -25,19 +25,12 @@ The command emits JSON. It does not print executable or runtime paths. Errors co
 | `@hyperframes/producer` | `0.8.39` | `sha512-11MQVmQbk3zL3pfY+1SufDpMAct1CHfufi4YY7KrRY4FCkW/lLsW7pqRhxNFPEJRLoID32857CRL4aW6QyHOsw==` | [HyperFrames producer](https://github.com/heygen-com/hyperframes/tree/main/packages/producer) | npm metadata has no licence field. [Repository licence](https://github.com/heygen-com/hyperframes/blob/main/LICENSE). |
 | `@hyperframes/engine` | `0.8.39` | `sha512-rRfqNi0m3HQW4xZ3YlD/PbeLi4o8kCFoXo5CM8rcUli7ooWRzs8gj3OmGQtaqayojbNC0haDWQ4CC+6OkmrtsQ==` | [HyperFrames engine](https://github.com/heygen-com/hyperframes/tree/main/packages/engine) | [Apache-2.0 package licence](https://github.com/heygen-com/hyperframes/blob/main/packages/engine/LICENSE). |
 | `@hyperframes/player` | `0.8.39` | `sha512-sI0DwgEvf+hr78QRIUv9TKF7AoLGUQPJSqkbKkYiCjv5LfvkFrqhPThOt0re49WDwOnPsW67ZJZO+QafT4Md+w==` | [HyperFrames player](https://github.com/heygen-com/hyperframes/tree/main/packages/player) | npm metadata has no licence field. [Repository licence](https://github.com/heygen-com/hyperframes/blob/main/LICENSE). |
-| `gsap` | `3.12.5` | `sha512-srBfnk4n+Oe/ZnMIOXt3gT605BX9x5+rh/prT2F1SsNJsU1XuMiP0E2aptW481OnonOGACZWBqseH5Z7csHxhQ==` | [GSAP 3.12.5 npm metadata](https://registry.npmjs.org/gsap/3.12.5) | [Standard no-charge licence](https://gsap.com/standard-license/), not MIT. |
 | `remotion` | `4.0.524` | `sha512-jtoQbO7+UD7/4gcl0Onjq/Q27DP3qjI9hRimJJGuvU9p6OekY+Oyn1wNjYxG+hGH4i6InDFneN3sazFLuSF4Og==` | [Remotion core](https://github.com/remotion-dev/remotion/tree/main/packages/core) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 | `@remotion/renderer` | `4.0.524` | `sha512-0Rw/nsVu3OlPg11obmSm9ivLHAFYdZfpPxWFprHYWSeC82cLS4zEGdgy5tWUtuvQvaQ1MMohMhAzSEpqmsLgSQ==` | [Remotion renderer](https://github.com/remotion-dev/remotion/tree/main/packages/renderer) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 | `@remotion/bundler` | `4.0.524` | `sha512-xEx5ql0R00tadUUWduma/haiRNJzu30UmG8LMUpUW7bdCcO8KeRqq41I/BRn4PqStUGbpi7/zkTA6kZ8yzUIHA==` | [Remotion bundler](https://github.com/remotion-dev/remotion/tree/main/packages/bundler) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 | `@remotion/player` | `4.0.524` | `sha512-MPaV64VKX4RFNFlEkoq7kKJKV6BfpSRdCAUKcjx6lVnF1VsSeb+wZKFGb3KvB8CzHYFkUM3RvhUi0JCxhnUmmA==` | [Remotion player](https://github.com/remotion-dev/remotion/tree/main/packages/player) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 
 `react` and `react-dom` are both pinned to `18.2.0`. The committed lockfile records their registry integrities.
-
-## HyperFrames player dependency proposal
-
-`gsap@3.12.5` is pinned for the documented HyperFrames core `0.8.39` browser-composition contract: a composition registers a paused `gsap.timeline()` in `window.__timelines`. A future, explicitly granted player bundle will copy its local `dist/gsap.min.js` beside the exact nested `@hyperframes/player/node_modules/@hyperframes/core@0.8.39` runtime. It will not load GSAP or the core runtime from a CDN, and it will not use the generic engine `window.__hf` contract as a player substitute.
-
-This change updates only this workspace's manifest and lockfile. It neither installs `gsap` into the shared runtime nor creates a player bundle. A dependency review must accept the licence and pinned tarball before an install or bundle build.
 
 The registry metadata identifies the two upstream repositories and package directories. It does not include a `gitHead` or an attestation tying the published tarballs to HyperFrames `d13a89b6707203a2efe2cfcd4e996e0ad0aa4573` or Remotion `9ca46edd6417b56cb10ae552f7a17027651d764c`. Package identity with those reviewed commits is unverified.
 
