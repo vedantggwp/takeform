@@ -47,3 +47,9 @@ grep -Eq 'presentedSystemPanel\(in: app' "$TEST_SOURCE"
 grep -Eq 'app\.windows\["save-panel"\]' "$TEST_SOURCE"
 grep -Eq 'saveConfirmation\.exists, saveConfirmation\.isHittable' "$TEST_SOURCE"
 grep -Eq 'action\.exists, action\.isHittable' "$TEST_SOURCE"
+grep -Eq 'textFields\["PathTextField"\]' "$TEST_SOURCE"
+grep -Eq 'presentedSystemPanel\(in: app, confirmation: confirmation, named: "\\\(named\)-confirmation"\)' "$TEST_SOURCE"
+if grep -Eq 'textFields\.firstMatch' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not use an ambiguous system-panel text field" >&2
+  exit 1
+fi

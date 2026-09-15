@@ -195,14 +195,29 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         attach(app.debugDescription, named: "\(named)-ax")
         capture(panel, named: named)
         panel.typeKey("g", modifierFlags: [.command, .shift])
-        let folderField = panel.textFields.firstMatch
+        // macOS exposes the initial Save As field first, but after Cmd-Shift-G
+        // the observed, focused Go to Folder field is `PathTextField`.
+        let folderField = panel.textFields["PathTextField"]
         XCTAssertTrue(folderField.waitForExistence(timeout: 5), "System panel did not expose its Go to Folder field")
+        XCTAssertTrue(waitForHittable(folderField, timeout: 5), "System panel did not make its Go to Folder field ready")
         folderField.click()
         folderField.typeText(path.path)
         panel.typeKey(.return, modifierFlags: [])
-        let confirmationButton = panel.buttons[confirmation]
+        // Go to Folder closes its transient input, so re-resolve the visible
+        // app-owned panel before confirming the path.
+        let confirmationPanel = try presentedSystemPanel(in: app, confirmation: confirmation, named: "\(named)-confirmation")
+        let confirmationButton = confirmationPanel.buttons[confirmation]
         XCTAssertTrue(confirmationButton.waitForExistence(timeout: 5), "System panel did not expose \(confirmation)")
+        XCTAssertTrue(waitForHittable(confirmationButton, timeout: 5), "System panel did not make \(confirmation) ready")
         confirmationButton.click()
+    }
+
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in element.exists && element.isHittable },
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     /// This test target intentionally has no configured Target Application: it
