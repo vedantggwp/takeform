@@ -126,6 +126,30 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
     public func cancelEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID = CommandID()) async throws -> EpisodeRenderRequestStatus { let r = try await request(.cancelRender(packageURL, jobID, operationID, try credential())); guard case let .renderStatus(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }
     public func materializeEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID = CommandID()) async throws -> EpisodeRenderMaterialization { let r = try await request(.materializeRender(packageURL, jobID, operationID, try credential())); guard case let .renderMaterialization(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }
     public func exportEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID = CommandID(), destination: URL, decision: EpisodeRenderExportDecision = .refuseExisting) async throws -> EpisodeRenderExportResult { let r = try await request(.exportRender(packageURL, jobID, operationID, destination, decision, try credential())); guard case let .renderExport(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }
+    public func playbackSource(packageURL: URL, jobID: UUID, operationID: CommandID = CommandID()) async throws -> EpisodeRenderPlaybackSource {
+        let response = try await request(.playbackSource(packageURL, jobID, operationID, try credential()))
+        guard case let .renderPlaybackSource(source) = response else {
+            if case let .failure(failure) = response { throw failure }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return source
+    }
+    public func configureRenderRuntime(packageURL: URL, selectors: RenderRuntimeSelectors, operationID: CommandID = CommandID()) async throws -> RenderRuntimeReadiness {
+        let response = try await request(.configureRenderRuntime(packageURL, selectors, operationID, try credential()))
+        guard case let .renderRuntimeReadiness(readiness) = response else {
+            if case let .failure(failure) = response { throw failure }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return readiness
+    }
+    public func renderRuntimeReadiness(packageURL: URL) async throws -> RenderRuntimeReadiness {
+        let response = try await request(.renderRuntimeReadiness(packageURL, try credential()))
+        guard case let .renderRuntimeReadiness(readiness) = response else {
+            if case let .failure(failure) = response { throw failure }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return readiness
+    }
     public func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws {
         let r = try await request(.pair(packageURL, label, expiresAt, try credential()))
         guard case let .pairing(id, raw) = r else { throw WorkspaceFailure.authorityUnavailable }
