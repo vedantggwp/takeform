@@ -5,12 +5,14 @@ runner can start Apple's macOS UI-test runner, launch a copied F1 bundle,
 read its accessibility tree and retain a screenshot of the actual window. It
 does not accept F1, F3, distribution, rendering, media, or local-Mac behavior.
 
-The probe commit contains CI tooling, not F1 product work. Its F1 production
-sources, `Package.swift`, design assets, and dev-bundle script are verified
-unchanged from F1 `63fc27ecbceec5c536983f749f4ef91fd9802a8a`; the copied app is
-therefore source-equivalent to that F1 revision. The probe input SHA identifies
-the reviewed tooling head. A successful probe can inform the F1 native gate,
-but it does not complete any remaining F1 native case.
+The original capability-probe commits contain CI tooling atop F1
+`63fc27ecbceec5c536983f749f4ef91fd9802a8a`. The full F1 harness also merges
+the separately reviewed product fix `6b1cebdbc026a1a93d6e9fe23c356dc2050da042`,
+which adds the title's accessible name. Aside from that single product line,
+`Package.swift`, design assets, dev-bundle script, and F1 production source are
+unchanged from F1. The probe input SHA identifies the reviewed combined
+product-and-tooling head. A successful probe can inform the F1 native gate, but
+it does not complete any remaining F1 native case.
 
 The job is opt-in only: root can dispatch it manually after merge with the full
 reviewed commit SHA, or a maintainer can apply the exact
@@ -36,13 +38,12 @@ identifier, and the visible `Native development foundation` text. It stores an
 
 The full F1 probe keeps those ready sentinels and checks native menu About,
 Settings through its button and Command-Comma shortcut, coordinate-driven
-window resizing, default-light and process-local dark appearance, native menu
+window resizing, process-local Light and Dark appearance, native menu
 and control reachability, and terminate/relaunch behavior. The warm-ready
 measurement starts immediately before the copied bundle's second `launch()` and
 ends only after the window, title and foundation sentinels are all present. It
 retains raw monotonic timestamps as an XCTest attachment and enforces the
-three-second F1 bound. Appearance uses the per-process `-AppleInterfaceStyle
-Dark` argument; it never changes the runner's System Settings.
+three-second F1 bound. Appearance uses per-process `-AppleInterfaceStyle Light` and `-AppleInterfaceStyle Dark` arguments; it never changes the runner's System Settings.
 
 The launcher passes the copied-app path only to the XCTest runner as
 `TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test

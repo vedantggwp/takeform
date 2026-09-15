@@ -29,7 +29,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         XCTAssertTrue(about.waitForExistence(timeout: 5))
         about.click()
 
-        let aboutWindow = app.windows.element(boundBy: 1)
+        let aboutWindow = app.windows.matching(NSPredicate(format: "title == %@", "About Takeform")).firstMatch
         XCTAssertTrue(aboutWindow.waitForExistence(timeout: 5), "Native About window did not appear")
         XCTAssertTrue(aboutWindow.staticTexts["Takeform"].exists)
         XCTAssertTrue(
@@ -38,7 +38,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         )
         capture(app, named: "f1-04-about")
         app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDisappearance(of: aboutWindow, timeout: 5), "Native About window did not dismiss")
+        XCTAssertTrue(app.windows.firstMatch.isHittable)
     }
 
     func testSettingsButtonAndKeyboardReturnToMainWindow() throws {
@@ -74,6 +75,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let narrower = leftEdge.withOffset(CGVector(dx: 180, dy: 0))
         leftEdge.press(forDuration: 0.2, thenDragTo: narrower)
 
+        XCTAssertTrue(waitForNarrowerFrame(of: window, than: before, timeout: 5), "Window frame did not change after the native edge drag")
         let after = window.frame
         XCTAssertLessThan(after.width, before.width - 40)
         XCTAssertGreaterThanOrEqual(after.width, 720)
@@ -85,7 +87,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     func testLightAndDarkAppearanceRemainLegible() throws {
-        let light = try launchReady()
+        let light = try launchReady(arguments: ["-AppleInterfaceStyle", "Light"])
         let lightShot = capture(light, named: "f1-07-light")
         let lightLuminance = try sampledLuminance(lightShot)
         light.terminate()
@@ -150,8 +152,11 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     private func closeSettings(in app: XCUIApplication) {
+        let settingsMarker = app.staticTexts["No application preferences are available in this development foundation."]
         app.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts[foundationText].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForDisappearance(of: settingsMarker, timeout: 5), "Settings surface did not close")
+        XCTAssertTrue(app.staticTexts[foundationText].isHittable)
+        XCTAssertTrue(app.buttons["open-settings"].isHittable)
     }
 
     @discardableResult
@@ -177,6 +182,19 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let y = Int(CGFloat(bitmap.pixelsHigh) * 0.55)
         let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
         return (0.2126 * color.redComponent) + (0.7152 * color.greenComponent) + (0.0722 * color.blueComponent)
+    }
+
+    private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForNarrowerFrame(of window: XCUIElement, than before: CGRect, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate { _, _ in
+            window.frame.width < before.width - 40
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: window)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func copiedAppURL() throws -> URL {
