@@ -1,5 +1,4 @@
 import AppKit
-import Darwin
 import XCTest
 
 /// Exercises only the copied app's public creator controls. Test input files
@@ -107,10 +106,9 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         record(app, named: "creator-cli-revoked")
     }
 
-    func testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen() async throws {
+    func testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen() throws {
         let projectURL = try runnerRoot().appendingPathComponent("original.takeform", isDirectory: true)
         let copiedURL = try runnerRoot().appendingPathComponent("copied.takeform", isDirectory: true)
-        await recordCopiedExecutableDiagnosticControl()
         let app = try launchApp()
         defer { finish(app, named: "creator-rebind-final") }
         try createChannel(in: app, named: "Move me", projectURL: projectURL)
@@ -231,118 +229,6 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         return (process.terminationStatus, String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
     }
 
-    /// This is a CI-only process control. It intentionally does not make any
-    /// UI claim: the following `XCUIApplication(url:)` launch remains the
-    /// only native acceptance route. Its purpose is to distinguish a copied
-    /// executable that exits immediately from an XCUI launch failure that
-    /// never yields an observable application process.
-    private func recordCopiedExecutableDiagnosticControl() async {
-        let appURL: URL
-        do {
-            appURL = try copiedAppURL()
-        } catch {
-            attach("configurationError: \(error)", named: "creator-direct-executable-control")
-            return
-        }
-
-        let executable = appURL.appendingPathComponent("Contents/MacOS/Takeform")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            attach("configurationError: copied executable is not executable\nexecutable: \(executable.path)", named: "creator-direct-executable-control")
-            return
-        }
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let stdoutCollector = BoundedProcessOutputCollector(limit: 32 * 1024)
-        let stderrCollector = BoundedProcessOutputCollector(limit: 32 * 1024)
-        stdoutCollector.read(from: stdout.fileHandleForReading)
-        stderrCollector.read(from: stderr.fileHandleForReading)
-
-        let process = Process()
-        process.executableURL = executable
-        process.currentDirectoryURL = executable.deletingLastPathComponent()
-        process.environment = diagnosticChildEnvironment()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        let startedAt = Date()
-        do {
-            try process.run()
-        } catch {
-            stdoutCollector.finish(stdout.fileHandleForReading)
-            stderrCollector.finish(stderr.fileHandleForReading)
-            attach(
-                """
-                childSpawnError: \(error)
-                copiedBundle: \(appURL.path)
-                executable: \(executable.path)
-                workingDirectory: \(executable.deletingLastPathComponent().path)
-                environmentKeys: \(diagnosticChildEnvironment().keys.sorted().joined(separator: ","))
-                """,
-                named: "creator-direct-executable-control"
-            )
-            attach(stdoutCollector.rendered(), named: "creator-direct-executable-stdout")
-            attach(stderrCollector.rendered(), named: "creator-direct-executable-stderr")
-            return
-        }
-
-        let processID = process.processIdentifier
-        let observationDeadline = Date().addingTimeInterval(5)
-        while process.isRunning && Date() < observationDeadline {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
-        let observedAliveAtFiveSeconds = process.isRunning
-        var sentTERM = false
-        var sentKILL = false
-        if process.isRunning {
-            sentTERM = true
-            process.terminate()
-            let terminationDeadline = Date().addingTimeInterval(2)
-            while process.isRunning && Date() < terminationDeadline {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-            if process.isRunning {
-                sentKILL = Darwin.kill(processID, SIGKILL) == 0
-            }
-        }
-        process.waitUntilExit()
-        stdoutCollector.finish(stdout.fileHandleForReading)
-        stderrCollector.finish(stderr.fileHandleForReading)
-
-        let endedAt = Date()
-        let result = """
-        diagnosticOnly: true
-        copiedBundle: \(appURL.path)
-        executable: \(executable.path)
-        workingDirectory: \(executable.deletingLastPathComponent().path)
-        environmentKeys: \(diagnosticChildEnvironment().keys.sorted().joined(separator: ","))
-        pid: \(processID)
-        startedAt: \(startedAt.timeIntervalSince1970)
-        observedAliveAtFiveSeconds: \(observedAliveAtFiveSeconds)
-        sentTERM: \(sentTERM)
-        sentKILL: \(sentKILL)
-        endedAt: \(endedAt.timeIntervalSince1970)
-        terminationReason: \(process.terminationReason.rawValue)
-        terminationStatus: \(process.terminationStatus)
-        stdoutRetainedBytes: \(stdoutCollector.snapshot.retained.count)
-        stdoutDiscardedBytes: \(stdoutCollector.snapshot.discardedByteCount)
-        stderrRetainedBytes: \(stderrCollector.snapshot.retained.count)
-        stderrDiscardedBytes: \(stderrCollector.snapshot.discardedByteCount)
-        """
-        attach(result, named: "creator-direct-executable-control")
-        attach(stdoutCollector.rendered(), named: "creator-direct-executable-stdout")
-        attach(stderrCollector.rendered(), named: "creator-direct-executable-stderr")
-    }
-
-    private func diagnosticChildEnvironment() -> [String: String] {
-        [
-            "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "TMPDIR": NSTemporaryDirectory(),
-            "USER": NSUserName()
-        ]
-    }
-
     private func copiedAppURL() throws -> URL {
         guard let path = ProcessInfo.processInfo.environment[appPathKey] else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 3) }
         return URL(fileURLWithPath: path, isDirectory: true)
@@ -370,59 +256,5 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         attachment.name = named
         attachment.lifetime = .keepAlways
         add(attachment)
-    }
-}
-
-private final class BoundedProcessOutputCollector: @unchecked Sendable {
-    struct Snapshot: Sendable {
-        let retained: Data
-        let discardedByteCount: Int
-    }
-
-    private let limit: Int
-    private let lock = NSLock()
-    private var retained = Data()
-    private var discardedByteCount = 0
-
-    init(limit: Int) {
-        self.limit = limit
-    }
-
-    var snapshot: Snapshot {
-        lock.lock()
-        defer { lock.unlock() }
-        return Snapshot(retained: retained, discardedByteCount: discardedByteCount)
-    }
-
-    func read(from handle: FileHandle) {
-        handle.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else {
-                handle.readabilityHandler = nil
-                return
-            }
-            self?.append(data)
-        }
-    }
-
-    func finish(_ handle: FileHandle) {
-        handle.readabilityHandler = nil
-        append(handle.readDataToEndOfFile())
-        try? handle.close()
-    }
-
-    func rendered() -> String {
-        let snapshot = snapshot
-        let payload = String(data: snapshot.retained, encoding: .utf8) ?? snapshot.retained.base64EncodedString()
-        return "retainedBytes: \(snapshot.retained.count)\ndiscardedBytes: \(snapshot.discardedByteCount)\n\(payload)"
-    }
-
-    private func append(_ data: Data) {
-        lock.lock()
-        defer { lock.unlock() }
-        let capacity = max(0, limit - retained.count)
-        let retainedCount = min(capacity, data.count)
-        retained.append(data.prefix(retainedCount))
-        discardedByteCount += data.count - retainedCount
     }
 }
