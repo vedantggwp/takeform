@@ -41,6 +41,11 @@ final class EpisodeCompositionEditorState: ObservableObject {
         var cropY: Double
         var cropWidth: Double
         var cropHeight: Double
+        /// Normalized destination position, with a top-left canvas origin.
+        var positionX: Double
+        var positionY: Double
+        var positionWidth: Double
+        var positionHeight: Double
     }
 
     struct Caption: Identifiable, Equatable {
@@ -84,7 +89,11 @@ final class EpisodeCompositionEditorState: ObservableObject {
                         cropX: Self.seconds(occurrence.crop.x),
                         cropY: Self.seconds(occurrence.crop.y),
                         cropWidth: Self.seconds(occurrence.crop.width),
-                        cropHeight: Self.seconds(occurrence.crop.height)
+                        cropHeight: Self.seconds(occurrence.crop.height),
+                        positionX: Self.seconds(occurrence.outputRect.x),
+                        positionY: Self.seconds(occurrence.outputRect.y),
+                        positionWidth: Self.seconds(occurrence.outputRect.width),
+                        positionHeight: Self.seconds(occurrence.outputRect.height)
                     )
                 }
                 captions = composition.captions.map {
@@ -124,7 +133,11 @@ final class EpisodeCompositionEditorState: ObservableObject {
                     cropX: 0,
                     cropY: 0,
                     cropWidth: 1,
-                    cropHeight: 1
+                    cropHeight: 1,
+                    positionX: 0,
+                    positionY: 0,
+                    positionWidth: 1,
+                    positionHeight: 1
                 )
             )
         }
@@ -157,13 +170,14 @@ final class EpisodeCompositionEditorState: ObservableObject {
             let occurrences = try clips.map { clip in
                 let outputRange = try Self.range(start: clip.outputStart, duration: clip.outputDuration)
                 let crop = try Self.crop(x: clip.cropX, y: clip.cropY, width: clip.cropWidth, height: clip.cropHeight)
+                let outputRect = try Self.outputRect(x: clip.positionX, y: clip.positionY, width: clip.positionWidth, height: clip.positionHeight)
                 let source: CompositionSource
                 if clip.mediaType == "video" {
                     source = .video(try Self.range(start: clip.sourceStart, duration: clip.sourceDuration))
                 } else {
                     source = .still
                 }
-                return CompositionOccurrence(id: clip.id, assetID: clip.assetID, assetDigest: clip.assetDigest, source: source, outputRange: outputRange, layer: clip.layer, order: clip.order, crop: crop)
+                return CompositionOccurrence(id: clip.id, assetID: clip.assetID, assetDigest: clip.assetDigest, source: source, outputRange: outputRange, layer: clip.layer, order: clip.order, crop: crop, outputRect: outputRect)
             }
             let cues = try captions.map {
                 CompositionCaption(id: $0.id, text: $0.text, outputRange: try Self.range(start: $0.outputStart, duration: $0.outputDuration), layer: $0.layer, order: $0.order)
@@ -213,18 +227,25 @@ final class EpisodeCompositionEditorState: ObservableObject {
             guard let x = time(x), let y = time(y), let width = time(width), let height = time(height) else { throw CompositionEditorFailure.invalidCrop }
             return CompositionCrop(x: x, y: y, width: width, height: height)
         }
+
+        private static func outputRect(x: Double, y: Double, width: Double, height: Double) throws -> CompositionOutputRect {
+            guard let x = time(x), let y = time(y), let width = time(width), let height = time(height) else { throw CompositionEditorFailure.invalidPosition }
+            return CompositionOutputRect(x: x, y: y, width: width, height: height)
+        }
     }
 
     enum CompositionEditorFailure: LocalizedError {
         case invalidDuration
         case invalidTime
         case invalidCrop
+        case invalidPosition
 
         var errorDescription: String? {
             switch self {
             case .invalidDuration: "Enter a finite output duration in seconds."
             case .invalidTime: "Enter finite clip and caption times in seconds."
-            case .invalidCrop: "Enter finite crop and position values."
+            case .invalidCrop: "Enter finite normalized crop values."
+            case .invalidPosition: "Enter finite normalized position values."
             }
         }
     }
@@ -318,13 +339,16 @@ final class EpisodeCompositionEditorState: ObservableObject {
             model.submit(.replaceEpisodeComposition(episodeID: episode.id, composition: composition)) { [weak self] completion in
                 self?.receive(completion, for: context, packageURL: packageURL, episode: episode)
             }
+        } catch let failure as CompositionValidationFailure {
+            message = validationMessage(for: failure)
+            needsResolution = true
         } catch {
             message = error.localizedDescription
             needsResolution = true
         }
     }
 
-    private func receive(_ completion: WorkspaceCommandCompletion, for request: Context, packageURL: URL, episode: Episode) {
+    func receive(_ completion: WorkspaceCommandCompletion, for request: Context, packageURL: URL, episode: Episode) {
         guard context?.packageURL == request.packageURL, context?.episodeID == request.episodeID else { return }
         isSaving = false
         switch completion {
@@ -351,6 +375,25 @@ final class EpisodeCompositionEditorState: ObservableObject {
         needsResolution = false
         isSaving = false
         message = nil
+    }
+
+    private func validationMessage(for failure: CompositionValidationFailure) -> String {
+        switch failure {
+        case .invalidRange, .rangeOutsideOutput:
+            "Check clip and caption times. Each range must have a positive length and fit the episode output."
+        case .rangeOutsideSource:
+            "Check the clip source range. It must fit the selected video's measured duration."
+        case .invalidCrop:
+            "Check the crop. Its normalized X, Y, width, and height must stay inside the source image."
+        case .invalidOutputRect:
+            "Check the position. Its normalized X, Y, width, and height must stay inside the composition canvas."
+        case .sameLayerOverlap:
+            "Clips on the same layer cannot overlap. Move one clip or place it on another layer."
+        case .emptyCaption:
+            "Enter caption text or remove the empty caption."
+        default:
+            "The composition has invalid values. Review the highlighted clip or caption and try again."
+        }
     }
 }
 
@@ -521,6 +564,11 @@ private struct ClipEditorRow: View {
                     cropFields
                     EmptyView()
                 }
+                GridRow {
+                    Text("Position")
+                    positionFields
+                    EmptyView()
+                }
             }
         }
         .padding(.vertical, 6)
@@ -533,6 +581,16 @@ private struct ClipEditorRow: View {
             labeledField("W", value: $clip.cropWidth, identifier: "composition-clip-\(clip.id.uuidString)-crop-width")
             labeledField("H", value: $clip.cropHeight, identifier: "composition-clip-\(clip.id.uuidString)-crop-height")
         }
+    }
+
+    private var positionFields: some View {
+        HStack(spacing: 8) {
+            labeledField("X", value: $clip.positionX, identifier: "composition-clip-\(clip.id.uuidString)-position-x")
+            labeledField("Y", value: $clip.positionY, identifier: "composition-clip-\(clip.id.uuidString)-position-y")
+            labeledField("W", value: $clip.positionWidth, identifier: "composition-clip-\(clip.id.uuidString)-position-width")
+            labeledField("H", value: $clip.positionHeight, identifier: "composition-clip-\(clip.id.uuidString)-position-height")
+        }
+        .accessibilityLabel("Position from top left")
     }
 
     private func secondsField(_ label: String, value: Binding<Double>, identifier: String) -> some View {
