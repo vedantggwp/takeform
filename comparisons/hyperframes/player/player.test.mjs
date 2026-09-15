@@ -42,7 +42,9 @@ test('M Player bundle uses pinned local runtime, frameState media, and the appro
   assert.ok(state.occurrenceIds.includes('oClip2997'));
   assert.match(index, /requested frame was not painted/);
   assert.match(index, /inactiveLayerHidden/);
-  assert.match(index, /window\.takeformPreviewCommand/);
+  assert.match(index, /let commandTail=Promise\.resolve\(\)/);
+  assert.match(index, /function serialize\(command\)/);
+  assert.match(index, /takeformPreviewCommand=command=>serialize/);
   assert.match(index, /return respond\(command,'painted'\)/);
   assert.match(notices, /@hyperframes\/player.*0\.8\.39/s);
   assert.match(notices, /@hyperframes\/core.*0\.8\.39/s);
