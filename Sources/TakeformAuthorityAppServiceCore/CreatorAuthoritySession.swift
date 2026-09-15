@@ -8,10 +8,12 @@ import TakeformWorkspace
 /// Exists only in the app-service target. The shipping CLI has no dependency on this target or the engine.
 public enum CreatorAuthorityService {
     public enum PeerRole: Sendable { case app, cli }
+    private static let importLock = NSLock()
+    private nonisolated(unsafe) static var cancelledImports = Set<UUID>()
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .create), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
+        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
         default: false
         }
     }
@@ -30,6 +32,16 @@ public enum CreatorAuthorityService {
 
     public static func handle(_ request: AppAuthorityRequest) throws -> AppAuthorityResponse {
         switch request {
+        case let .importMedia(url, sources, operationID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            beginImport(operationID)
+            defer { finishImport(operationID) }
+            return .importOutcomes(try authority.importManagedSources(sources, credential: String(decoding: credential, as: UTF8.self), shouldCancel: { isCancelled(operationID) }))
+        case let .cancelImport(url, operationID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            _ = try authority.openForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self), rebindMovedPackage: false)
+            cancelImport(operationID)
+            return .success
         case let .open(url, rebind, credential):
             let authority = try ProjectAuthority(packageURL: url)
             let opened = try authority.openForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self), rebindMovedPackage: rebind)
@@ -57,7 +69,22 @@ public enum CreatorAuthorityService {
         }
     }
 
+    // A cancellation can reach the listener before the copy request. Keep that
+    // marker so the first copy boundary observes it instead of racing it away.
+    private static func beginImport(_ id: UUID) {}
+    private static func finishImport(_ id: UUID) { importLock.lock(); cancelledImports.remove(id); importLock.unlock() }
+    private static func cancelImport(_ id: UUID) { importLock.lock(); cancelledImports.insert(id); importLock.unlock() }
+    private static func isCancelled(_ id: UUID) -> Bool { importLock.lock(); defer { importLock.unlock() }; return cancelledImports.contains(id) }
+
     public static func workspaceFailure(_ error: Error) -> WorkspaceFailure {
+        if let failure = error as? ManagedImport.Failure {
+            switch failure {
+            case .invalidSource: return .rejected("Choose a readable regular file")
+            case .sourceChanged: return .rejected("The source changed while it was copied; no media was added")
+            case .objectCollision: return .rejected("An existing managed object does not match its digest")
+            case .durability: return .rejected("Takeform could not durably promote this media")
+            }
+        }
         guard let error = error as? AuthorityFailure else { return .authorityUnavailable }
         switch error {
         case .copyDecisionRequired: return .copyDecisionRequired

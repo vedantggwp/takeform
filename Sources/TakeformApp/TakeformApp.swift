@@ -1,5 +1,7 @@
 import AppKit
+import AVFoundation
 import SwiftUI
+import UniformTypeIdentifiers
 import TakeformCore
 import TakeformSupport
 import TakeformWorkspace
@@ -7,6 +9,13 @@ import TakeformAppAuthorityWire
 import TakeformAppServiceClient
 
 private let authorityClient = AppAuthorityServiceClient()
+
+private final class DroppedURLs: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [URL] = []
+    func append(_ url: URL) { lock.lock(); values.append(url); lock.unlock() }
+    func snapshot() -> [URL] { lock.lock(); defer { lock.unlock() }; return values }
+}
 
 final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -74,6 +83,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedGrantID: UUID?
 
     private let client: any WorkspaceClient
+    private var importTask: Task<Void, Never>?
 
     init(client: any WorkspaceClient) { self.client = client }
 
@@ -116,6 +126,52 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func beginNewChannel() { showNewChannel = true }
+
+    func chooseMedia() {
+        guard let packageURL else { error = .rejected("Open a project before importing media"); return }
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
+        panel.message = "Choose footage to copy into this Takeform project"; panel.prompt = "Import footage"
+        panel.begin { [weak self] response in
+            guard response == .OK else { self?.status = "Media import cancelled."; return }
+            self?.importMedia(panel.urls, into: packageURL)
+        }
+    }
+
+    func importDroppedMedia(_ urls: [URL]) {
+        guard let packageURL else { error = .rejected("Open a project before importing media"); return }
+        importMedia(urls, into: packageURL)
+    }
+
+    func cancelMediaImport() {
+        importTask?.cancel()
+        status = "Cancelling media import after the current file boundary…"
+    }
+
+    private func importMedia(_ urls: [URL], into packageURL: URL) {
+        guard !urls.isEmpty else { return }
+        importTask?.cancel()
+        importTask = Task { [weak self] in
+            guard let self else { return }
+            self.isWorking = true
+            defer { self.isWorking = false; self.importTask = nil }
+            do {
+                let outcomes = try await self.client.importMedia(packageURL: packageURL, sources: urls)
+                if Task.isCancelled { self.status = "Media import cancelled."; return }
+                self.status = outcomes.map(Self.importMessage).joined(separator: "\n")
+                self.snapshot = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
+            } catch let failure as WorkspaceFailure { self.error = failure; self.status = failure.errorDescription ?? "Import failed." }
+            catch { self.status = "Import failed without committing incomplete media." }
+        }
+    }
+
+    private static func importMessage(_ outcome: ManagedImportOutcome) -> String {
+        switch outcome {
+        case .imported(let asset): "Imported \(asset.filename) · \(asset.byteLength) bytes"
+        case .duplicate(_, let filename): "Already managed: \(filename)"
+        case .cancelled(let filename): "Cancelled \(filename)"
+        case .failed(let filename, let reason): "Failed \(filename): \(reason)"
+        }
+    }
 
     func createChannel(name: String, initialRecipe: [String: String]) {
         let panel = NSSavePanel()
@@ -252,6 +308,7 @@ private struct WorkspaceView: View {
                             Button("Undo") { model.submit(.undo) }
                             Button("Redo") { model.submit(.redo) }
                         }
+                        Button("Import footage…") { model.chooseMedia() }
                     }
                     GroupBox("Recipes") {
                         VStack(alignment: .leading, spacing: 10) {
@@ -278,9 +335,40 @@ private struct WorkspaceView: View {
                             }.disabled(document.recipes.isEmpty || episodeName.isEmpty)
                         }
                     }
+                    GroupBox("Managed media") {
+                        if document.assets.isEmpty { Text("No managed media yet. Imported originals are copied into this project unchanged.").foregroundStyle(.secondary) }
+                        ForEach(document.assets) { asset in
+                            HStack(alignment: .top, spacing: 12) {
+                                ManagedAssetPreview(asset: asset, packageURL: model.packageURL)
+                                VStack(alignment: .leading) {
+                                    Text(asset.filename)
+                                    Text("\(asset.mediaType) · \(asset.byteLength) bytes · \(asset.digest.prefix(12))").font(.caption.monospaced()).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        HStack {
+                            Button("Import footage…") { model.chooseMedia() }
+                            if model.isWorking { Button("Cancel import", role: .cancel) { model.cancelMediaImport() } }
+                        }
+                    }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
+                    let group = DispatchGroup()
+                    let urls = DroppedURLs()
+                    for provider in providers {
+                        group.enter()
+                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                            defer { group.leave() }
+                            guard let data = item as? Data,
+                                  let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                            urls.append(url)
+                        }
+                    }
+                    group.notify(queue: .main) { model.importDroppedMedia(urls.snapshot()) }
+                    return true
+                }
             }
         } else {
             ContentUnavailableView("Choose a project", systemImage: "folder.badge.plus", description: Text("Takeform opens projects through its authority. It does not infer an empty project from an error."))
@@ -371,6 +459,50 @@ private struct SettingsView: View {
     }
 }
 
+/// Preview only reads the immutable object derived from the catalog digest. It
+/// never follows an original source URL, which remains outside the package.
+private struct ManagedAssetPreview: View {
+    let asset: ManagedAsset
+    let packageURL: URL?
+    @State private var image: NSImage?
+    @State private var unsupported = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if unsupported {
+                Label("Preview unsupported", systemImage: "film")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .frame(width: 108, height: 72)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .task(id: asset.digest) { await loadPreview() }
+    }
+
+    @MainActor private func loadPreview() async {
+        guard let packageURL else { unsupported = true; return }
+        let object = packageURL.appendingPathComponent(".takeform/objects/\(asset.digest)")
+        if let image = NSImage(contentsOf: object) { self.image = image; return }
+        let media = AVURLAsset(url: object)
+        let generator = AVAssetImageGenerator(asset: media)
+        generator.appliesPreferredTrackTransform = true
+        do {
+            let frame = try await generator.image(at: .zero).image
+            image = NSImage(cgImage: frame, size: .zero)
+        } catch {
+            unsupported = true
+        }
+    }
+}
+
 
 private actor NativeAuthorityClient: WorkspaceClient {
     private var ownedService: Process?
@@ -379,6 +511,7 @@ private actor NativeAuthorityClient: WorkspaceClient {
         if ownedService?.isRunning == true { ownedService?.terminate() }
     }
     private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] { let r = try await request(.importMedia(packageURL, sources, UUID(), try credential())); if case let .importOutcomes(outcomes) = r { return outcomes }; throw WorkspaceFailure.authorityUnavailable }
     private func verifiedRequest(_ request: AppAuthorityRequest) throws -> AppAuthorityResponse {
         guard let service = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService") else { throw WorkspaceFailure.authorityUnavailable }
         return try AppAuthoritySocket.verifiedRequest(request, expectedService: service)

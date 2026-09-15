@@ -257,8 +257,10 @@ final class ProjectAuthorityTests: XCTestCase {
 
         let open = AppAuthorityRequest.open(package, true, Data("forged".utf8))
         let pair = AppAuthorityRequest.pair(package, "forged", .distantFuture, Data("forged".utf8))
+        let importRequest = AppAuthorityRequest.importMedia(package, [root.appendingPathComponent("forged.mov")], UUID(), Data("forged".utf8))
         guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: open, from: .cli) else { return XCTFail("CLI role routed creator open") }
         guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: pair, from: .cli) else { return XCTFail("CLI role routed creator pair") }
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: importRequest, from: .cli) else { return XCTFail("CLI role routed media import") }
         XCTAssertEqual(try Data(contentsOf: stateURL), bindingBefore)
         XCTAssertEqual(try Data(contentsOf: manifestURL), manifestBefore)
     }
@@ -347,6 +349,89 @@ final class ProjectAuthorityTests: XCTestCase {
         let corruptAuthority = try ProjectAuthority(packageURL: root.appendingPathComponent("Corrupt.takeform"))
         XCTAssertThrowsError(try corruptAuthority.open()) {
             XCTAssertEqual($0 as? AuthorityFailure, .corruptDatabase)
+        }
+    }
+
+    func testManagedImportServiceRouteCopiesDeduplicatesAndReopensWithoutChangingOriginal() throws {
+        let package = root.appendingPathComponent("Managed.takeform")
+        let source = root.appendingPathComponent("camera.mov")
+        let original = Data((0..<150_000).map { UInt8($0 % 251) })
+        try original.write(to: source)
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(initial.projectID)
+
+        let request = AppAuthorityRequest.importMedia(package, [source], UUID(), Data("creator".utf8))
+        guard case let .importOutcomes(first) = CreatorAuthorityService.respond(to: request, from: .app),
+              first.count == 1,
+              case let .imported(asset) = first[0] else { return XCTFail("import route did not return an asset") }
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(".takeform/objects/\(asset.digest)")), original)
+
+        guard case let .importOutcomes(second) = CreatorAuthorityService.respond(to: .importMedia(package, [source], UUID(), Data("creator".utf8)), from: .app),
+              second.count == 1,
+              case let .duplicate(digest, _) = second[0] else { return XCTFail("same bytes should deduplicate") }
+        XCTAssertEqual(digest, asset.digest)
+
+        let reopened = try ProjectAuthority(packageURL: package).open().document
+        XCTAssertEqual(reopened.assets, [asset])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/staging").appendingPathComponent("bytes").path))
+    }
+
+    func testManagedImportCancellationAndSourceChangeLeaveNoCatalogReference() throws {
+        let package = root.appendingPathComponent("Cancelled.takeform")
+        let source = root.appendingPathComponent("source.mov")
+        try Data(repeating: 0x31, count: 130_000).write(to: source)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+
+        let operationID = UUID()
+        guard case .success = CreatorAuthorityService.respond(to: .cancelImport(package, operationID, Data("creator".utf8)), from: .app) else {
+            return XCTFail("cancel route was not accepted")
+        }
+        guard case let .importOutcomes(cancelled) = CreatorAuthorityService.respond(to: .importMedia(package, [source], operationID, Data("creator".utf8)), from: .app) else {
+            return XCTFail("cancelled route did not reply")
+        }
+        XCTAssertEqual(cancelled, [.cancelled(filename: "source.mov")])
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/objects").path))
+
+        XCTAssertThrowsError(try ManagedImport.stageAndPromoteSync(source: source, package: package, afterChunk: { chunk in
+            guard chunk == 1 else { return }
+            try? Data(repeating: 0x32, count: 130_000).write(to: source)
+        })) { XCTAssertEqual($0 as? ManagedImport.Failure, .sourceChanged) }
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+        let staging = package.appendingPathComponent(".takeform/staging")
+        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: staging.path)) ?? [], [])
+    }
+
+    func testManagedImportCollisionPreservesExistingObjectAndMissingObjectIsVisibleOnReopen() throws {
+        let package = root.appendingPathComponent("Collision.takeform")
+        let source = root.appendingPathComponent("same.mov")
+        let bytes = Data(repeating: 0x41, count: 90_000)
+        try bytes.write(to: source)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let objectDirectory = package.appendingPathComponent(".takeform/objects")
+        try FileManager.default.createDirectory(at: objectDirectory, withIntermediateDirectories: true)
+        let collision = objectDirectory.appendingPathComponent(digest)
+        let preserved = Data("wrong-existing-object".utf8)
+        try preserved.write(to: collision)
+
+        let result = try authority.importManagedSources([source], credential: "creator")
+        guard result.count == 1, case .failed = result[0] else { return XCTFail("mismatched digest collision must fail") }
+        XCTAssertEqual(try Data(contentsOf: collision), preserved)
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+
+        try FileManager.default.removeItem(at: collision)
+        let imported = try authority.importManagedSources([source], credential: "creator")
+        guard imported.count == 1, case let .imported(asset) = imported[0] else { return XCTFail("import should recover after collision removal") }
+        try FileManager.default.removeItem(at: objectDirectory.appendingPathComponent(asset.digest))
+        XCTAssertThrowsError(try ProjectAuthority(packageURL: package).open()) {
+            XCTAssertEqual($0 as? AuthorityFailure, .missingObject("objects/\(asset.digest)"))
         }
     }
 }

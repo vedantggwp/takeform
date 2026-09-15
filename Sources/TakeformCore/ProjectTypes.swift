@@ -27,6 +27,24 @@ public struct Override: Codable, Equatable, Sendable {
     public init(episodeID: UUID, key: String, value: String) { self.episodeID = episodeID; self.key = key; self.value = value }
 }
 
+/// Portable catalog entry. The object path is derived from this canonical digest.
+public struct ManagedAsset: Codable, Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let digest: String
+    public let byteLength: UInt64
+    public let filename: String
+    public let mediaType: String
+    public init(id: UUID = UUID(), digest: String, byteLength: UInt64, filename: String, mediaType: String) { self.id = id; self.digest = digest; self.byteLength = byteLength; self.filename = filename; self.mediaType = mediaType }
+}
+
+public enum ManagedImportOutcome: Codable, Equatable, Sendable, Identifiable {
+    case imported(ManagedAsset)
+    case duplicate(digest: String, filename: String)
+    case cancelled(filename: String)
+    case failed(filename: String, reason: String)
+    public var id: String { switch self { case let .imported(asset): asset.id.uuidString; case let .duplicate(digest, filename): "duplicate-\(digest)-\(filename)"; case let .cancelled(filename): "cancelled-\(filename)"; case let .failed(filename, reason): "failed-\(filename)-\(reason)" } }
+}
+
 public struct Revision: Codable, Comparable, Equatable, Sendable {
     public let value: Int64
     public init(_ value: Int64) { self.value = value }
@@ -65,12 +83,13 @@ public enum ProjectCommand: Codable, Equatable, Sendable {
     case createEpisode(name: String, recipeVersion: Int)
     case setOverride(episodeID: UUID, key: String, value: String)
     case resetOverride(episodeID: UUID, key: String)
+    case addManagedAsset(ManagedAsset)
     case undo
     case redo
 
     public var requiredScope: GrantScope {
         switch self {
-        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride: return .editProject
+        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride, .addManagedAsset: return .editProject
         }
     }
 }
@@ -96,9 +115,26 @@ public struct ProjectDocument: Codable, Equatable, Sendable {
     public var recipes: [RecipeVersion]
     public var episodes: [Episode]
     public var overrides: [Override]
+    public var assets: [ManagedAsset]
     public var revision: Revision
-    public init(projectID: UUID = UUID(), channel: Channel? = nil, recipes: [RecipeVersion] = [], episodes: [Episode] = [], overrides: [Override] = [], revision: Revision = Revision(0)) {
-        self.projectID = projectID; self.channel = channel; self.recipes = recipes; self.episodes = episodes; self.overrides = overrides; self.revision = revision
+    public init(projectID: UUID = UUID(), channel: Channel? = nil, recipes: [RecipeVersion] = [], episodes: [Episode] = [], overrides: [Override] = [], assets: [ManagedAsset] = [], revision: Revision = Revision(0)) {
+        self.projectID = projectID; self.channel = channel; self.recipes = recipes; self.episodes = episodes; self.overrides = overrides; self.assets = assets; self.revision = revision
+    }
+
+    private enum CodingKeys: String, CodingKey { case projectID, channel, recipes, episodes, overrides, assets, revision }
+
+    /// Catalog entries were added after the first portable document format.
+    /// Opening an older project therefore means an empty catalog, not a decode
+    /// failure or an inferred object inventory.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        projectID = try values.decode(UUID.self, forKey: .projectID)
+        channel = try values.decodeIfPresent(Channel.self, forKey: .channel)
+        recipes = try values.decodeIfPresent([RecipeVersion].self, forKey: .recipes) ?? []
+        episodes = try values.decodeIfPresent([Episode].self, forKey: .episodes) ?? []
+        overrides = try values.decodeIfPresent([Override].self, forKey: .overrides) ?? []
+        assets = try values.decodeIfPresent([ManagedAsset].self, forKey: .assets) ?? []
+        revision = try values.decode(Revision.self, forKey: .revision)
     }
 
     public func effectiveValues(for episodeID: UUID) -> [EffectiveValue]? {

@@ -102,6 +102,22 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
     }
 
     private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
+    public func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] {
+        let credential = try credential()
+        let operationID = UUID()
+        let service = service
+        let response = try await withTaskCancellationHandler(operation: {
+            try await request(.importMedia(packageURL, sources, operationID, credential))
+        }, onCancel: {
+            // The cancel request is authenticated and peer-verified on its own
+            // connection because the original service thread may be copying.
+            Task.detached {
+                _ = try? AppAuthoritySocket.verifiedRequest(.cancelImport(packageURL, operationID, credential), expectedService: service)
+            }
+        })
+        guard case let .importOutcomes(outcomes) = response else { throw WorkspaceFailure.authorityUnavailable }
+        return outcomes
+    }
     public func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { let r = try await request(.create(packageURL, name, initialRecipe, try credential())); guard case let .snapshot(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }
     public func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot { let r = try await request(.open(packageURL, rebindMovedPackage, try credential())); guard case let .snapshot(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }
     public func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { let r = try await request(.execute(packageURL, envelope, try credential())); guard case let .result(x) = r else { if case let .failure(e) = r { throw e }; throw WorkspaceFailure.authorityUnavailable }; return x }

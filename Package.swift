@@ -21,7 +21,7 @@ let package = Package(
         .target(name: "TakeformSupport"),
         .target(name: "TakeformCore"),
         .target(name: "TakeformAuthorityEngine", dependencies: ["CSQLite", "TakeformCore"], path: "Sources/TakeformAuthority"),
-        .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformMedia"]),
         .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
         .target(name: "TakeformAppAuthorityWire", dependencies: ["TakeformCore", "TakeformWorkspace"]),
         .target(name: "TakeformMedia"),
