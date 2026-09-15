@@ -68,7 +68,7 @@ command=(
 
 set -m
 if [ "$MODE" = run ]; then
-  TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" "${command[@]}" > "$LOG" 2>&1 &
+  TEST_RUNNER_TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" "${command[@]}" > "$LOG" 2>&1 &
 else
   "${command[@]}" > "$LOG" 2>&1 &
 fi

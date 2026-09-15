@@ -34,6 +34,13 @@ identifier, and the visible `Native development foundation` text. It stores an
 `app.screenshot()` attachment with `keepAlways`; it does not call an in-app or
 `CGWindowList` screenshot route.
 
+The launcher passes the copied-app path only to the XCTest runner as
+`TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test
+reads `TAKEFORM_UI_PROBE_APP`; it is not an app-launch environment variable.
+This is the documented `xcodebuild` transport for test-runner variables in the
+[Xcode 13 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-13-release-notes)
+(74104870) and the installed `xcodebuild` manual.
+
 The runner has 90 seconds for `xcodebuild` and the job has an eight-minute
 ceiling. On timeout the launcher terminates and reaps only the xcodebuild
 process group and its discovered descendants. On success or failure the
