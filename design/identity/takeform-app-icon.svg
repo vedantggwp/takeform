@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Takeform app icon — selected master
+  64-unit construction: three independent cuts form one editing frame.
+  The construction guide is supplied separately so production exports contain only the icon.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Takeform editing frame</title>
+  <desc id="desc">Three flat cuts assemble into a single camera-frame silhouette.</desc>
+  <g id="enclosure">
+    <rect width="64" height="64" rx="15" fill="#F4F2EC"/>
+  </g>
+  <g id="glyph" fill-rule="evenodd">
+    <!-- Take one: the decisive opening cut. -->
+    <path id="take-one" fill="#E85C3C" d="M12 9h39l5 5v10H18L12 18z"/>
+    <!-- Take two: the right-side cut holds the result in frame. -->
+    <path id="take-two" fill="#202124" d="M56 14v37l-5 5H40V45h5V25h-5l6-6z"/>
+    <!-- Take three: the lower-left cut closes the frame without a card stack. -->
+    <path id="take-three" fill="#202124" d="M18 24v21h22v11H13l-5-5V19z"/>
+  </g>
+</svg>

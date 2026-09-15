@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Dark appearance: same 64-unit geometry; color only changes. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Takeform editing frame, dark appearance</title>
+  <desc id="desc">Three flat cuts assemble into a single camera-frame silhouette.</desc>
+  <g id="enclosure"><rect width="64" height="64" rx="15" fill="#1F2023"/></g>
+  <g id="glyph" fill-rule="evenodd">
+    <path id="take-one" fill="#FF7A59" d="M12 9h39l5 5v10H18L12 18z"/>
+    <path id="take-two" fill="#F5F4EF" d="M56 14v37l-5 5H40V45h5V25h-5l6-6z"/>
+    <path id="take-three" fill="#F5F4EF" d="M18 24v21h22v11H13l-5-5V19z"/>
+  </g>
+</svg>
