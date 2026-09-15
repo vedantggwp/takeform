@@ -43,8 +43,6 @@ struct TakeformApp: App {
             CommandMenu("CLI Access") {
                 Button("Pair CLI…") { workspace.showPairing = true }
                     .disabled(workspace.document == nil)
-                Button("Revoke CLI Access") { workspace.revokeCLI() }
-                    .disabled(workspace.document == nil)
             }
         }
         Settings { SettingsView() }
@@ -259,7 +257,6 @@ private struct WorkspaceView: View {
                 }
                 Section("CLI access") {
                     Button("Pair CLI…") { model.showPairing = true }
-                    Button("Revoke CLI access", role: .destructive) { model.revokeCLI() }
                 }
             }.padding()
         } else {
