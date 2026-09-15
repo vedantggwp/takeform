@@ -38,12 +38,18 @@ identifier, and the visible `Native development foundation` text. It stores an
 
 The full F1 probe keeps those ready sentinels and checks native menu About,
 Settings through its button and Command-Comma shortcut, coordinate-driven
-window resizing, process-local Light and Dark appearance, native menu
-and control reachability, and terminate/relaunch behavior. The warm-ready
-measurement starts immediately before the copied bundle's second `launch()` and
-ends only after the window, title and foundation sentinels are all present. It
-retains raw monotonic timestamps as an XCTest attachment and enforces the
-three-second F1 bound. Appearance uses per-process `-AppleInterfaceStyle Light` and `-AppleInterfaceStyle Dark` arguments; it never changes the runner's System Settings.
+window resizing, the visible app-owned System/Light/Dark Appearance preference,
+native menu and control reachability, and terminate/relaunch behavior. Each case attaches
+an app screenshot and the actual title element's type, identifier, label,
+value and debug hierarchy before teardown, including on an assertion failure.
+The title contract is limited to an exact static-text role and its exact
+displayed Accessibility value, as documented for `NSAccessibilityStaticText`;
+it does not treat arbitrary control values as labels. The warm-ready record
+separates monotonic launch-return, window, title and foundation timestamps.
+Its driver-inclusive visible-ready value remains subject to the three-second
+F1 bound; the individual timestamps avoid treating sequential XCTest waits as
+an unexamined product-only measurement. Appearance selection uses the native
+Settings picker and never changes the runner's System Settings.
 
 The launcher passes the copied-app path only to the XCTest runner as
 `TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test
@@ -52,10 +58,10 @@ This is the documented `xcodebuild` transport for test-runner variables in the
 [Xcode 13 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-13-release-notes)
 (74104870) and the installed `xcodebuild` manual.
 
-The runner has 90 seconds for `xcodebuild` and the job has an eight-minute
-ceiling. On timeout the launcher terminates and reaps only the xcodebuild
-process group and its discovered descendants. On success or failure the
-workflow uploads only the source SHA record, narrow xcodebuild log, facts,
+The full walkthrough has 180 seconds for `xcodebuild` and the job has an
+eight-minute ceiling. On timeout the launcher terminates and reaps only the
+xcodebuild process group and its discovered descendants. On success or failure
+the workflow uploads only the source SHA record, narrow xcodebuild log, facts,
 result bundle and exported test attachments for three days; derived data stays
 on the runner. All app state is synthetic and runner-owned. No personal files,
 media, credentials, Keychain items, broad environment dumps, or F3 authority

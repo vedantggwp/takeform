@@ -8,7 +8,7 @@ MODE="${1:-run}"
 OUTPUT_DIR="${TAKEFORM_UI_PROBE_OUTPUT:-}"
 APP_BUNDLE="${TAKEFORM_UI_PROBE_APP:-}"
 SOURCE_SHA="${TAKEFORM_UI_PROBE_SOURCE_SHA:-}"
-TIMEOUT_SECONDS="${TAKEFORM_UI_PROBE_TIMEOUT_SECONDS:-90}"
+TIMEOUT_SECONDS="${TAKEFORM_UI_PROBE_TIMEOUT_SECONDS:-180}"
 
 if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ]; then
   echo "Usage: $0 [--build-for-testing]" >&2

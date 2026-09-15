@@ -54,7 +54,7 @@ jobs:
           TAKEFORM_UI_PROBE_APP: ${{ runner.temp }}/takeform-native-ui-capability/Takeform.app
           TAKEFORM_UI_PROBE_OUTPUT: ${{ runner.temp }}/takeform-native-ui-capability/artifacts
           TAKEFORM_UI_PROBE_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
-          TAKEFORM_UI_PROBE_TIMEOUT_SECONDS: 90
+          TAKEFORM_UI_PROBE_TIMEOUT_SECONDS: 180
         run: ./scripts/run-native-ui-capability-probe
       - name: Upload synthetic UI probe artifacts
         if: always()

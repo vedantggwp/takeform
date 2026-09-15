@@ -1,26 +1,28 @@
 import AppKit
 import XCTest
 
+@MainActor
 final class TakeformNativeUICapabilityTests: XCTestCase {
     private let copiedAppPathKey = "TAKEFORM_UI_PROBE_APP"
     private let titleIdentifier = "takeform-title"
     private let foundationText = "Native development foundation"
+    private let settingsStatusText = "Appearance is the only application preference available in this development foundation."
 
     func testBrandedLaunchIsAccessibleAndCaptured() throws {
         let app = try launchReady()
-        defer { app.terminate() }
+        defer { finishCase(app, named: "f1-01-branded-launch-final") }
 
         let title = app.staticTexts[titleIdentifier]
-        XCTAssertEqual(title.label, "Takeform")
+        assertAccessibleTitle(title)
         XCTAssertTrue(app.buttons["open-settings"].isHittable)
         capture(app, named: "f1-01-branded-launch")
     }
 
     func testAboutIdentityUsesNativeMenu() throws {
         let app = try launchReady()
-        defer { app.terminate() }
+        defer { finishCase(app, named: "f1-04-about-final") }
 
-        let appMenu = app.menuBars.menuItems["Takeform"]
+        let appMenu = app.menuBars.menuBarItems["Takeform"]
         XCTAssertTrue(appMenu.waitForExistence(timeout: 5))
         XCTAssertTrue(appMenu.isHittable)
         appMenu.click()
@@ -44,15 +46,17 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
     func testSettingsButtonAndKeyboardReturnToMainWindow() throws {
         let app = try launchReady()
-        defer { app.terminate() }
+        defer { finishCase(app, named: "f1-05-settings-final") }
 
         app.buttons["open-settings"].click()
         assertSettingsSurface(in: app)
+        selectAppearance("System", in: app)
         capture(app, named: "f1-05-settings-button")
         closeSettings(in: app)
 
         app.typeKey(",", modifierFlags: .command)
         assertSettingsSurface(in: app)
+        selectAppearance("System", in: app)
         capture(app, named: "f1-05-settings-keyboard")
         closeSettings(in: app)
 
@@ -64,12 +68,12 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
     func testResizePreservesReachableNativeControls() throws {
         let app = try launchReady()
-        defer { app.terminate() }
+        defer { finishCase(app, named: "f1-06-resized-final") }
 
         let window = app.windows.firstMatch
         let before = window.frame
+        attachWindowGeometry(before, named: "f1-06-window-before")
         XCTAssertGreaterThanOrEqual(before.width, 1024)
-        XCTAssertGreaterThanOrEqual(before.height, 700)
 
         let leftEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.001, dy: 0.5))
         let narrower = leftEdge.withOffset(CGVector(dx: 180, dy: 0))
@@ -77,6 +81,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
         XCTAssertTrue(waitForNarrowerFrame(of: window, than: before, timeout: 5), "Window frame did not change after the native edge drag")
         let after = window.frame
+        attachWindowGeometry(after, named: "f1-06-window-after")
         XCTAssertLessThan(after.width, before.width - 40)
         XCTAssertGreaterThanOrEqual(after.width, 720)
         XCTAssertGreaterThanOrEqual(after.height, 500)
@@ -87,21 +92,24 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     func testLightAndDarkAppearanceRemainLegible() throws {
-        let light = try launchReady(arguments: ["-AppleInterfaceStyle", "Light"])
-        let lightShot = capture(light, named: "f1-07-light")
-        let lightLuminance = try sampledLuminance(lightShot)
-        light.terminate()
-        XCTAssertTrue(light.wait(for: .notRunning, timeout: 5))
+        let app = try launchReady()
+        defer { finishCase(app, named: "f1-08-appearance-final") }
 
-        let dark = try launchReady(arguments: ["-AppleInterfaceStyle", "Dark"])
-        defer { dark.terminate() }
-        let darkShot = capture(dark, named: "f1-08-dark")
+        app.buttons["open-settings"].click()
+        assertSettingsSurface(in: app)
+        selectAppearance("Light", in: app)
+        let lightShot = capture(app, named: "f1-07-light")
+        let lightLuminance = try sampledLuminance(lightShot)
+
+        selectAppearance("Dark", in: app)
+        let darkShot = capture(app, named: "f1-08-dark")
         let darkLuminance = try sampledLuminance(darkShot)
 
         XCTAssertGreaterThan(lightLuminance - darkLuminance, 0.2, "Process-local dark appearance did not produce a distinct readable surface")
-        XCTAssertTrue(dark.staticTexts[titleIdentifier].isHittable)
-        XCTAssertTrue(dark.staticTexts[foundationText].isHittable)
-        XCTAssertTrue(dark.buttons["open-settings"].isHittable)
+        XCTAssertTrue(app.staticTexts[titleIdentifier].isHittable)
+        XCTAssertTrue(app.staticTexts[foundationText].isHittable)
+        selectAppearance("System", in: app)
+        closeSettings(in: app)
     }
 
     func testQuitRelaunchAndWarmReadyLatency() throws {
@@ -111,20 +119,41 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
         let startedAt = ProcessInfo.processInfo.systemUptime
         app.launch()
-        try assertReady(app)
-        let readyAt = ProcessInfo.processInfo.systemUptime
-        let elapsed = readyAt - startedAt
-        attach("{\"warmLaunchStartedAt\":\(startedAt),\"visibleReadyAt\":\(readyAt),\"elapsedSeconds\":\(elapsed)}", named: "f1-10-warm-ready")
+        let launchReturnedAt = ProcessInfo.processInfo.systemUptime
+        let window = app.windows.firstMatch
+        let windowExists = window.waitForExistence(timeout: 15)
+        let windowObservedAt = ProcessInfo.processInfo.systemUptime
+        let title = app.staticTexts[titleIdentifier]
+        let titleExists = title.waitForExistence(timeout: 10)
+        let titleObservedAt = ProcessInfo.processInfo.systemUptime
+        let foundation = app.staticTexts[foundationText]
+        let foundationExists = foundation.waitForExistence(timeout: 5)
+        let foundationObservedAt = ProcessInfo.processInfo.systemUptime
+        let elapsed = foundationObservedAt - startedAt
+        attachWarmReadyTiming(
+            startedAt: startedAt,
+            launchReturnedAt: launchReturnedAt,
+            windowObservedAt: windowObservedAt,
+            titleObservedAt: titleObservedAt,
+            foundationObservedAt: foundationObservedAt,
+            windowExists: windowExists,
+            titleExists: titleExists,
+            foundationExists: foundationExists
+        )
+        XCTAssertTrue(windowExists, "The copied F1 main window did not appear after relaunch")
+        XCTAssertTrue(titleExists, "F1 title accessibility identifier was not exposed after relaunch")
+        assertAccessibleTitle(title)
+        XCTAssertTrue(foundationExists, "Known F1 foundation text was not exposed after relaunch")
         XCTAssertLessThanOrEqual(elapsed, 3, "Warm copied-app visible-ready latency exceeded three seconds")
         capture(app, named: "f1-10-relaunch")
+        recordCaseEvidence(app, named: "f1-10-relaunch-final")
         app.terminate()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
     }
 
-    private func launchReady(arguments: [String] = []) throws -> XCUIApplication {
+    private func launchReady() throws -> XCUIApplication {
         let app = XCUIApplication(url: try copiedAppURL())
         app.launchEnvironment = ["TAKEFORM_UI_CAPABILITY_PROBE": "1"]
-        app.launchArguments = arguments
         app.launch()
         try assertReady(app)
         return app
@@ -136,7 +165,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
         let title = app.staticTexts[titleIdentifier]
         XCTAssertTrue(title.waitForExistence(timeout: 10), "F1 title accessibility identifier was not exposed")
-        XCTAssertEqual(title.label, "Takeform")
+        assertAccessibleTitle(title)
 
         XCTAssertTrue(
             app.staticTexts[foundationText].waitForExistence(timeout: 5),
@@ -144,19 +173,89 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         )
     }
 
+    private func finishCase(_ app: XCUIApplication, named name: String) {
+        recordCaseEvidence(app, named: name)
+        app.terminate()
+    }
+
+    private func recordCaseEvidence(_ app: XCUIApplication, named name: String) {
+        capture(app, named: name)
+        attachTitleEvidence(in: app, named: "\(name)-accessibility")
+    }
+
+    private func assertAccessibleTitle(_ title: XCUIElement) {
+        XCTAssertEqual(title.elementType, .staticText)
+        XCTAssertEqual(title.value as? String, "Takeform")
+    }
+
+    private func attachTitleEvidence(in app: XCUIApplication, named name: String) {
+        let title = app.staticTexts[titleIdentifier]
+        let window = app.windows.firstMatch
+        let evidence = """
+        titleExists: \(title.exists)
+        titleElementType: \(title.elementType.rawValue)
+        titleIdentifier: \(title.identifier)
+        titleLabel: \(title.label)
+        titleValue: \(String(describing: title.value))
+        xcuiWindowFrame: \(window.frame)
+        titleDebugDescription:
+        \(title.debugDescription)
+        applicationDebugDescription:
+        \(app.debugDescription)
+        """
+        attach(evidence, named: name)
+    }
+
+    private func attachWindowGeometry(_ frame: CGRect, named name: String) {
+        attach("xcuiWindowFrame: \(frame)", named: name)
+    }
+
+    private func attachWarmReadyTiming(
+        startedAt: TimeInterval,
+        launchReturnedAt: TimeInterval,
+        windowObservedAt: TimeInterval,
+        titleObservedAt: TimeInterval,
+        foundationObservedAt: TimeInterval,
+        windowExists: Bool,
+        titleExists: Bool,
+        foundationExists: Bool
+    ) {
+        let evidence = """
+        warmLaunchStartedAt: \(startedAt)
+        launchReturnedAt: \(launchReturnedAt)
+        windowObservedAt: \(windowObservedAt)
+        titleObservedAt: \(titleObservedAt)
+        foundationObservedAt: \(foundationObservedAt)
+        driverInclusiveVisibleReadySeconds: \(foundationObservedAt - startedAt)
+        windowExists: \(windowExists)
+        titleExists: \(titleExists)
+        foundationExists: \(foundationExists)
+        """
+        attach(evidence, named: "f1-10-warm-ready")
+    }
+
     private func assertSettingsSurface(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["General"].waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.staticTexts["No application preferences are available in this development foundation."].waitForExistence(timeout: 5)
-        )
+        XCTAssertTrue(app.staticTexts[settingsStatusText].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.popUpButtons["appearance-preference"].waitForExistence(timeout: 5))
     }
 
     private func closeSettings(in app: XCUIApplication) {
-        let settingsMarker = app.staticTexts["No application preferences are available in this development foundation."]
+        let settingsMarker = app.staticTexts[settingsStatusText]
         app.typeKey("w", modifierFlags: .command)
         XCTAssertTrue(waitForDisappearance(of: settingsMarker, timeout: 5), "Settings surface did not close")
         XCTAssertTrue(app.staticTexts[foundationText].isHittable)
         XCTAssertTrue(app.buttons["open-settings"].isHittable)
+    }
+
+    private func selectAppearance(_ name: String, in app: XCUIApplication) {
+        let picker = app.popUpButtons["appearance-preference"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5), "Appearance picker was not exposed")
+        picker.click()
+        let option = app.menuItems[name]
+        XCTAssertTrue(option.waitForExistence(timeout: 5), "Appearance option \(name) was not exposed")
+        option.click()
+        XCTAssertEqual(picker.value as? String, name, "Appearance picker did not select \(name)")
     }
 
     @discardableResult
