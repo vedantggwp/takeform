@@ -545,6 +545,9 @@ private struct WorkspaceView: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(model.isDropTargeted ? Color.accentColor.opacity(0.08) : .clear)
+                // Keep the drop target as a container so its identifier does
+                // not replace the identifiers of import controls and assets.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("managed-media-drop-target")
                 .onDrop(of: [UTType.fileURL], isTargeted: $model.isDropTargeted) { providers in
                     let group = DispatchGroup()

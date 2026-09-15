@@ -165,7 +165,17 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         recipeValue.typeText("Creator cut")
         record(app, named: "creator-new-channel")
         app.buttons["new-channel-create"].click()
-        try acceptSystemPanel(path: projectURL.deletingLastPathComponent(), confirmation: "Create Project", app: app, named: "creator-create-panel")
+        try acceptSystemPanel(
+            path: projectURL.deletingLastPathComponent(),
+            filename: projectURL.lastPathComponent,
+            confirmation: "Create Project",
+            app: app,
+            named: "creator-create-panel"
+        )
+        XCTAssertTrue(
+            waitForPath(projectURL, timeout: 10),
+            "Create Project did not create the requested package at \(projectURL.path)"
+        )
     }
 
     private func importMedia(_ source: URL, in app: XCUIApplication) throws {
@@ -190,7 +200,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     /// Open and Save panels are system UI. This intentionally records the
     /// panel AX tree before interacting with it; a changed system hierarchy is
     /// a test failure with evidence, never a product-route fallback.
-    private func acceptSystemPanel(path: URL, confirmation: String, app: XCUIApplication, named: String) throws {
+    private func acceptSystemPanel(path: URL, filename: String? = nil, confirmation: String, app: XCUIApplication, named: String) throws {
         let panel = try presentedSystemPanel(in: app, confirmation: confirmation, named: named)
         attach(app.debugDescription, named: "\(named)-ax")
         capture(panel, named: named)
@@ -202,10 +212,23 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         XCTAssertTrue(waitForHittable(folderField, timeout: 5), "System panel did not make its Go to Folder field ready")
         folderField.click()
         folderField.typeText(path.path)
-        panel.typeKey(.return, modifierFlags: [])
+        folderField.typeKey(.return, modifierFlags: [])
+        let goToFolder = app.sheets["GoToWindow"]
+        XCTAssertTrue(
+            waitForNonexistence(goToFolder, timeout: 5),
+            "Go to Folder did not close after accepting its focused path field"
+        )
         // Go to Folder closes its transient input, so re-resolve the visible
         // app-owned panel before confirming the path.
         let confirmationPanel = try presentedSystemPanel(in: app, confirmation: confirmation, named: "\(named)-confirmation")
+        if let filename {
+            let saveNameField = confirmationPanel.textFields["saveAsNameTextField"]
+            XCTAssertTrue(saveNameField.waitForExistence(timeout: 5), "Save panel did not expose its filename field")
+            XCTAssertTrue(waitForHittable(saveNameField, timeout: 5), "Save panel did not make its filename field ready")
+            saveNameField.click()
+            saveNameField.typeKey("a", modifierFlags: .command)
+            saveNameField.typeText(filename)
+        }
         let confirmationButton = confirmationPanel.buttons[confirmation]
         XCTAssertTrue(confirmationButton.waitForExistence(timeout: 5), "System panel did not expose \(confirmation)")
         XCTAssertTrue(waitForHittable(confirmationButton, timeout: 5), "System panel did not make \(confirmation) ready")
@@ -218,6 +241,23 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
             object: element
         )
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForNonexistence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in !element.exists },
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForPath(_ url: URL, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: url.path) { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     /// This test target intentionally has no configured Target Application: it
