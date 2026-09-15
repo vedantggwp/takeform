@@ -6,6 +6,7 @@ import XCTest
 @MainActor
 final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     private let appPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_APP"
+    private let outputPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT"
     private let rootPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_ROOT"
 
     func testCreateImportInspectComposeSaveAndReopen() async throws {
@@ -147,6 +148,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["takeform-title"].waitForExistence(timeout: 10))
+        record(app, named: "creator-launch")
         return app
     }
 
@@ -162,6 +164,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let recipeValue = app.textFields["new-channel-recipe-value"]
         recipeValue.click()
         recipeValue.typeText("Creator cut")
+        record(app, named: "creator-new-channel")
         app.buttons["new-channel-create"].click()
         try acceptSystemPanel(path: projectURL.deletingLastPathComponent(), confirmation: "Create Project", app: app, named: "creator-create-panel")
     }
@@ -189,20 +192,37 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     /// panel AX tree before interacting with it; a changed system hierarchy is
     /// a test failure with evidence, never a product-route fallback.
     private func acceptSystemPanel(path: URL, confirmation: String, app: XCUIApplication, named: String) throws {
-        let system = XCUIApplication()
-        let panel = system.dialogs.firstMatch
-        XCTAssertTrue(panel.waitForExistence(timeout: 10), "The separate system Open/Save panel did not appear")
-        attach(system.debugDescription, named: "\(named)-ax")
+        let panel = try presentedSystemPanel(in: app, named: named)
+        attach(app.debugDescription, named: "\(named)-ax")
         capture(panel, named: named)
         panel.typeKey("g", modifierFlags: [.command, .shift])
-        let folderField = system.textFields.firstMatch
+        let folderField = panel.textFields.firstMatch
         XCTAssertTrue(folderField.waitForExistence(timeout: 5), "System panel did not expose its Go to Folder field")
         folderField.click()
         folderField.typeText(path.path)
         panel.typeKey(.return, modifierFlags: [])
-        let confirmationButton = system.buttons[confirmation]
+        let confirmationButton = panel.buttons[confirmation]
         XCTAssertTrue(confirmationButton.waitForExistence(timeout: 5), "System panel did not expose \(confirmation)")
         confirmationButton.click()
+    }
+
+    /// This test target intentionally has no configured Target Application: it
+    /// launches the copied bundle by URL. NSOpenPanel/NSSavePanel presentation
+    /// therefore remains a descendant of that explicit app proxy instead of
+    /// creating XCUIApplication(), which would require a Target Application.
+    private func presentedSystemPanel(in app: XCUIApplication, named: String) throws -> XCUIElement {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            let sheet = app.sheets.firstMatch
+            if sheet.exists { return sheet }
+            let dialog = app.dialogs.firstMatch
+            if dialog.exists { return dialog }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        attach(app.debugDescription, named: "\(named)-missing-panel-ax")
+        capture(app, named: "\(named)-missing-panel")
+        XCTFail("The app-owned system Open/Save panel did not appear")
+        throw NSError(domain: "TakeformCreatorWalkthrough", code: 4)
     }
 
     private func commandJSON(expectedRevision: Int, name: String) -> String {
@@ -245,10 +265,29 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     }
 
     private func capture(_ object: some XCUIScreenshotProviding, named: String) {
-        let attachment = XCTAttachment(screenshot: object.screenshot())
+        let screenshot = object.screenshot()
+        persist(screenshot, named: named)
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = named
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func persist(_ screenshot: XCUIScreenshot, named: String) {
+        guard let outputPath = ProcessInfo.processInfo.environment[outputPathKey], !outputPath.isEmpty else {
+            XCTFail("The opt-in workflow did not provide a runner-owned evidence output path.")
+            return
+        }
+        let output = URL(fileURLWithPath: outputPath, isDirectory: true)
+            .appendingPathComponent("captures", isDirectory: true)
+        let safeName = named.replacingOccurrences(of: "/", with: "-")
+        let file = output.appendingPathComponent("\(safeName)-\(UUID().uuidString).png")
+        do {
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try screenshot.pngRepresentation.write(to: file, options: .atomic)
+        } catch {
+            XCTFail("Could not retain \(named) screenshot: \(error.localizedDescription)")
+        }
     }
 
     private func attach(_ value: String, named: String) {

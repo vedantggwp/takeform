@@ -70,5 +70,6 @@ jobs:
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/xcodebuild.log
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/native-creator-walkthrough.xcresult
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/attachments
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/captures
           if-no-files-found: warn
           retention-days: 3

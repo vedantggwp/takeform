@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LAUNCHER="$ROOT_DIR/scripts/run-native-creator-walkthrough"
+TEST_SOURCE="$ROOT_DIR/Tests/native-creator-walkthrough/TakeformNativeCreatorWalkthroughTests/TakeformNativeCreatorWalkthroughTests.swift"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/takeform-creator-paths.XXXXXX")"
 RUNNER="$SCRATCH/runner"
 OUTSIDE="$SCRATCH/outside"
@@ -33,3 +34,15 @@ RUNNER_TEMP="$RUNNER" \
   "$LAUNCHER" --validate-runner-paths >/dev/null
 test ! -e "$RUNNER/valid/artifacts"
 test ! -e "$RUNNER/valid/test-inputs"
+
+# The copied bundle is intentionally launched through XCUIApplication(url:).
+# A default proxy needs an Xcode Target Application, which this portable test
+# target deliberately does not configure.
+if rg -q '=\s*XCUIApplication\(\)' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not construct a default XCUIApplication proxy" >&2
+  exit 1
+fi
+rg -q 'presentedSystemPanel\(in: app' "$TEST_SOURCE"
+rg -q 'app\.sheets\.firstMatch' "$TEST_SOURCE"
+rg -q 'app\.dialogs\.firstMatch' "$TEST_SOURCE"
+rg -q 'TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT' "$LAUNCHER"

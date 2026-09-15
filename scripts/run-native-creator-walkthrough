@@ -122,8 +122,9 @@ DERIVED_DATA="$OUTPUT_DIR/DerivedData"
 LOG="$OUTPUT_DIR/xcodebuild.log"
 FACTS="$OUTPUT_DIR/facts.txt"
 ATTACHMENTS="$OUTPUT_DIR/attachments"
+CAPTURES="$OUTPUT_DIR/captures"
 
-rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
+rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS" "$CAPTURES"
 {
   echo "source_sha: ${SOURCE_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
   echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
@@ -162,6 +163,7 @@ command=(
 set -m
 if [ "$MODE" = run ]; then
   TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_APP="$APP_BUNDLE" \
+    TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$OUTPUT_DIR" \
     TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$TEST_ROOT" \
     "${command[@]}" > "$LOG" 2>&1 &
 else
@@ -238,7 +240,7 @@ else
   echo "result_bundle: missing" >> "$FACTS"
   status=1
 fi
-if [ "$MODE" = run ] && ! find "$ATTACHMENTS" -type f -name '*.png' -print -quit | grep -q .; then
+if [ "$MODE" = run ] && ! find "$CAPTURES" -type f -name '*.png' -print -quit | grep -q .; then
   echo "window_screenshot: missing" >> "$FACTS"
   status=1
 fi
