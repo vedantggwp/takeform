@@ -5,9 +5,19 @@ runner can start Apple's macOS UI-test runner, launch a copied F1 bundle,
 read its accessibility tree and retain a screenshot of the actual window. It
 does not accept F1, F3, distribution, rendering, media, or local-Mac behavior.
 
-The job has only a `workflow_dispatch` trigger. Root enables it only after the
-exact source head has passed independent source review. Dispatch it with the
-full reviewed commit SHA; checkout verifies that SHA before it builds anything.
+The probe commit contains CI tooling, not F1 product work. Its F1 production
+sources, `Package.swift`, design assets, and dev-bundle script are verified
+unchanged from F1 `63fc27ecbceec5c536983f749f4ef91fd9802a8a`; the copied app is
+therefore source-equivalent to that F1 revision. The probe input SHA identifies
+the reviewed tooling head. A successful probe can inform the F1 native gate,
+but it does not complete any remaining F1 native case.
+
+The job is opt-in only: root can dispatch it manually after merge with the full
+reviewed commit SHA, or a maintainer can apply the exact
+`native-ui-capability-probe` label to the reviewed pull request. It never runs
+on ordinary pushes or pull requests, and it never uses `pull_request_target`.
+Manual dispatch checks out its `source_sha`; a label run checks out that pull
+request's head SHA. The job verifies the selected SHA before it builds anything.
 
 ```sh
 TAKEFORM_UI_PROBE_APP="/tmp/Takeform.app" \
@@ -25,11 +35,13 @@ identifier, and the visible `Native development foundation` text. It stores an
 `CGWindowList` screenshot route.
 
 The runner has 90 seconds for `xcodebuild` and the job has an eight-minute
-ceiling. On success or failure the workflow uploads only the source SHA record,
-the narrow xcodebuild log, facts, result bundle and exported test attachments
-for three days. All app state is synthetic and runner-owned. No personal
-files, media, credentials, Keychain items, broad environment dumps, or F3
-authority paths are used.
+ceiling. On timeout the launcher terminates and reaps only the xcodebuild
+process group and its discovered descendants. On success or failure the
+workflow uploads only the source SHA record, narrow xcodebuild log, facts,
+result bundle and exported test attachments for three days; derived data stays
+on the runner. All app state is synthetic and runner-owned. No personal files,
+media, credentials, Keychain items, broad environment dumps, or F3 authority
+paths are used.
 
 For a local structural build that deliberately does not launch a UI test:
 
