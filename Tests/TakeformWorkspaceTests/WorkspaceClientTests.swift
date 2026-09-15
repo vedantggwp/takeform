@@ -9,6 +9,30 @@ import UniformTypeIdentifiers
 @_spi(Testing) @testable import TakeformAppAuthorityWire
 @testable import TakeformAuthorityAppServiceCore
 import TakeformCore
+@testable import TakeformApp
+
+private actor DelayedOpenWorkspaceClient: WorkspaceClient {
+    private var openContinuations: [CheckedContinuation<WorkspaceSnapshot, Error>] = []
+
+    func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot {
+        try await withCheckedThrowingContinuation { openContinuations.append($0) }
+    }
+
+    func waitForOpenCount(_ count: Int) async {
+        while openContinuations.count < count { await Task.yield() }
+    }
+
+    func finishOpen(_ index: Int, with snapshot: WorkspaceSnapshot) {
+        openContinuations[index].resume(returning: snapshot)
+    }
+
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] { throw WorkspaceFailure.authorityUnavailable }
+    func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { throw WorkspaceFailure.authorityUnavailable }
+    func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { throw WorkspaceFailure.authorityUnavailable }
+    func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws { throw WorkspaceFailure.authorityUnavailable }
+    func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary] { [] }
+    func revokeCLI(packageURL: URL, grantID: UUID) async throws { throw WorkspaceFailure.authorityUnavailable }
+}
 
 final class WorkspaceClientTests: XCTestCase {
     func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {
@@ -18,6 +42,40 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: nil))
         XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: UUID()))
         XCTAssertEqual(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: asset.id), asset)
+    }
+
+    func testLateAssetSelectionCannotReplaceNewerVerifiedSelection() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/selection-race.takeform", isDirectory: true)
+        let first = ManagedAsset(digest: String(repeating: "a", count: 64), byteLength: 1, filename: "first.png", mediaType: "image")
+        let second = ManagedAsset(digest: String(repeating: "b", count: 64), byteLength: 2, filename: "second.png", mediaType: "image")
+        let snapshot = WorkspaceSnapshot(document: ProjectDocument(assets: [first, second], revision: Revision(7)), projectionMatches: true, packageURL: package)
+        let client = DelayedOpenWorkspaceClient()
+        let model = await MainActor.run { WorkspaceModel(client: client) }
+
+        await MainActor.run { model.open(package, rebind: false) }
+        await client.waitForOpenCount(1)
+        await client.finishOpen(0, with: snapshot)
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+        let openedDocument = await MainActor.run { model.document }
+        XCTAssertNotNil(openedDocument)
+
+        await MainActor.run { model.selectAsset(first) }
+        await client.waitForOpenCount(2)
+        await MainActor.run { model.selectAsset(second) }
+        await client.waitForOpenCount(3)
+
+        // Complete B first, then deliver the canceled A request afterwards.
+        await client.finishOpen(2, with: snapshot)
+        for _ in 0..<100 where await MainActor.run(body: { model.selectedAssetID != second.id }) { await Task.yield() }
+        await client.finishOpen(1, with: snapshot)
+        for _ in 0..<100 { await Task.yield() }
+
+        let selectedID = await MainActor.run { model.selectedAssetID }
+        XCTAssertEqual(selectedID, second.id)
+        let verified = await MainActor.run { model.verifiedAssetSelection }
+        XCTAssertEqual(verified?.asset, second)
+        XCTAssertEqual(verified?.packageURL, package)
+        XCTAssertEqual(verified?.revision, Revision(7))
     }
     private func validPNG() -> Data {
         let data = NSMutableData()
