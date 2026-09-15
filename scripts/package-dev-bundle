@@ -2,7 +2,75 @@
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-DESTINATION_DIR="${1:-"$ROOT_DIR/dist"}"
+DESTINATION_DIR="$ROOT_DIR/dist"
+RENDERER_NODE_ROOT=""
+RENDERER_RUNTIME_SOURCE=""
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: package-dev-bundle [DESTINATION] [--renderer-node-root ABSOLUTE_DIRECTORY --renderer-runtime-source ABSOLUTE_DIRECTORY]
+
+Both renderer options are required together. The node root must be a
+self-contained Node 22.22.1 runtime with bin/node; the runtime source must be
+the installed lock-derived renderer runtime. Neither value is discovered.
+USAGE
+  exit 64
+}
+
+if [ "$#" -gt 0 ] && [ "${1#--}" = "$1" ]; then
+  DESTINATION_DIR="$1"
+  shift
+fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --renderer-node-root)
+      [ "$#" -ge 2 ] || usage
+      RENDERER_NODE_ROOT="$2"
+      shift 2
+      ;;
+    --renderer-runtime-source)
+      [ "$#" -ge 2 ] || usage
+      RENDERER_RUNTIME_SOURCE="$2"
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
+if [ -n "$RENDERER_NODE_ROOT" ] && [ -z "$RENDERER_RUNTIME_SOURCE" ] || [ -z "$RENDERER_NODE_ROOT" ] && [ -n "$RENDERER_RUNTIME_SOURCE" ]; then
+  usage
+fi
+
+require_absolute_directory() {
+  case "$2" in /*) ;; *) echo "$1 must be an absolute directory." >&2; exit 64 ;; esac
+  [ -d "$2" ] || { echo "$1 is not a directory." >&2; exit 64; }
+}
+
+assert_self_contained_node() {
+  local node_root="$1"
+  local candidate dependency
+  while IFS= read -r -d '' candidate; do
+    while IFS= read -r dependency; do
+      case "$dependency" in
+        /System/Library/*|/usr/lib/*|@rpath/*|@loader_path/*|@executable_path/*) ;;
+        *) echo "Renderer Node has an external dynamic-library dependency: $dependency" >&2; exit 65 ;;
+      esac
+    done < <(otool -L "$candidate" | tail -n +2 | sed -E 's/^[[:space:]]*([^[:space:]]+).*/\1/')
+  done < <(find "$node_root/bin" "$node_root/lib" -type f \( -name '*.dylib' -o -name node \) -print0 2>/dev/null)
+}
+
+if [ -n "$RENDERER_NODE_ROOT" ]; then
+  require_absolute_directory "--renderer-node-root" "$RENDERER_NODE_ROOT"
+  require_absolute_directory "--renderer-runtime-source" "$RENDERER_RUNTIME_SOURCE"
+  RENDERER_NODE="$RENDERER_NODE_ROOT/bin/node"
+  [ -x "$RENDERER_NODE" ] || { echo "Renderer Node root has no executable bin/node." >&2; exit 64; }
+  [ -f "$RENDERER_RUNTIME_SOURCE/package-lock.json" ] && [ -d "$RENDERER_RUNTIME_SOURCE/node_modules" ] && [ -f "$RENDERER_RUNTIME_SOURCE/doctor.mjs" ] || { echo "Renderer runtime source is incomplete." >&2; exit 64; }
+  assert_self_contained_node "$RENDERER_NODE_ROOT"
+  EXPECTED_NODE_VERSION="$("$RENDERER_NODE" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).nodeVersion)' "$ROOT_DIR/renderer/runtime-profile.json")"
+  ACTUAL_NODE_VERSION="$("$RENDERER_NODE" --version)"
+  [ "$ACTUAL_NODE_VERSION" = "$EXPECTED_NODE_VERSION" ] || { echo "Renderer Node version does not match runtime-profile.json." >&2; exit 65; }
+  "$RENDERER_NODE" "$RENDERER_RUNTIME_SOURCE/doctor.mjs" --runtime "$RENDERER_RUNTIME_SOURCE" --package-only
+fi
 APP_BUNDLE="$DESTINATION_DIR/Takeform.app"
 
 mkdir -p "$DESTINATION_DIR"
@@ -36,6 +104,15 @@ cp "$BIN_DIR/TakeformApp" "$APP_BUNDLE/Contents/MacOS/Takeform"
 cp "$BIN_DIR/TakeformAuthorityAppService" "$APP_BUNDLE/Contents/MacOS/TakeformAuthorityAppService"
 cp "$BIN_DIR/takeform" "$APP_BUNDLE/Contents/MacOS/takeform"
 cp "$ROOT_DIR/design/identity/exports/Takeform.icns" "$APP_BUNDLE/Contents/Resources/Takeform.icns"
+
+if [ -n "$RENDERER_NODE_ROOT" ]; then
+  RENDERER_BUNDLE="$APP_BUNDLE/Contents/Resources/RendererRuntime"
+  mkdir -p "$RENDERER_BUNDLE"
+  ditto "$RENDERER_NODE_ROOT" "$RENDERER_BUNDLE/node"
+  ditto "$RENDERER_RUNTIME_SOURCE/node_modules" "$RENDERER_BUNDLE/node_modules"
+  cp "$RENDERER_RUNTIME_SOURCE/package.json" "$RENDERER_RUNTIME_SOURCE/package-lock.json" "$RENDERER_RUNTIME_SOURCE/doctor.mjs" "$RENDERER_BUNDLE/"
+  cp "$ROOT_DIR/renderer/episode-render-worker.mjs" "$ROOT_DIR/renderer/runtime-profile.json" "$RENDERER_BUNDLE/"
+fi
 
 cat >"$APP_BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

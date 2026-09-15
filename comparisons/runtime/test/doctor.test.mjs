@@ -39,6 +39,14 @@ test('validates the exact public bundle API needed before renderMedia', () => {
   assert.deepEqual(result.output.imports.remotion.bundlerPublicApis, ['bundle']);
 });
 
+test('validates only the copied package runtime without a PATH executable fallback', () => {
+  const result = run('--package-only');
+  assert.equal(result.code, 0);
+  assert.equal(result.output.ffmpeg.status, 'not-requested');
+  assert.equal(result.output.browser.candidate.status, 'not-requested');
+  assert.equal(result.output.imports.hyperframes.status, 'ok');
+});
+
 test('surfaces a missing runtime import as a doctor error', async (t) => {
   const emptyRuntime = await mkdtemp(join(tmpdir(), 'takeform-empty-runtime-'));
   t.after(() => rm(emptyRuntime, {force: true, recursive: true}));
