@@ -12,7 +12,9 @@ public enum AppAuthorityRequest: Codable, Sendable {
 }
 public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocket {
- public static var path: String { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
+ nonisolated(unsafe) private static var testingPath: String?
+ public static var path: String { testingPath ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }
+ @_spi(Testing) public static func setTestingPath(_ path: String?) { testingPath = path }
  static func address() -> sockaddr_un { var a=sockaddr_un(); a.sun_family=sa_family_t(AF_UNIX); let b=Array(path.utf8CString); withUnsafeMutableBytes(of:&a.sun_path){ r in for(i,x) in b.enumerated(){r[i]=UInt8(bitPattern:x)} }; a.sun_len=UInt8(MemoryLayout<sockaddr_un>.size); return a }
  public static func connect() throws -> Int32 { let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd >= 0 else {throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.connect(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; return fd }
     public static func listen() throws -> Int32 { try FileManager.default.createDirectory(at:URL(fileURLWithPath:path).deletingLastPathComponent(),withIntermediateDirectories:true); let fd=socket(AF_UNIX,SOCK_STREAM,0); guard fd>=0 else{throw WorkspaceFailure.authorityUnavailable}; var a=address(); let rc=withUnsafePointer(to:&a){$0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.bind(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}}; guard rc==0 && Darwin.listen(fd,8)==0 else {close(fd);throw WorkspaceFailure.authorityUnavailable}; chmod(path,S_IRUSR|S_IWUSR);return fd }

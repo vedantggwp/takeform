@@ -4,7 +4,7 @@ import Darwin
 import Security
 import XCTest
 @testable import TakeformAuthorityAppServiceCore
-import TakeformAppAuthorityWire
+@_spi(Testing) @testable import TakeformAppAuthorityWire
 import TakeformCore
 
 final class ProjectAuthorityTests: XCTestCase {
@@ -235,8 +235,9 @@ final class ProjectAuthorityTests: XCTestCase {
             func set(_ value: Data) { lock.lock(); self.value = value; lock.unlock(); completed.signal() }
             func read() -> Data { lock.lock(); defer { lock.unlock() }; return value }
         }
-        let socketURL = URL(fileURLWithPath: AppAuthoritySocket.path)
-        guard !FileManager.default.fileExists(atPath: socketURL.path) else { throw XCTSkip("app authority socket is active") }
+        let socketURL = URL(fileURLWithPath: "/private/tmp/takeform-authority-test-\(UUID().uuidString).sock")
+        AppAuthoritySocket.setTestingPath(socketURL.path)
+        defer { AppAuthoritySocket.setTestingPath(nil) }
         let listener = socket(AF_UNIX, SOCK_STREAM, 0)
         guard listener >= 0 else { throw XCTSkip("could not create test socket") }
         defer { close(listener); try? FileManager.default.removeItem(at: socketURL) }
@@ -262,7 +263,7 @@ final class ProjectAuthorityTests: XCTestCase {
         }.start()
         let rootURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let service = rootURL.appendingPathComponent(".build/debug/TakeformAuthorityAppService")
-        guard FileManager.default.isExecutableFile(atPath: service.path), AppAuthorityPeer.requirement(for: service) != nil else { throw XCTSkip("service identity is unavailable") }
+        guard FileManager.default.isExecutableFile(atPath: service.path), AppAuthorityPeer.requirement(for: service) != nil else { return XCTFail("service identity is unavailable") }
         XCTAssertThrowsError(try AppAuthoritySocket.verifiedRequest(.open(root.appendingPathComponent("Secret.takeform"), false, Data("creator-secret-marker".utf8)), expectedService: service))
         XCTAssertEqual(capture.completed.wait(timeout: .now() + 1), .success)
         XCTAssertEqual(capture.read(), Data())

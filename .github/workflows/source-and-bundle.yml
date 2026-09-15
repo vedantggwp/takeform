@@ -49,6 +49,7 @@ jobs:
       - name: Test and release build
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift build --product TakeformAuthorityAppService
           swift test
           swift build -c release
       - name: Verify an ad-hoc copied bundle
