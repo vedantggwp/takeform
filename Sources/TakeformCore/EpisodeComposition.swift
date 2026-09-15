@@ -120,7 +120,10 @@ public struct CompositionCaption: Codable, Equatable, Sendable, Identifiable {
     public let text: String
     public let outputRange: CompositionRange
     public let layer: Int
-    public init(id: UUID = UUID(), text: String, outputRange: CompositionRange, layer: Int) { self.id = id; self.text = text; self.outputRange = outputRange; self.layer = layer }
+    /// Captions are a fixed overlay phase above all visual occurrences.
+    /// Higher order paints later inside the same caption layer.
+    public let order: Int
+    public init(id: UUID = UUID(), text: String, outputRange: CompositionRange, layer: Int, order: Int) { self.id = id; self.text = text; self.outputRange = outputRange; self.layer = layer; self.order = order }
 }
 
 public struct EpisodeComposition: Codable, Equatable, Sendable, Identifiable {
@@ -131,7 +134,22 @@ public struct EpisodeComposition: Codable, Equatable, Sendable, Identifiable {
     public let captions: [CompositionCaption]
     public var id: UUID { episodeID }
     public init(episodeID: UUID, output: CompositionOutput, clipAudioPolicy: CompositionAudioPolicy = .muted, occurrences: [CompositionOccurrence], captions: [CompositionCaption]) {
-        self.episodeID = episodeID; self.output = output; self.clipAudioPolicy = clipAudioPolicy; self.occurrences = occurrences; self.captions = captions
+        self.episodeID = episodeID; self.output = output; self.clipAudioPolicy = clipAudioPolicy
+        self.occurrences = occurrences.sorted { $0.order < $1.order }
+        self.captions = captions.sorted { ($0.layer, $0.order) < ($1.layer, $1.order) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case episodeID, output, clipAudioPolicy, occurrences, captions }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            episodeID: try values.decode(UUID.self, forKey: .episodeID),
+            output: try values.decode(CompositionOutput.self, forKey: .output),
+            clipAudioPolicy: try values.decode(CompositionAudioPolicy.self, forKey: .clipAudioPolicy),
+            occurrences: try values.decode([CompositionOccurrence].self, forKey: .occurrences),
+            captions: try values.decode([CompositionCaption].self, forKey: .captions)
+        )
     }
 
     public func canonicalData() throws -> Data {
@@ -147,6 +165,7 @@ public enum CompositionValidationFailure: Error, Equatable, Sendable {
     case duplicateOccurrence
     case duplicateCaption
     case duplicateOrder
+    case duplicateCaptionOrder
     case missingAsset
     case assetDigestMismatch
     case missingProbe
@@ -168,6 +187,7 @@ public enum CompositionValidationFailure: Error, Equatable, Sendable {
         case .duplicateOccurrence: "composition-duplicate-occurrence"
         case .duplicateCaption: "composition-duplicate-caption"
         case .duplicateOrder: "composition-duplicate-order"
+        case .duplicateCaptionOrder: "composition-duplicate-caption-order"
         case .missingAsset: "composition-missing-asset"
         case .assetDigestMismatch: "composition-asset-digest-mismatch"
         case .missingProbe: "composition-missing-probe"
@@ -227,8 +247,10 @@ public extension EpisodeComposition {
             }
         }
         var captions = Set<UUID>()
+        var captionOrders = Set<Int>()
         for caption in self.captions {
             guard captions.insert(caption.id).inserted else { throw CompositionValidationFailure.duplicateCaption }
+            guard captionOrders.insert(caption.order).inserted else { throw CompositionValidationFailure.duplicateCaptionOrder }
             guard !caption.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CompositionValidationFailure.emptyCaption }
             guard caption.layer >= 0 else { throw CompositionValidationFailure.invalidLayer }
             try validate(range: caption.outputRange, within: output.duration, outside: .rangeOutsideOutput)

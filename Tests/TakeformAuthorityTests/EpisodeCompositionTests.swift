@@ -62,6 +62,15 @@ final class EpisodeCompositionTests: XCTestCase {
         let ambiguous = try makeComposition(episodeID: episode.id, asset: image, second: second, secondLayer: 0)
         XCTAssertThrowsError(try ambiguous.validate(episodes: [episode], assets: [image, second])) { XCTAssertEqual($0 as? CompositionValidationFailure, .sameLayerOverlap) }
 
+        let permuted = EpisodeComposition(episodeID: composition.episodeID, output: composition.output, occurrences: Array(composition.occurrences.reversed()), captions: Array(composition.captions.reversed()))
+        XCTAssertEqual(try composition.canonicalData(), try permuted.canonicalData())
+
+        let captionA = CompositionCaption(text: "A", outputRange: try range(0, 3), layer: 0, order: 0)
+        let captionB = CompositionCaption(text: "B", outputRange: try range(1, 3), layer: 0, order: 1)
+        let captionsForward = EpisodeComposition(episodeID: episode.id, output: composition.output, occurrences: composition.occurrences, captions: [captionA, captionB])
+        let captionsReverse = EpisodeComposition(episodeID: episode.id, output: composition.output, occurrences: composition.occurrences, captions: [captionB, captionA])
+        XCTAssertEqual(try captionsForward.canonicalData(), try captionsReverse.canonicalData())
+
         let audio = ManagedAsset(digest: String(repeating: "c", count: 64), byteLength: 12, filename: "tone.aiff", mediaType: "audio", probe: ManagedAssetProbe(audio: [.init(codec: "lpcm", channels: 1, sampleRate: 48_000, timeRange: [.init(0, 1), .init(12, 1)])]))
         let audioComposition = try makeComposition(episodeID: episode.id, asset: audio)
         XCTAssertThrowsError(try audioComposition.validate(episodes: [episode], assets: [audio])) { XCTAssertEqual($0 as? CompositionValidationFailure, .unsupportedAssetType) }
@@ -75,6 +84,10 @@ final class EpisodeCompositionTests: XCTestCase {
         let badVideoRange = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1920, height: 1080, frameRate: try time(30), duration: try time(2)), occurrences: [videoOccurrence], captions: [])
         XCTAssertThrowsError(try badVideoRange.validate(episodes: [episode], assets: [video])) { XCTAssertEqual($0 as? CompositionValidationFailure, .rangeOutsideSource) }
         XCTAssertThrowsError(try JSONDecoder().decode(CompositionTime.self, from: Data("{\"value\":1,\"timescale\":0}".utf8)))
+
+        let overflow = CompositionOccurrence(assetID: image.id, assetDigest: image.digest, source: .still, outputRange: try range(.max, 1), layer: 0, order: 0, crop: try crop())
+        let overflowComposition = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1, height: 1, frameRate: try time(1), duration: try time(.max)), occurrences: [overflow], captions: [])
+        XCTAssertThrowsError(try overflowComposition.validate(episodes: [episode], assets: [image])) { XCTAssertEqual($0 as? CompositionValidationFailure, .rationalOverflow) }
     }
 
     func testLegacyProjectDocumentDecodesWithoutCompositions() throws {
@@ -96,13 +109,13 @@ final class EpisodeCompositionTests: XCTestCase {
         if let second {
             occurrences.append(CompositionOccurrence(assetID: second.id, assetDigest: second.digest, source: .still, outputRange: try range(6, 6), layer: secondLayer, order: 1, crop: try crop()))
         }
-        return EpisodeComposition(episodeID: episodeID, output: output, occurrences: occurrences, captions: [CompositionCaption(text: "Harbor recap", outputRange: try range(0, 3), layer: 2)])
+        return EpisodeComposition(episodeID: episodeID, output: output, occurrences: occurrences, captions: [CompositionCaption(text: "Harbor recap", outputRange: try range(0, 3), layer: 2, order: 0)])
     }
 
     private func equivalentComposition(_ original: EpisodeComposition, asset: ManagedAsset) throws -> EpisodeComposition {
         let output = CompositionOutput(width: 1920, height: 1080, frameRate: try time(60, 2), duration: try time(24, 2))
         let occurrence = CompositionOccurrence(id: original.occurrences[0].id, assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: try range(0, 24, scale: 2), layer: 0, order: 0, crop: try crop())
-        return EpisodeComposition(episodeID: original.episodeID, output: output, occurrences: [occurrence], captions: [CompositionCaption(id: original.captions[0].id, text: "Harbor recap", outputRange: try range(0, 6, scale: 2), layer: 2)])
+        return EpisodeComposition(episodeID: original.episodeID, output: output, occurrences: [occurrence], captions: [CompositionCaption(id: original.captions[0].id, text: "Harbor recap", outputRange: try range(0, 6, scale: 2), layer: 2, order: 0)])
     }
 
     private func time(_ value: Int64, _ timescale: Int32 = 1) throws -> CompositionTime {
