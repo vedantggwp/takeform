@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';
-import {mkdir, readdir, readFile, stat, statfs, symlink, writeFile} from 'node:fs/promises';
+import {appendFile, mkdir, readdir, readFile, stat, statfs, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
@@ -87,6 +87,20 @@ export function mediaPreparationReceipt(manifestBytes, manifest, entries) {
 
 function receiptJson(value, attemptRoot) {
   return JSON.stringify(value, (key, item) => typeof item === 'string' ? item.replaceAll(attemptRoot, '.') : item, 2);
+}
+
+export function createAttemptProgress(attemptRoot, startedAt = Date.now()) {
+  const path = join(attemptRoot, 'progress.ndjson');
+  let pending = Promise.resolve();
+
+  const emit = (event) => {
+    const line = `${JSON.stringify({schemaVersion: 1, atMs: Date.now() - startedAt, ...event})}\n`;
+    pending = pending.then(() => appendFile(path, line));
+    pending.catch(() => {});
+    return pending;
+  };
+
+  return {emit, flush: () => pending, path};
 }
 
 async function importProducer(runtime) {
@@ -190,6 +204,7 @@ export class HyperframesAdapter {
     const controller = new AbortController();
     this.controllers.set(attempt.id, controller);
     const progress = [];
+    const durableProgress = createAttemptProgress(attemptRoot);
     const processSamples = [];
     let highWaterBytes = 0;
     let lowestFreeBytes = freeBytes;
@@ -202,18 +217,45 @@ export class HyperframesAdapter {
     process.env.TAKEFORM_BROWSER_EXECUTABLE = this.browser;
     const job = producer.createRenderJob({entryFile: 'index.html', format: 'mp4', fps: fixture.canonicalPlan.outputFrameRate, hdrMode: 'force-sdr', producerConfig, quality: 'standard', strictness: 'strict', workers: 1});
     const started = Date.now();
+    let lastFrame = 0;
+    let lastStage = '';
+    const recordProgress = (renderJob, message) => {
+      const entry = {message: String(message).slice(0, 240), status: String(renderJob.status)};
+      progress.push(entry);
+      const frame = /^Streaming frame (\d+)\/(\d+)$/.exec(entry.message);
+      if (frame) {
+        const current = Number(frame[1]);
+        const total = Number(frame[2]);
+        if (current === 1 || current === total || current - lastFrame >= 60) {
+          lastFrame = current;
+          durableProgress.emit({phase: 'frame', ...entry, frame: current, totalFrames: total});
+        }
+        return;
+      }
+      const stage = `${entry.status}:${entry.message}`;
+      if (stage !== lastStage) {
+        lastStage = stage;
+        durableProgress.emit({phase: 'stage', ...entry});
+      }
+    };
     try {
-      await producer.executeRenderJob(job, project, output, (renderJob, message) => progress.push({message: String(message).slice(0, 240), status: renderJob.status}), controller.signal);
+      await durableProgress.emit({phase: 'initial', status: job.status, message: 'Render job created'});
+      await producer.executeRenderJob(job, project, output, recordProgress, controller.signal);
+      await durableProgress.flush();
       highWaterBytes = Math.max(highWaterBytes, await directoryBytes(attemptRoot));
       const finished = await finishAttempt(attempt, {status: job.status === 'complete' ? 'completed' : 'failed'});
       const cleaned = await cleanupAttemptScratch(finished);
-      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, mediaPreparation, processSamples, progress, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
+      await durableProgress.emit({phase: 'terminal', status: String(job.status), message: job.status === 'complete' ? 'Render complete' : 'Render job returned'});
+      await durableProgress.flush();
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, mediaPreparation, processSamples, progress, progressLog: {path: './progress.ndjson', schemaVersion: 1}, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } catch (error) {
       const finished = await finishAttempt(attempt, {status: controller.signal.aborted ? 'interrupted' : 'failed'});
       const cleaned = await cleanupAttemptScratch(finished);
-      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, mediaPreparation, processSamples, progress, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
+      await durableProgress.emit({phase: 'terminal', status: controller.signal.aborted ? 'interrupted' : 'failed', message: 'Render terminated'}).catch(() => {});
+      await durableProgress.flush().catch(() => {});
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, mediaPreparation, processSamples, progress, progressLog: {path: './progress.ndjson', schemaVersion: 1}, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } finally {

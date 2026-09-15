@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
 import test from 'node:test';
 import {mkdtemp, readFile, readdir, rm} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
@@ -59,6 +61,29 @@ test('cancellation is attempt-scoped and restart requires a fresh attempt id', (
 test('process sampling excludes unrelated processes and retains descendants', () => {
   const rows = [{pid: 10, ppid: 1}, {pid: 11, ppid: 10}, {pid: 12, ppid: 11}, {pid: 13, ppid: 1}];
   assert.deepEqual(ownedProcessTree(rows, 10).map((row) => row.pid), [10, 11, 12]);
+});
+
+test('durable progress is readable while the reporting child remains alive', async () => {
+  const attemptRoot = await mkdtemp(join(tmpdir(), 'takeform-hf-progress-'));
+  const adapterUrl = pathToFileURL(join(import.meta.dirname, 'adapter.mjs')).href;
+  const child = spawn(process.execPath, ['--input-type=module', '--eval', `
+    import {createAttemptProgress} from ${JSON.stringify(adapterUrl)};
+    const progress = createAttemptProgress(process.argv[1]);
+    await progress.emit({phase: 'initial', status: 'created', message: 'Render job created'});
+    process.stdout.write('marker-written\\n');
+    setTimeout(() => process.exit(0), 500);
+  `, attemptRoot], {stdio: ['ignore', 'pipe', 'pipe']});
+  try {
+    await once(child.stdout, 'data');
+    assert.equal(child.exitCode, null);
+    const progress = await readFile(join(attemptRoot, 'progress.ndjson'), 'utf8');
+    assert.match(progress, /"phase":"initial"/);
+    assert.match(progress, /"message":"Render job created"/);
+    await once(child, 'close');
+  } finally {
+    if (child.exitCode === null) child.kill();
+    await rm(attemptRoot, {force: true, recursive: true});
+  }
 });
 
 test('future receipts use the accepted shared validator output shape', async () => {
