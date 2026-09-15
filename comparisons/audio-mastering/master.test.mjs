@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { masterArtifact, MasteringError } from './master.mjs';
+import { masterArtifact, MasteringError, timingFromStreams } from './master.mjs';
 
 const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
 const ffprobePath = '/opt/homebrew/bin/ffprobe';
-const policy = { targetIntegratedLufs: -16, maxTruePeakDbtp: -1, loudnessRangeTarget: 11, measurementResolution: 0.1, maxPrimingOffsetSeconds: 0.15, audioCodec: 'aac', audioBitrate: '192k' };
+const policy = { targetIntegratedLufs: -16, maxTruePeakDbtp: -1, loudnessRangeTarget: 11, measurementResolution: 0.1, primingAccessUnits: 2, audioCodec: 'aac', audioBitrate: '192k' };
 const run = (args) => new Promise((resolve, reject) => execFile(ffmpegPath, args, { maxBuffer: 1024 * 1024 }, error => error ? reject(error) : resolve()));
 const exists = async file => stat(file).then(() => true).catch(() => false);
 
@@ -22,13 +22,13 @@ async function media(root, { audio = 'sine=frequency=440:sample_rate=48000' } = 
 }
 
 async function setup() { const root = await mkdtemp(path.join(os.tmpdir(), 'takeform-audio-master-')); await mkdir(path.join(root, 'attempt')); return { root, attemptRoot: path.join(root, 'attempt'), outputPath: path.join(root, 'mastered.mp4') }; }
-const options = ({ rawPath, outputPath, attemptRoot, signal }) => ({ rawPath, outputPath, attemptRoot, signal, binaries: { ffmpegPath, ffprobePath }, policy, videoSampleFrames: [0, 30, 60, 89] });
+const options = ({ rawPath, outputPath, attemptRoot, signal, hooks }) => ({ rawPath, outputPath, attemptRoot, signal, hooks, binaries: { ffmpegPath, ffprobePath }, policy, videoSampleFrames: [0, 30, 60, 89] });
 
 test('masters real media transactionally and preserves decoded video', async () => {
   const ctx = await setup(); const rawPath = await media(ctx.root);
   const receipt = await masterArtifact(options({ ...ctx, rawPath }));
   assert.equal(receipt.status, 'succeeded'); assert.equal(await exists(ctx.outputPath), true);
-  assert.equal(receipt.videoSamples.length, 4); assert.equal(Math.round(receipt.mastered.measurement.integratedLufs * 10), -160);
+  assert.equal(receipt.videoSamples.length, 4); assert.equal(Math.round(receipt.mastered.measurement.integratedLufs * 10), -160); assert.equal(receipt.priming.avOffsetDifferenceSeconds, 0); assert.ok(Math.abs(receipt.priming.durationDifferenceSeconds) <= 2 * 1024 / 48000); assert.ok(receipt.cost.sampledChildren.every(child => child.reaped));
 });
 
 test('rejects absent, silent, and existing output before publication', async () => {
@@ -38,8 +38,18 @@ test('rejects absent, silent, and existing output before publication', async () 
   const overwrite = await setup(); const rawPath = await media(overwrite.root); await run(['-hide_banner', '-y', '-f', 'lavfi', '-i', 'color=s=16x16:d=0.1', '-frames:v', '1', overwrite.outputPath]); await assert.rejects(() => masterArtifact(options({ ...overwrite, rawPath })), error => error.code === 'output-exists');
 });
 
-test('cancellation leaves no partial or publishable output and writes a terminal receipt', async () => {
-  const ctx = await setup(); const rawPath = await media(ctx.root); const controller = new AbortController(); controller.abort();
-  await assert.rejects(() => masterArtifact(options({ ...ctx, rawPath, signal: controller.signal })), error => error.code === 'cancelled');
+test('atomic publication preserves a late competing output', async () => {
+  const ctx = await setup(); const rawPath = await media(ctx.root);
+  await assert.rejects(() => masterArtifact(options({ ...ctx, rawPath, hooks: { beforePublish: () => writeFile(ctx.outputPath, 'competitor') } })), error => error.code === 'output-exists');
+  assert.equal(await readFile(ctx.outputPath, 'utf8'), 'competitor');
+});
+
+test('late cancellation before publication leaves no output or partial', async () => {
+  const ctx = await setup(); const rawPath = await media(ctx.root); const controller = new AbortController();
+  await assert.rejects(() => masterArtifact(options({ ...ctx, rawPath, signal: controller.signal, hooks: { beforePublish: () => controller.abort() } })), error => error.code === 'cancelled');
   assert.equal(await exists(ctx.outputPath), false); assert.equal(await exists(path.join(ctx.attemptRoot, 'tmp', 'master.partial.mp4')), false); assert.equal(await exists(path.join(ctx.attemptRoot, 'terminal-receipt.json')), true);
+});
+
+test('rejects unavailable timing rather than inventing zero', () => {
+  assert.throws(() => timingFromStreams({ channels: 2, sample_rate: '48000', duration: 'N/A', start_time: '0' }, { start_time: '0' }), error => error.code === 'timing-unavailable');
 });
