@@ -20,6 +20,16 @@ jobs:
       (github.event.action == 'labeled' && github.event.label.name == 'native-creator-walkthrough-probe')
     runs-on: macos-26
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        case:
+          - name: create-import-inspect-compose-reopen
+            test: testCreateImportInspectComposeSaveAndReopen
+          - name: pair-stale-revoke
+            test: testPairCLIRejectsStaleRevisionAndRevocation
+          - name: copy-rebind-corrupt
+            test: testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -50,25 +60,26 @@ jobs:
           ./scripts/verify-dev-bundle "$probe_root/Takeform.app"
       - name: Validate runner-temporary path containment
         run: ./scripts/test-run-native-creator-walkthrough-paths
-      - name: Run bounded XCTest capability probe
+      - name: Run bounded XCTest capability probe (${{ matrix.case.name }})
         env:
           DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
           TAKEFORM_CREATOR_WALKTHROUGH_APP: ${{ runner.temp }}/takeform-native-creator-walkthrough/Takeform.app
-          TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT: ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts
-          TAKEFORM_CREATOR_WALKTHROUGH_ROOT: ${{ runner.temp }}/takeform-native-creator-walkthrough/test-inputs
+          TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT: ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/${{ matrix.case.name }}
+          TAKEFORM_CREATOR_WALKTHROUGH_ROOT: ${{ runner.temp }}/takeform-native-creator-walkthrough/test-inputs/${{ matrix.case.name }}
           TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
           TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS: 180
+          TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE: ${{ matrix.case.test }}
         run: ./scripts/run-native-creator-walkthrough
       - name: Upload creator walkthrough artifacts
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: native-creator-walkthrough-${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+          name: native-creator-walkthrough-${{ matrix.case.name }}-${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
           path: |
             ${{ runner.temp }}/takeform-ui-probe-source-sha.txt
-            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/facts.txt
-            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/xcodebuild.log
-            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/native-creator-walkthrough.xcresult
-            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/attachments
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/${{ matrix.case.name }}/facts.txt
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/${{ matrix.case.name }}/xcodebuild.log
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/${{ matrix.case.name }}/native-creator-walkthrough.xcresult
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/${{ matrix.case.name }}/attachments
           if-no-files-found: warn
           retention-days: 3

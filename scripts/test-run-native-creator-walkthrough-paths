@@ -18,6 +18,7 @@ must_reject() {
   if RUNNER_TEMP="$RUNNER" \
     TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$output" \
     TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$test_root" \
+    TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="testCreateImportInspectComposeSaveAndReopen" \
     "$LAUNCHER" --validate-runner-paths >/dev/null 2>&1; then
     echo "accepted unsafe path: $output" >&2
     exit 1
@@ -29,9 +30,25 @@ test ! -e "$SCRATCH/escaped"
 must_reject "$RUNNER/existing-link/escaped" "$RUNNER/test-inputs"
 test ! -e "$OUTSIDE/escaped"
 
+must_reject_case() {
+  local selector="$1"
+  if RUNNER_TEMP="$RUNNER" \
+    TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$RUNNER/valid/artifacts" \
+    TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$RUNNER/valid/test-inputs" \
+    TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="$selector" \
+    "$LAUNCHER" --validate-runner-paths >/dev/null 2>&1; then
+    echo "accepted unsafe or unknown test selector: $selector" >&2
+    exit 1
+  fi
+}
+
+must_reject_case ""
+must_reject_case "testNotACreatorWalkthroughCase"
+
 RUNNER_TEMP="$RUNNER" \
   TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$RUNNER/valid/artifacts" \
   TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$RUNNER/valid/test-inputs" \
+  TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="testCreateImportInspectComposeSaveAndReopen" \
   "$LAUNCHER" --validate-runner-paths >/dev/null
 test ! -e "$RUNNER/valid/artifacts"
 test ! -e "$RUNNER/valid/test-inputs"
@@ -55,6 +72,9 @@ grep -Eq 'waitForNonexistence\(goToFolder' "$TEST_SOURCE"
 grep -Eq 'textFields\["saveAsNameTextField"\]' "$TEST_SOURCE"
 grep -Eq 'filename: projectURL\.lastPathComponent' "$TEST_SOURCE"
 grep -Eq 'waitForPath\(projectURL' "$TEST_SOURCE"
+grep -Eq 'TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE is required for run and validation modes' "$LAUNCHER"
+grep -Eq 'testCreateImportInspectComposeSaveAndReopen\|testPairCLIRejectsStaleRevisionAndRevocation\|testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen' "$LAUNCHER"
+grep -Eq 'only-testing:\$TEST_IDENTIFIER' "$LAUNCHER"
 grep -Eq 'presentedSystemPanel\(in: app, confirmation: confirmation, named: "\\\(named\)-confirmation"\)' "$TEST_SOURCE"
 if grep -Eq 'textFields\.firstMatch' "$TEST_SOURCE"; then
   echo "creator walkthrough must not use an ambiguous system-panel text field" >&2

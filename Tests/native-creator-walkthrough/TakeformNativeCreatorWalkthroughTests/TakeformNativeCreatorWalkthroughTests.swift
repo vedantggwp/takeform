@@ -74,12 +74,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         defer { finish(app, named: "creator-cli-final") }
         try createChannel(in: app, named: "CLI channel", projectURL: projectURL)
 
-        app.buttons["workspace-pair-cli"].click()
-        XCTAssertTrue(app.buttons["workspace-confirm-pair-cli"].waitForExistence(timeout: 5))
-        app.buttons["workspace-confirm-pair-cli"].click()
-        let grant = app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-cli-grant-")).firstMatch
-        XCTAssertTrue(grant.waitForExistence(timeout: 15))
-        let grantID = try XCTUnwrap(UUID(uuidString: String(grant.identifier.dropFirst("workspace-cli-grant-".count))))
+        let grantID = try pairCLI(in: app)
         record(app, named: "creator-cli-paired")
 
         let rename = commandJSON(expectedRevision: 1, name: "CLI committed")
@@ -101,8 +96,12 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         app.buttons["workspace-revoke-cli"].click()
         XCTAssertTrue(app.staticTexts["CLI access revoked."].waitForExistence(timeout: 10))
         let denied = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, commandJSON(expectedRevision: 2, name: "denied")])
-        XCTAssertNotEqual(denied.status, 0)
-        XCTAssertTrue(denied.stderr.contains("open Takeform"), denied.stderr)
+        XCTAssertEqual(denied.status, 0, denied.stderr)
+        XCTAssertTrue(denied.stdout.contains("rejected"), denied.stdout)
+        XCTAssertTrue(denied.stdout.contains("unauthorized"), denied.stdout)
+        try openProject(projectURL, in: app)
+        XCTAssertTrue(app.staticTexts["CLI committed"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["denied"].exists)
         record(app, named: "creator-cli-revoked")
     }
 
@@ -112,6 +111,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let app = try launchApp()
         defer { finish(app, named: "creator-rebind-final") }
         try createChannel(in: app, named: "Move me", projectURL: projectURL)
+        let grantID = try pairCLI(in: app)
         try FileManager.default.copyItem(at: projectURL, to: copiedURL)
 
         try openProject(copiedURL, in: app)
@@ -121,12 +121,26 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         record(app, named: "creator-copy-decision")
         app.buttons["Rebind moved project"].click()
         XCTAssertTrue(app.staticTexts["Move me"].waitForExistence(timeout: 10))
+        let retiredGrant = app.otherElements["workspace-cli-grant-\(grantID.uuidString)"]
+        XCTAssertTrue(waitForNonexistence(retiredGrant, timeout: 10), "Rebinding a copied project must invalidate its prior paired grant")
+        let deniedAfterRebind = try runCopiedCLI(arguments: ["execute", copiedURL.path, grantID.uuidString, commandJSON(expectedRevision: 1, name: "Rebind denied")])
+        XCTAssertEqual(deniedAfterRebind.status, 0, deniedAfterRebind.stderr)
+        XCTAssertTrue(deniedAfterRebind.stdout.contains("rejected"), deniedAfterRebind.stdout)
+        XCTAssertTrue(deniedAfterRebind.stdout.contains("unauthorized"), deniedAfterRebind.stdout)
+        try openProject(copiedURL, in: app)
+        XCTAssertTrue(app.staticTexts["Move me"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Rebind denied"].exists)
 
         let manifest = copiedURL.appendingPathComponent(".takeform/manifest.json")
         try Data("not a takeform manifest".utf8).write(to: manifest, options: .atomic)
         try openProject(copiedURL, in: app)
         XCTAssertTrue(app.dialogs["Project needs attention"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "corrupt")).firstMatch.exists)
+        let corruptRecovery = "Takeform could not read this project. Its files were left unchanged."
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "value == %@", corruptRecovery)).firstMatch.waitForExistence(timeout: 5),
+            "Corrupt-project recovery should identify the safe, no-rewrite path"
+        )
+        XCTAssertTrue(app.staticTexts["Move me"].exists, "A corrupt open must retain the already open workspace")
         record(app, named: "creator-corrupt-project")
     }
 
@@ -176,6 +190,17 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
             waitForPath(projectURL, timeout: 10),
             "Create Project did not create the requested package at \(projectURL.path)"
         )
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 10), "Create Project did not publish the new channel before the next operation")
+        XCTAssertTrue(app.staticTexts["Revision 1"].waitForExistence(timeout: 10), "A new channel must publish its initial committed revision before the next operation")
+    }
+
+    private func pairCLI(in app: XCUIApplication) throws -> UUID {
+        app.buttons["workspace-pair-cli"].click()
+        XCTAssertTrue(app.buttons["workspace-confirm-pair-cli"].waitForExistence(timeout: 5))
+        app.buttons["workspace-confirm-pair-cli"].click()
+        let grant = app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-cli-grant-")).firstMatch
+        XCTAssertTrue(grant.waitForExistence(timeout: 15), "Pairing did not publish an app-issued CLI grant")
+        return try XCTUnwrap(UUID(uuidString: String(grant.identifier.dropFirst("workspace-cli-grant-".count))))
     }
 
     private func importMedia(_ source: URL, in app: XCUIApplication) throws {

@@ -10,6 +10,18 @@ APP_BUNDLE="${TAKEFORM_CREATOR_WALKTHROUGH_APP:-}"
 SOURCE_SHA="${TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA:-}"
 TEST_ROOT="${TAKEFORM_CREATOR_WALKTHROUGH_ROOT:-}"
 TIMEOUT_SECONDS="${TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS:-180}"
+TEST_CASE="${TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE:-}"
+
+test_identifier_for_case() {
+  case "$1" in
+    testCreateImportInspectComposeSaveAndReopen|testPairCLIRejectsStaleRevisionAndRevocation|testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen)
+      printf 'TakeformNativeCreatorWalkthroughTests/TakeformNativeCreatorWalkthroughTests/%s\n' "$1"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ] && [ "$MODE" != "--validate-runner-paths" ]; then
   echo "Usage: $0 [--build-for-testing|--validate-runner-paths]" >&2
@@ -21,6 +33,14 @@ if [ -z "$OUTPUT_DIR" ]; then
 fi
 if ! [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+if [ -n "$TEST_CASE" ] && ! TEST_IDENTIFIER="$(test_identifier_for_case "$TEST_CASE")"; then
+  echo "TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE is not an allowlisted creator walkthrough case" >&2
+  exit 2
+fi
+if { [ "$MODE" = run ] || [ "$MODE" = "--validate-runner-paths" ]; } && [ -z "$TEST_CASE" ]; then
+  echo "TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE is required for run and validation modes" >&2
   exit 2
 fi
 if [ ! -d "$PROJECT" ]; then
@@ -128,6 +148,7 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
   echo "source_sha: ${SOURCE_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
   echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
   echo "mode: $MODE"
+  echo "test_case: ${TEST_CASE:-not_applicable}"
   echo "test_root: ${TEST_ROOT:-not_applicable}"
   if [ "$MODE" = run ]; then
     echo "runner_temp: $RUNNER_TEMP_PHYSICAL"
@@ -159,6 +180,9 @@ command=(
   -derivedDataPath "$DERIVED_DATA"
   -resultBundlePath "$RESULT_BUNDLE"
 )
+if [ "$MODE" = run ]; then
+  command+=("-only-testing:$TEST_IDENTIFIER")
+fi
 set -m
 if [ "$MODE" = run ]; then
   TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_APP="$APP_BUNDLE" \
