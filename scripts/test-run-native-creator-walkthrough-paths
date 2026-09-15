@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+LAUNCHER="$ROOT_DIR/scripts/run-native-creator-walkthrough"
+TEST_SOURCE="$ROOT_DIR/Tests/native-creator-walkthrough/TakeformNativeCreatorWalkthroughTests/TakeformNativeCreatorWalkthroughTests.swift"
+APP_SOURCE="$ROOT_DIR/Sources/TakeformApp/TakeformApp.swift"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/takeform-creator-paths.XXXXXX")"
+RUNNER="$SCRATCH/runner"
+OUTSIDE="$SCRATCH/outside"
+trap 'rm -rf "$SCRATCH"' EXIT
+mkdir -p "$RUNNER" "$OUTSIDE"
+ln -s "$OUTSIDE" "$RUNNER/existing-link"
+
+must_reject() {
+  local output="$1"
+  local test_root="$2"
+  if RUNNER_TEMP="$RUNNER" \
+    TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$output" \
+    TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$test_root" \
+    TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="testCreateImportInspectComposeSaveAndReopen" \
+    "$LAUNCHER" --validate-runner-paths >/dev/null 2>&1; then
+    echo "accepted unsafe path: $output" >&2
+    exit 1
+  fi
+}
+
+must_reject "$RUNNER/out/../../escaped" "$RUNNER/test-inputs"
+test ! -e "$SCRATCH/escaped"
+must_reject "$RUNNER/existing-link/escaped" "$RUNNER/test-inputs"
+test ! -e "$OUTSIDE/escaped"
+
+must_reject_case() {
+  local selector="$1"
+  if RUNNER_TEMP="$RUNNER" \
+    TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$RUNNER/valid/artifacts" \
+    TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$RUNNER/valid/test-inputs" \
+    TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="$selector" \
+    "$LAUNCHER" --validate-runner-paths >/dev/null 2>&1; then
+    echo "accepted unsafe or unknown test selector: $selector" >&2
+    exit 1
+  fi
+}
+
+must_reject_case ""
+must_reject_case "testNotACreatorWalkthroughCase"
+
+RUNNER_TEMP="$RUNNER" \
+  TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$RUNNER/valid/artifacts" \
+  TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$RUNNER/valid/test-inputs" \
+  TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE="testCreateImportInspectComposeSaveAndReopen" \
+  "$LAUNCHER" --validate-runner-paths >/dev/null
+test ! -e "$RUNNER/valid/artifacts"
+test ! -e "$RUNNER/valid/test-inputs"
+
+# The copied bundle is intentionally launched through XCUIApplication(url:).
+# A default proxy needs an Xcode Target Application, which this portable test
+# target deliberately does not configure. The retained hosted AX hierarchy
+# exposes NSSavePanel as the copied app's `save-panel` window.
+if grep -Eq '=([[:space:]]*)XCUIApplication\(\)' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not construct a default XCUIApplication proxy" >&2
+  exit 1
+fi
+grep -Eq 'presentedSystemPanel\(in: app' "$TEST_SOURCE"
+grep -Eq 'app\.windows\["save-panel"\]' "$TEST_SOURCE"
+grep -Eq 'saveConfirmation\.exists, saveConfirmation\.isHittable' "$TEST_SOURCE"
+grep -Eq 'action\.exists, action\.isHittable' "$TEST_SOURCE"
+grep -Eq 'textFields\["PathTextField"\]' "$TEST_SOURCE"
+grep -Eq 'folderField\.typeKey\(\.return' "$TEST_SOURCE"
+grep -Eq 'app\.sheets\["GoToWindow"\]' "$TEST_SOURCE"
+grep -Eq 'waitForNonexistence\(goToFolder' "$TEST_SOURCE"
+grep -Eq 'textFields\["saveAsNameTextField"\]' "$TEST_SOURCE"
+grep -Eq 'filename: projectURL\.lastPathComponent' "$TEST_SOURCE"
+grep -Eq 'waitForPath\(projectURL' "$TEST_SOURCE"
+grep -Eq 'app\.buttons\.matching\(NSPredicate\(format: "identifier BEGINSWITH %@", "workspace-cli-grant-"\)\)' "$TEST_SOURCE"
+grep -Eq 'acceptSystemPanel\(path: source, confirmation: "Import footage"' "$TEST_SOURCE"
+grep -Eq 'try requireRegularFixture\(source\)' "$TEST_SOURCE"
+grep -Eq 'replaceText\(folderField, with: path\.path, named: "Go to Folder path"\)' "$TEST_SOURCE"
+grep -Eq 'predicate: NSPredicate\(format: "value == %@", value\)' "$TEST_SOURCE"
+grep -Eq 'value BEGINSWITH %@", "Revision "' "$TEST_SOURCE"
+grep -Eq 'let values = try url\.resourceValues\(forKeys: \[\.isRegularFileKey\]\)' "$TEST_SOURCE"
+grep -Eq 'identifier == %@", "composition-asset-picker"' "$TEST_SOURCE"
+if grep -Eq 'app\.buttons\["composition-asset-picker"\]' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not assume the composition Menu is a Button" >&2
+  exit 1
+fi
+if [ "$(grep -Ec '\.typeText\(' "$TEST_SOURCE")" -ne 1 ]; then
+  echo "creator walkthrough fields must use replaceText so prefilled values are never appended" >&2
+  exit 1
+fi
+grep -Eq 'TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE is required for run and validation modes' "$LAUNCHER"
+grep -Eq 'testCreateImportInspectComposeSaveAndReopen\|testPairCLIRejectsStaleRevisionAndRevocation\|testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen' "$LAUNCHER"
+grep -Eq 'only-testing:\$TEST_IDENTIFIER' "$LAUNCHER"
+grep -Eq 'presentedSystemPanel\(in: app, confirmation: confirmation, named: "\\\(named\)-confirmation"\)' "$TEST_SOURCE"
+if grep -Eq 'textFields\.firstMatch' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not use an ambiguous system-panel text field" >&2
+  exit 1
+fi
+if grep -Eq 'process\.waitUntilExit\(\)' "$TEST_SOURCE"; then
+  echo "creator walkthrough copied CLI must use bounded TERM/KILL reaping" >&2
+  exit 1
+fi
+grep -Eq 'Darwin\.kill\(pid, SIGKILL\)' "$TEST_SOURCE"
+grep -Eq 'exited\.wait\(timeout: \.now\(\) \+ 10\)' "$TEST_SOURCE"
+grep -Eq 'accessibilityElement\(children: \.contain\)' "$APP_SOURCE"
+grep -Eq 'accessibilityIdentifier\("managed-media-drop-target"\)' "$APP_SOURCE"
+grep -Eq 'accessibilityIdentifier\("workspace-import-footage"\)' "$APP_SOURCE"
