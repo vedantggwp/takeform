@@ -1,6 +1,9 @@
 import XCTest
+import CoreGraphics
 import Darwin
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 @testable import TakeformWorkspace
 @_spi(Testing) import TakeformAppServiceClient
 @_spi(Testing) @testable import TakeformAppAuthorityWire
@@ -8,6 +11,16 @@ import Foundation
 import TakeformCore
 
 final class WorkspaceClientTests: XCTestCase {
+    private func validPNG() -> Data {
+        let data = NSMutableData()
+        let context = CGContext(data: nil, width: 8, height: 4, bitsPerComponent: 8, bytesPerRow: 32, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 4))
+        let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
     private func runBounded(_ executable: URL, arguments: [String], input: String? = nil, environment: [String: String] = [:]) throws -> (status: Int32, output: Data, error: Data) {
         let process = Process(); let output = Pipe(); let error = Pipe(); let standardInput = Pipe()
         let exited = DispatchSemaphore(value: 0)
@@ -217,8 +230,8 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(document.channel?.name, "Paired")
         XCTAssertEqual(document.revision, Revision(1))
 
-        let source = root.appendingPathComponent("paired-import.mov")
-        let bytes = Data(repeating: 0x44, count: 90_000)
+        let source = root.appendingPathComponent("paired-import.png")
+        let bytes = validPNG()
         try bytes.write(to: source)
         let pairedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, grant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(pairedImport.status, 0, String(decoding: pairedImport.error, as: UTF8.self))

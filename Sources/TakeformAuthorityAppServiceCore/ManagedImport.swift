@@ -2,6 +2,7 @@ import CryptoKit
 import Darwin
 import Foundation
 import TakeformCore
+import TakeformMedia
 
 /// Authority-only copy/promotion primitive. It never mutates a source and only
 /// removes the UUID staging directory it created. The catalog commit remains a
@@ -12,6 +13,7 @@ enum ManagedImport {
         case sourceChanged
         case objectCollision
         case unsafePackagePath
+        case unsupportedMedia
         case durability
     }
 
@@ -35,7 +37,8 @@ enum ManagedImport {
         defer { try? FileManager.default.removeItem(at: staging) }
         try requireRegularDirectory(staging)
 
-        let staged = staging.appendingPathComponent("bytes")
+        let stagedName = source.pathExtension.isEmpty ? "bytes" : "bytes.\(source.pathExtension.lowercased())"
+        let staged = staging.appendingPathComponent(stagedName)
         let input = try openRegularFile(source, flags: O_RDONLY, failure: .invalidSource)
         defer { try? input.close() }
         var sourceFDBefore = stat()
@@ -92,7 +95,26 @@ enum ManagedImport {
             }
         }
         try syncDirectory(objects)
-        return ManagedAsset(digest: hash, byteLength: count, filename: source.lastPathComponent, mediaType: mediaType(for: source))
+        let unvalidated = ManagedAsset(digest: hash, byteLength: count, filename: source.lastPathComponent, mediaType: "unvalidated")
+        return try validatePromotedMedia(unvalidated, probeURL: staged)
+    }
+
+    /// The catalog is allowed to reference only bytes that were successfully
+    /// measured from the immutable promoted object, never from the mutable
+    /// source pathname. The matching digest binds the persisted media type to
+    /// those exact object bytes.
+    static func validatePromotedMedia(_ asset: ManagedAsset, probeURL: URL) throws -> ManagedAsset {
+        let result = waitForProbe(probeURL)
+        guard case let .success(facts) = result,
+              facts.source.byteLength == asset.byteLength,
+              facts.source.byteLength > 0,
+              facts.source.sha256 == asset.digest else { throw Failure.unsupportedMedia }
+        let mediaType: String
+        if facts.image != nil { mediaType = "image" }
+        else if facts.video != nil { mediaType = "video" }
+        else if !facts.audio.isEmpty { mediaType = "audio" }
+        else { throw Failure.unsupportedMedia }
+        return ManagedAsset(digest: asset.digest, byteLength: asset.byteLength, filename: asset.filename, mediaType: mediaType)
     }
 
     static func verifyObject(_ asset: ManagedAsset, package: URL) throws {
@@ -181,6 +203,21 @@ enum ManagedImport {
         return (hex(digest.finalize()), count)
     }
 
+    private final class ProbeBox: @unchecked Sendable {
+        var result: MediaProbeResult?
+    }
+
+    private static func waitForProbe(_ object: URL) -> MediaProbeResult {
+        let box = ProbeBox()
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            box.result = await MediaProbe().inspect(object)
+            done.signal()
+        }
+        done.wait()
+        return box.result ?? .failure(.unreadableFile)
+    }
+
     private static func sameIdentity(_ lhs: stat, _ rhs: stat) -> Bool {
         lhs.st_dev == rhs.st_dev && lhs.st_ino == rhs.st_ino && lhs.st_size == rhs.st_size
             && lhs.st_mtimespec.tv_sec == rhs.st_mtimespec.tv_sec
@@ -197,8 +234,4 @@ enum ManagedImport {
 
     private static func hex(_ digest: SHA256.Digest) -> String { digest.map { String(format: "%02x", $0) }.joined() }
 
-    private static func mediaType(for source: URL) -> String {
-        let imageExtensions: Set<String> = ["heic", "heif", "jpg", "jpeg", "png", "tif", "tiff", "gif"]
-        return imageExtensions.contains(source.pathExtension.lowercased()) ? "image" : "video-or-audio"
-    }
 }

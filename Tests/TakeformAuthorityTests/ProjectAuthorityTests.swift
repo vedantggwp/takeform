@@ -1,7 +1,10 @@
 import Foundation
 import CryptoKit
+import CoreGraphics
 import Darwin
+import ImageIO
 import Security
+import UniformTypeIdentifiers
 import XCTest
 @testable import TakeformAuthorityAppServiceCore
 @_spi(Testing) @testable import TakeformAppAuthorityWire
@@ -12,6 +15,17 @@ final class ProjectAuthorityTests: XCTestCase {
     private var tokenAccounts: Set<String> = []
     private var tokens: [UUID: String] = [:]
     private var projectIDs: Set<UUID> = []
+    private lazy var validPNG: Data = {
+        let data = NSMutableData()
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = CGContext(data: nil, width: 8, height: 4, bitsPerComponent: 8, bytesPerRow: 32, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 4))
+        let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return data as Data
+    }()
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-authority-\(UUID().uuidString)")
@@ -354,17 +368,16 @@ final class ProjectAuthorityTests: XCTestCase {
 
     func testManagedImportServiceRouteCopiesDeduplicatesAndReopensWithoutChangingOriginal() throws {
         let package = root.appendingPathComponent("Managed.takeform")
-        let source = root.appendingPathComponent("camera.mov")
-        let original = Data((0..<150_000).map { UInt8($0 % 251) })
+        let source = root.appendingPathComponent("camera.png")
+        let original = validPNG
         try original.write(to: source)
         let authority = try ProjectAuthority(packageURL: package)
         let initial = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
         projectIDs.insert(initial.projectID)
 
         let request = AppAuthorityRequest.importMedia(package, [source], UUID(), Data("creator".utf8))
-        guard case let .importOutcomes(first) = CreatorAuthorityService.respond(to: request, from: .app),
-              first.count == 1,
-              case let .imported(asset) = first[0] else { return XCTFail("import route did not return an asset") }
+        guard case let .importOutcomes(first) = CreatorAuthorityService.respond(to: request, from: .app) else { return XCTFail("import route did not return outcomes") }
+        guard first.count == 1, case let .imported(asset) = first[0] else { return XCTFail("import route did not return an asset: \(first)") }
         XCTAssertEqual(try Data(contentsOf: source), original)
         XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(".takeform/objects/\(asset.digest)")), original)
 
@@ -380,8 +393,8 @@ final class ProjectAuthorityTests: XCTestCase {
 
     func testPairedImportUsesEditGrantAndRefusesInvalidOrRevokedGrantBeforeStaging() throws {
         let package = root.appendingPathComponent("PairedImport.takeform")
-        let source = root.appendingPathComponent("paired.mov")
-        try Data(repeating: 0x55, count: 90_000).write(to: source)
+        let source = root.appendingPathComponent("paired.png")
+        try validPNG.write(to: source)
         let authority = try ProjectAuthority(packageURL: package)
         let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
         projectIDs.insert(document.projectID)
@@ -397,6 +410,21 @@ final class ProjectAuthorityTests: XCTestCase {
         try authority.revokePairedCLIGrant(credential: "creator", grantID: grant.id)
         let revoked = try authority.importManagedSources([source], grantID: grant.id, token: "paired-token")
         guard case .failed = revoked.first else { return XCTFail("revoked paired token must be denied") }
+    }
+
+    func testManagedImportRejectsEmptyAndCorruptBytesBeforeCatalogCommit() throws {
+        let package = root.appendingPathComponent("RejectedMedia.takeform")
+        let empty = root.appendingPathComponent("empty.mov")
+        let corrupt = root.appendingPathComponent("corrupt.png")
+        try Data().write(to: empty)
+        try Data("not media".utf8).write(to: corrupt)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let outcomes = try authority.importManagedSources([empty, corrupt], credential: "creator")
+        XCTAssertEqual(outcomes.count, 2)
+        for outcome in outcomes { guard case .failed = outcome else { return XCTFail("unsupported bytes were cataloged") } }
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
     }
 
     func testManagedImportCancellationAndSourceChangeLeaveNoCatalogReference() throws {
@@ -453,8 +481,8 @@ final class ProjectAuthorityTests: XCTestCase {
 
     func testManagedImportCollisionPreservesExistingObjectAndMissingObjectIsVisibleOnReopen() throws {
         let package = root.appendingPathComponent("Collision.takeform")
-        let source = root.appendingPathComponent("same.mov")
-        let bytes = Data(repeating: 0x41, count: 90_000)
+        let source = root.appendingPathComponent("same.png")
+        let bytes = validPNG
         try bytes.write(to: source)
         let authority = try ProjectAuthority(packageURL: package)
         let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
@@ -482,8 +510,8 @@ final class ProjectAuthorityTests: XCTestCase {
 
     func testManagedImportRejectsSymlinkedObjectInsteadOfReadingOutsidePackage() throws {
         let package = root.appendingPathComponent("Symlink.takeform")
-        let source = root.appendingPathComponent("source.mov")
-        let bytes = Data(repeating: 0x71, count: 90_000)
+        let source = root.appendingPathComponent("source.png")
+        let bytes = validPNG
         try bytes.write(to: source)
         let authority = try ProjectAuthority(packageURL: package)
         let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document

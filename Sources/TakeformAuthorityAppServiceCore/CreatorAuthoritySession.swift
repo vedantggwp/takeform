@@ -86,6 +86,7 @@ public enum CreatorAuthorityService {
             case .sourceChanged: return .rejected("The source changed while it was copied; no media was added")
             case .objectCollision: return .rejected("An existing managed object does not match its digest")
             case .unsafePackagePath: return .rejected("Takeform refused an unsafe media storage path")
+            case .unsupportedMedia: return .rejected("Takeform could not read supported media from the copied bytes")
             case .durability: return .rejected("Takeform could not durably promote this media")
             }
         }
