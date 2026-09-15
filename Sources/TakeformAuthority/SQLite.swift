@@ -4,15 +4,15 @@ import Foundation
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-enum SQLiteError: Error, LocalizedError {
+public enum SQLiteError: Error, LocalizedError {
     case message(String)
-    var errorDescription: String? { switch self { case .message(let value): value } }
+    public var errorDescription: String? { switch self { case .message(let value): value } }
 }
 
-final class SQLiteDatabase {
+public final class SQLiteDatabase {
     private var handle: OpaquePointer?
 
-    init(path: URL) throws {
+    public init(path: URL) throws {
         var opened: OpaquePointer?
         guard sqlite3_open_v2(path.path, &opened, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
             throw SQLiteError.message("Could not open SQLite database at \(path.path)")
@@ -24,7 +24,7 @@ final class SQLiteDatabase {
 
     deinit { sqlite3_close(handle) }
 
-    func execute(_ sql: String, bindings: [String] = []) throws {
+    public func execute(_ sql: String, bindings: [String] = []) throws {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
         defer { sqlite3_finalize(statement) }
@@ -36,7 +36,7 @@ final class SQLiteDatabase {
         guard result == SQLITE_DONE else { throw failure() }
     }
 
-    func value(_ sql: String, bindings: [String] = []) throws -> String? {
+    public func value(_ sql: String, bindings: [String] = []) throws -> String? {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
         defer { sqlite3_finalize(statement) }
@@ -47,7 +47,7 @@ final class SQLiteDatabase {
         return sqlite3_column_text(statement, 0).map { String(cString: $0) }
     }
 
-    func row(_ sql: String, bindings: [String] = []) throws -> [String]? {
+    public func row(_ sql: String, bindings: [String] = []) throws -> [String]? {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
         defer { sqlite3_finalize(statement) }
@@ -60,7 +60,7 @@ final class SQLiteDatabase {
         }
     }
 
-    func transaction<T>(_ work: () throws -> T) throws -> T {
+    public func transaction<T>(_ work: () throws -> T) throws -> T {
         try execute("BEGIN IMMEDIATE")
         do {
             let value = try work()

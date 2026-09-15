@@ -2,7 +2,8 @@ import Foundation
 import CryptoKit
 import Security
 import XCTest
-@testable import TakeformAuthority
+@testable import TakeformAuthorityAppServiceCore
+import TakeformAppAuthorityWire
 import TakeformCore
 
 final class ProjectAuthorityTests: XCTestCase {
@@ -167,6 +168,64 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertEqual(try movedAuthority.open(rebindMovedPackage: true).document, document)
         let denied = try execute(movedAuthority, CommandEnvelope(expectedRevision: document.revision, command: .renameChannel(name: "Needs pairing")), grant: grant)
         XCTAssertEqual(denied.outcome, .rejected(reason: "unauthorized"))
+    }
+
+    func testCreatorRebindAuthenticatesBeforeMutationAndNativeEditsDoNotMintCLIGrants() throws {
+        let original = root.appendingPathComponent("Creator.takeform")
+        let authority = try ProjectAuthority(packageURL: original)
+        let creatorCredential = "creator-credential"
+        let initial = try authority.openForAuthenticatedCreator(credential: creatorCredential, rebindMovedPackage: false).document
+        let paired: Grant
+        do { paired = try authority.issuePairedCLIGrant(credential: creatorCredential, label: "paired CLI", scopes: [.editProject], expiresAt: .distantFuture, rawToken: "paired-token") }
+        catch { return XCTFail("initial pair failed: \(error)") }
+        let stateURL = try machineURL(for: initial.projectID).appendingPathComponent("binding.json")
+        let grantsBeforeNativeEdit = try JSONDecoder().decode(TestMachineState.self, from: Data(contentsOf: stateURL)).grants
+        do { _ = try authority.openForAuthenticatedCreator(credential: creatorCredential, rebindMovedPackage: false) }
+        catch { return XCTFail("creator credential changed before native edit: \(error)") }
+        do { _ = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Native", initialRecipe: [:])), credential: creatorCredential) }
+        catch { return XCTFail("native edit failed: \(error)") }
+        XCTAssertEqual(try JSONDecoder().decode(TestMachineState.self, from: Data(contentsOf: stateURL)).grants, grantsBeforeNativeEdit)
+
+        let moved = root.appendingPathComponent("CreatorMoved.takeform")
+        try FileManager.default.copyItem(at: original, to: moved)
+        let movedAuthority = try ProjectAuthority(packageURL: moved)
+        let bindingBeforeWrongCredential = try Data(contentsOf: stateURL)
+        XCTAssertThrowsError(try movedAuthority.openForAuthenticatedCreator(credential: "wrong-credential", rebindMovedPackage: true)) {
+            XCTAssertEqual($0 as? AuthorityFailure, .unauthorized)
+        }
+        XCTAssertEqual(try Data(contentsOf: stateURL), bindingBeforeWrongCredential)
+
+        do { _ = try movedAuthority.openForAuthenticatedCreator(credential: creatorCredential, rebindMovedPackage: true) }
+        catch { return XCTFail("authenticated rebind failed: \(error)") }
+        let denied = try movedAuthority.execute(CommandEnvelope(expectedRevision: Revision(1), command: .renameChannel(name: "Old grant")), grantID: paired.id, token: "paired-token")
+        XCTAssertEqual(denied.outcome, .rejected(reason: "unauthorized"))
+
+        let replacement: Grant
+        do { replacement = try movedAuthority.issuePairedCLIGrant(credential: creatorCredential, label: "replacement", scopes: [.editProject], expiresAt: .distantFuture, rawToken: "replacement-token") }
+        catch { return XCTFail("replacement pair failed: \(error)") }
+        try movedAuthority.revokePairedCLIGrant(credential: creatorCredential, grantID: replacement.id)
+        let revoked = try movedAuthority.execute(CommandEnvelope(expectedRevision: Revision(1), command: .renameChannel(name: "Revoked")), grantID: replacement.id, token: "replacement-token")
+        XCTAssertEqual(revoked.outcome, .rejected(reason: "unauthorized"))
+    }
+
+    func testPeerRolePolicyCannotRouteCreatorRequestsThroughPairedCLI() throws {
+        let creatorRequest = AppAuthorityRequest.open(root.appendingPathComponent("NoMutation.takeform"), false, Data("credential".utf8))
+        let pairedRequest = AppAuthorityRequest.pairedExecute(root.appendingPathComponent("NoMutation.takeform"), CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "No", initialRecipe: [:])), UUID(), "token")
+        XCTAssertFalse(CreatorAuthorityService.allows(creatorRequest, for: .cli))
+        XCTAssertFalse(CreatorAuthorityService.allows(pairedRequest, for: .app))
+        XCTAssertTrue(CreatorAuthorityService.allows(creatorRequest, for: .app))
+        XCTAssertTrue(CreatorAuthorityService.allows(pairedRequest, for: .cli))
+    }
+
+    func testShippingCLIHasNoCreatorOrEngineDependency() throws {
+        let packageURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Package.swift")
+        let manifest = try String(contentsOf: packageURL)
+        guard let range = manifest.range(of: ".executableTarget(name: \"TakeformCLI\"") else { return XCTFail("TakeformCLI target missing") }
+        let declaration = String(manifest[range.lowerBound...].prefix(180))
+        XCTAssertTrue(declaration.contains("\"TakeformCore\""))
+        XCTAssertTrue(declaration.contains("\"TakeformAppAuthorityWire\""))
+        XCTAssertFalse(declaration.contains("TakeformAuthorityEngine"))
+        XCTAssertFalse(declaration.contains("TakeformAuthorityAppServiceCore"))
     }
 
     func testProjectionDriftAndNewerSchemaAreVisibleWithoutReset() throws {

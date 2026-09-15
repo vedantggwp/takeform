@@ -1,6 +1,6 @@
 import Foundation
 import Darwin
-import TakeformAuthority
+import TakeformAuthorityAppServiceCore
 import TakeformCore
 
 func output<T: Encodable>(_ value: T) throws {
@@ -11,7 +11,7 @@ func output<T: Encodable>(_ value: T) throws {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard arguments.count == 4, arguments[0] == "execute", let grantID = UUID(uuidString: arguments[2]) else {
-    fputs("usage: TakeformAuthorityService execute <package> <grant-id> <request-json>\n", stderr)
+    fputs("usage: TakeformAuthorityEngineService execute <package> <grant-id> <request-json>\n", stderr)
     exit(2)
 }
 

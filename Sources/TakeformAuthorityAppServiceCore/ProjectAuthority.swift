@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import TakeformAuthorityEngine
 import TakeformCore
 
 public enum AuthorityFailure: Error, Equatable, LocalizedError {
@@ -233,7 +234,6 @@ public final class ProjectAuthority {
     private func tokenDigest(_ token: String) -> String { SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined() }
 }
 
-@_spi(AuthorityAppService)
 extension ProjectAuthority {
     /// Service-only native path. Its credential is never accepted by CLI commands.
     public func openForAuthenticatedCreator(credential: String, rebindMovedPackage: Bool) throws -> ProjectOpenState {
@@ -241,7 +241,13 @@ extension ProjectAuthority {
         let state = try loadMachineState(for: projectID)
         let digest = tokenDigest(credential)
         if let binding = state.binding {
-            guard state.creatorCredentialDigest == digest else { throw AuthorityFailure.unauthorized }
+            if let existingDigest = state.creatorCredentialDigest {
+                guard existingDigest == digest else { throw AuthorityFailure.unauthorized }
+            } else {
+                // First creator registration can only adopt the already-bound path. A
+                // moved package never acquires a creator credential through rebind.
+                guard binding.canonicalPath == packageURL.path else { throw AuthorityFailure.copyDecisionRequired }
+            }
             if binding.canonicalPath != packageURL.path && !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
         }
         let opened = try open(rebindMovedPackage: rebindMovedPackage)
@@ -264,6 +270,14 @@ extension ProjectAuthority {
         guard let epoch = state.binding?.epoch else { throw AuthorityFailure.unauthorized }
         let grant = Grant(label: label, scopes: scopes, expiresAt: expiresAt, authorityEpoch: epoch, tokenDigest: tokenDigest(rawToken))
         state.grants.append(grant); try saveMachineState(state, for: opened.document.projectID); return grant
+    }
+
+    public func revokePairedCLIGrant(credential: String, grantID: UUID) throws {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        var state = try loadMachineState(for: opened.document.projectID)
+        guard let index = state.grants.firstIndex(where: { $0.id == grantID }) else { throw AuthorityFailure.unauthorized }
+        state.grants[index].revokedAt = Date()
+        try saveMachineState(state, for: opened.document.projectID)
     }
 
     private func portableProjectID() throws -> UUID {

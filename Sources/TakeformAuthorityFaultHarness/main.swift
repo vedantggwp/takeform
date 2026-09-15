@@ -1,7 +1,7 @@
 import Darwin
 import CryptoKit
 import Foundation
-import TakeformAuthority
+import TakeformAuthorityAppServiceCore
 import TakeformCore
 
 private struct Fixture: Codable {
@@ -15,7 +15,7 @@ private struct HarnessMachineState: Codable { let binding: HarnessBinding; let g
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard arguments.count == 2, let root = arguments.last.map({ URL(fileURLWithPath: $0) }) else {
-    fputs("usage: TakeformAuthorityFaultHarness <setup|before|verify-before|after|replay|cleanup> <root>\n", stderr)
+    fputs("usage: TakeformAuthorityEngineFaultHarness <setup|before|verify-before|after|replay|cleanup> <root>\n", stderr)
     exit(2)
 }
 
@@ -39,7 +39,7 @@ private func serviceStatus(_ fixture: Fixture, fault: String? = nil) throws -> I
     let harnessURL = executable.hasPrefix("/")
         ? URL(fileURLWithPath: executable)
         : URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(executable)
-    let service = harnessURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityService")
+    let service = harnessURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityEngineService")
     let process = Process()
     let input = Pipe()
     let completed = DispatchSemaphore(value: 0)
@@ -54,7 +54,7 @@ private func serviceStatus(_ fixture: Fixture, fault: String? = nil) throws -> I
     guard completed.wait(timeout: .now() + 5) == .success else {
         process.terminate()
         _ = completed.wait(timeout: .now() + 1)
-        throw NSError(domain: "TakeformAuthorityFaultHarness", code: 6)
+        throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 6)
     }
     return process.terminationStatus
 }
@@ -70,28 +70,28 @@ do {
         let rawToken = "fault-harness-\(document.projectID.uuidString)-\(fixtureGrantID.uuidString)"
         let digest = SHA256.hash(data: Data(rawToken.utf8)).map { String(format: "%02x", $0) }.joined()
         let grant = Grant(id: fixtureGrantID, label: "fault-harness", scopes: [.editProject], expiresAt: .distantFuture, authorityEpoch: 1, tokenDigest: digest)
-        guard let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 4) }
+        guard let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 4) }
         let stateURL = applicationSupport.appendingPathComponent("Takeform/Authority/\(document.projectID.uuidString)/binding.json")
         try JSONEncoder().encode(HarnessMachineState(binding: HarnessBinding(canonicalPath: package.standardizedFileURL.path, epoch: 1), grants: [grant])).write(to: stateURL, options: .atomic)
         let command = CommandEnvelope(expectedRevision: document.revision, command: .createChannel(name: "Recovered", initialRecipe: [:]))
         try JSONEncoder().encode(Fixture(projectID: document.projectID, grantID: grant.id, envelope: command)).write(to: fixtureURL, options: .atomic)
         print("fault-harness: setup")
     case "before":
-        guard try serviceStatus(try fixture(), fault: "before-commit") == 75 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 7) }
+        guard try serviceStatus(try fixture(), fault: "before-commit") == 75 else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 7) }
         print("fault-harness: service terminated immediately before SQLite commit")
     case "verify-before":
         let document = try authority().open().document
-        guard document.revision == Revision(0), document.channel == nil else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 1) }
+        guard document.revision == Revision(0), document.channel == nil else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 1) }
         print("fault-harness: PASS pre-commit termination retained revision 0")
     case "after":
         let fixture = try fixture()
-        guard try serviceStatus(fixture, fault: "after-commit") == 75 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 2) }
+        guard try serviceStatus(fixture, fault: "after-commit") == 75 else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 2) }
         print("fault-harness: service terminated after durable SQLite commit before response")
     case "replay":
         let fixture = try fixture()
-        guard try serviceStatus(fixture) == 0 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 3) }
+        guard try serviceStatus(fixture) == 0 else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 3) }
         let document = try authority().open().document
-        guard document.revision == Revision(1), document.channel?.name == "Recovered" else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 3) }
+        guard document.revision == Revision(1), document.channel?.name == "Recovered" else { throw NSError(domain: "TakeformAuthorityEngineFaultHarness", code: 3) }
         print("fault-harness: PASS post-commit replay returned revision 1 without another mutation")
     case "cleanup":
         if let stored = try? fixture() {

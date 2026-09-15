@@ -3,7 +3,13 @@ import Foundation
 import TakeformCore
 import TakeformWorkspace
 
-public enum AppAuthorityRequest: Codable, Sendable { case open(URL, Bool, Data); case execute(URL, CommandEnvelope, Data); case pair(URL, String, Date, Data); case revoke(URL, UUID, Data) }
+public enum AppAuthorityRequest: Codable, Sendable {
+    case open(URL, Bool, Data)
+    case execute(URL, CommandEnvelope, Data)
+    case pair(URL, String, Date, Data)
+    case revoke(URL, UUID, Data)
+    case pairedExecute(URL, CommandEnvelope, UUID, String)
+}
 public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case pairing(UUID, String); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocket {
  public static var path: String { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask).first!.appendingPathComponent("Takeform/app-authority.sock").path }

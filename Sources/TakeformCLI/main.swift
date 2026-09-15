@@ -2,6 +2,8 @@ import Foundation
 import Darwin
 import LocalAuthentication
 import Security
+import TakeformAppAuthorityWire
+import TakeformCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
@@ -80,13 +82,13 @@ func credentialQuery(for grantID: UUID) -> [CFString: Any] {
     [kSecClass: kSecClassGenericPassword, kSecAttrService: "com.takeform.authority.cli", kSecAttrAccount: grantID.uuidString]
 }
 
-func bundledService() -> String? {
+func bundledAppService() -> URL? {
     let executable = CommandLine.arguments[0]
     let executableURL = executable.hasPrefix("/")
         ? URL(fileURLWithPath: executable)
         : URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(executable)
-    let service = executableURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityService").path
-    return FileManager.default.isExecutableFile(atPath: service) ? service : nil
+    let service = executableURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService")
+    return FileManager.default.isExecutableFile(atPath: service.path) ? service : nil
 }
 
 switch arguments.first {
@@ -111,35 +113,34 @@ case "forget-paired-credential":
     _ = removeCredential(query: credentialQuery(for: grantID))
     print("takeform: paired session credential removed")
 case "execute":
-    guard arguments.count == 4, let service = bundledService() else {
-        fputs("takeform: bundled authority service is unavailable\n", stderr)
+    guard arguments.count == 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]) else {
+        fputs("usage: takeform execute <package> <grant-id> <request-json>\n", stderr)
         exit(1)
     }
-    guard let grantID = UUID(uuidString: arguments[2]) else {
-        fputs("usage: takeform execute <package> <grant-id> <request-json>\n", stderr)
-        exit(2)
-    }
-    let authenticationContext = LAContext()
-    authenticationContext.interactionNotAllowed = true
-    var query = credentialQuery(for: grantID)
-    query[kSecReturnData] = true
-    query[kSecUseAuthenticationContext] = authenticationContext
-    let credential = readCredential(query: query)
-    guard let tokenData = credential else {
-        fputs("takeform: paired session credential is unavailable\n", stderr)
+    do {
+        let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: Data(arguments[3].utf8))
+        let fd = try AppAuthoritySocket.connect()
+        defer { close(fd) }
+        guard let requirement = AppAuthorityPeer.requirement(for: service), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else {
+            throw NSError(domain: "TakeformCLI", code: 1)
+        }
+        let authenticationContext = LAContext()
+        authenticationContext.interactionNotAllowed = true
+        var query = credentialQuery(for: grantID)
+        query[kSecReturnData] = true
+        query[kSecUseAuthenticationContext] = authenticationContext
+        guard let tokenData = readCredential(query: query), let token = String(data: tokenData, encoding: .utf8), !token.isEmpty else {
+            throw NSError(domain: "TakeformCLI", code: 2)
+        }
+        try AppAuthoritySocket.send(AppAuthorityRequest.pairedExecute(URL(fileURLWithPath: arguments[1]), envelope, grantID, token), fd)
+        guard case let .result(result) = try AppAuthoritySocket.receive(AppAuthorityResponse.self, fd) else { throw NSError(domain: "TakeformCLI", code: 3) }
+        let output = try JSONEncoder().encode(result)
+        FileHandle.standardOutput.write(output)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        fputs("takeform: paired authority request failed\n", stderr)
         exit(3)
     }
-    let process = Process()
-    let input = Pipe()
-    process.executableURL = URL(fileURLWithPath: service)
-    process.arguments = arguments
-    process.standardInput = input
-    try process.run()
-    input.fileHandleForWriting.write(tokenData)
-    input.fileHandleForWriting.write(Data("\n".utf8))
-    input.fileHandleForWriting.closeFile()
-    process.waitUntilExit()
-    exit(process.terminationStatus)
 default:
     fputs("usage: takeform <import-paired-credential|forget-paired-credential|execute> ...\n", stderr)
     exit(2)
