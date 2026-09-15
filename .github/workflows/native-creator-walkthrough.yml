@@ -1,0 +1,72 @@
+name: native-creator-walkthrough-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed commit SHA to measure
+        required: true
+        type: string
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  native-creator-walkthrough:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'native-creator-walkthrough-probe')
+    runs-on: macos-26
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Verify exact reviewed source and pinned toolchain
+        env:
+          TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_26.4.1.app/Contents/Developer
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA"
+          printf '%s\n' "$actual_sha" > "$RUNNER_TEMP/takeform-ui-probe-source-sha.txt"
+          xcodebuild -version
+          swift --version
+          sw_vers
+          uname -m
+      - name: Build and copy the exact creator bundle
+        run: |
+          set -euo pipefail
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          probe_root="$RUNNER_TEMP/takeform-native-creator-walkthrough"
+          mkdir -p "$probe_root"
+          ./scripts/package-dev-bundle "$probe_root/bundle"
+          ditto "$probe_root/bundle/Takeform.app" "$probe_root/Takeform.app"
+          ./scripts/verify-dev-bundle "$probe_root/Takeform.app"
+      - name: Run bounded XCTest capability probe
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+          TAKEFORM_CREATOR_WALKTHROUGH_APP: ${{ runner.temp }}/takeform-native-creator-walkthrough/Takeform.app
+          TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT: ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts
+          TAKEFORM_CREATOR_WALKTHROUGH_ROOT: ${{ runner.temp }}/takeform-native-creator-walkthrough/test-inputs
+          TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+          TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS: 180
+        run: ./scripts/run-native-creator-walkthrough
+      - name: Upload creator walkthrough artifacts
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: native-creator-walkthrough-${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/takeform-ui-probe-source-sha.txt
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/facts.txt
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/xcodebuild.log
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/native-creator-walkthrough.xcresult
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/attachments
+          if-no-files-found: warn
+          retention-days: 3

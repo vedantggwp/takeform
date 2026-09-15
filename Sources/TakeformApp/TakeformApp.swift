@@ -425,14 +425,18 @@ private struct WorkspaceView: View {
                         VStack(alignment: .leading) {
                             Text(episode.name)
                             Text("Recipe \(episode.recipeVersion)").font(.caption).foregroundStyle(.secondary)
-                        }.tag(episode.id)
+                        }
+                        .tag(episode.id)
+                        .accessibilityIdentifier("workspace-episode-\(episode.id.uuidString)")
                     }
                 } else {
                     ContentUnavailableView("No project open", systemImage: "folder", description: Text("Open a project to view its committed channel and episodes."))
                 }
                 Spacer()
                 Button("Open Project…") { model.openPanel() }
+                    .accessibilityIdentifier("workspace-open-project")
                 Button("New Channel…") { model.beginNewChannel() }
+                    .accessibilityIdentifier("workspace-new-channel")
             }
             .padding()
             .frame(minWidth: 230)
@@ -467,6 +471,7 @@ private struct WorkspaceView: View {
                             Button("Redo") { model.submit(.redo) }
                         }
                         Button("Import footage…") { model.chooseMedia() }
+                            .accessibilityIdentifier("workspace-import-footage")
                     }
                     GroupBox("Recipes") {
                         VStack(alignment: .leading, spacing: 10) {
@@ -476,21 +481,28 @@ private struct WorkspaceView: View {
                             }
                             HStack {
                                 TextField("Value name", text: $recipeKey)
+                                    .accessibilityIdentifier("workspace-recipe-key")
                                 TextField("Value", text: $recipeValue)
+                                    .accessibilityIdentifier("workspace-recipe-value")
                                 Button("Publish recipe") {
                                     guard !recipeKey.isEmpty else { return }
                                     model.submit(.publishRecipe(values: [recipeKey: recipeValue])); recipeKey = ""; recipeValue = ""
-                                }.disabled(document.channel == nil)
+                                }
+                                .disabled(document.channel == nil)
+                                .accessibilityIdentifier("workspace-publish-recipe")
                             }
                         }
                     }
                     GroupBox("Episodes") {
                         HStack {
                             TextField("Episode name", text: $episodeName)
+                                .accessibilityIdentifier("workspace-episode-name")
                             Button("Create episode") {
                                 guard let recipe = document.recipes.last else { return }
                                 model.submit(.createEpisode(name: episodeName, recipeVersion: recipe.id)); episodeName = ""
-                            }.disabled(document.recipes.isEmpty || episodeName.isEmpty)
+                            }
+                            .disabled(document.recipes.isEmpty || episodeName.isEmpty)
+                            .accessibilityIdentifier("workspace-create-episode")
                         }
                     }
                     GroupBox("Managed media") {
@@ -569,11 +581,15 @@ private struct WorkspaceView: View {
                 }
                 Section("Override") {
                     TextField("Value name", text: $overrideKey)
+                        .accessibilityIdentifier("workspace-override-key")
                     TextField("Value", text: $overrideValue)
+                        .accessibilityIdentifier("workspace-override-value")
                     Button("Apply override") { model.submit(.setOverride(episodeID: episode.id, key: overrideKey, value: overrideValue)) }
                         .disabled(overrideKey.isEmpty)
+                        .accessibilityIdentifier("workspace-apply-override")
                     Button("Reset override") { model.submit(.resetOverride(episodeID: episode.id, key: overrideKey)) }
                         .disabled(overrideKey.isEmpty)
+                        .accessibilityIdentifier("workspace-reset-override")
                 }
                 EpisodeCompositionEditor(model: model, episode: episode)
                 cliAccess
@@ -586,14 +602,18 @@ private struct WorkspaceView: View {
     private var cliAccess: some View {
         Section("CLI access") {
             Button("Pair CLI…") { model.showPairing = true }
+                .accessibilityIdentifier("workspace-pair-cli")
             if model.cliGrants.isEmpty { Text("No paired CLI grants.").foregroundStyle(.secondary) }
             ForEach(model.cliGrants) { grant in
                 HStack {
                     Button { model.selectedGrantID = grant.id } label: { Image(systemName: model.selectedGrantID == grant.id ? "checkmark.circle.fill" : "circle") }
+                        .accessibilityIdentifier("workspace-cli-grant-select-\(grant.id.uuidString)")
                     VStack(alignment: .leading) { Text(grant.label); Text(grant.revokedAt == nil ? "Expires \(grant.expiresAt.formatted())" : "Revoked").font(.caption).foregroundStyle(.secondary) }
-                }
+                }.accessibilityIdentifier("workspace-cli-grant-\(grant.id.uuidString)")
             }
-            Button("Revoke selected grant") { model.revokeCLI() }.disabled(model.selectedGrantID == nil)
+            Button("Revoke selected grant") { model.revokeCLI() }
+                .disabled(model.selectedGrantID == nil)
+                .accessibilityIdentifier("workspace-revoke-cli")
         }
     }
 
@@ -601,6 +621,7 @@ private struct WorkspaceView: View {
         HStack(spacing: 8) {
             if model.isWorking { ProgressView().controlSize(.small) }
             Text(model.status).font(.caption).foregroundStyle(model.error == nil ? Color.secondary : Color.red)
+                .accessibilityIdentifier("workspace-status")
         }.padding(10).background(.bar).frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -608,11 +629,17 @@ private struct WorkspaceView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("New Channel").font(.title2.weight(.semibold))
             TextField("Channel name", text: $channelName)
+                .accessibilityIdentifier("new-channel-name")
             TextField("First recipe value name", text: $recipeKey)
+                .accessibilityIdentifier("new-channel-recipe-key")
             TextField("First recipe value", text: $recipeValue)
+                .accessibilityIdentifier("new-channel-recipe-value")
             HStack { Spacer(); Button("Cancel") { model.showNewChannel = false }; Button("Create") {
                 model.createChannel(name: channelName, initialRecipe: recipeKey.isEmpty ? [:] : [recipeKey: recipeValue]); model.showNewChannel = false
-            }.keyboardShortcut(.defaultAction).disabled(channelName.isEmpty) }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(channelName.isEmpty)
+            .accessibilityIdentifier("new-channel-create") }
         }.padding().frame(width: 400)
     }
 
@@ -628,7 +655,9 @@ private struct WorkspaceView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Pair Takeform CLI").font(.title2.weight(.semibold))
             Text("Pairing grants the bundled CLI a time-limited project session. Takeform never stores the raw CLI token in this project.").fixedSize(horizontal: false, vertical: true)
-            HStack { Spacer(); Button("Cancel") { model.showPairing = false }; Button("Pair CLI") { model.pairCLI(); model.showPairing = false }.keyboardShortcut(.defaultAction) }
+            HStack { Spacer(); Button("Cancel") { model.showPairing = false }; Button("Pair CLI") { model.pairCLI(); model.showPairing = false }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("workspace-confirm-pair-cli") }
         }.padding().frame(width: 420)
     }
 }
