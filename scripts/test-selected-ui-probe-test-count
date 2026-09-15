@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/takeform-selected-tests.XXXXXX")"
+trap 'rm -rf "$fixture_root"' EXIT
+
+cat > "$fixture_root/singular.log" <<'EOF'
+Test Suite 'Selected tests' passed at 2026-09-15 07:21:52.693.
+	 Executed 1 test, with 0 failures (0 unexpected) in 12.659 seconds
+EOF
+cat > "$fixture_root/plural.log" <<'EOF'
+Test Suite 'Selected tests' failed at 2026-09-15 07:21:52.693.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 12.659 seconds
+EOF
+
+test "$("$ROOT_DIR/scripts/selected-ui-probe-test-count" "$fixture_root/singular.log")" = "1"
+test "$("$ROOT_DIR/scripts/selected-ui-probe-test-count" "$fixture_root/plural.log")" = "3"

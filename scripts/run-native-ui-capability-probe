@@ -138,11 +138,7 @@ status=$?
 
 if [ "$MODE" = run ] && [ "$FAILED_LANES_ONLY" = "1" ]; then
   expected_test_count=1
-  executed_test_count="$(awk '
-    /Test Suite .Selected tests./ { selected = 1; next }
-    selected && /Executed [0-9]+ tests/ { count = $2; selected = 0 }
-    END { print count + 0 }
-  ' "$LOG")"
+  executed_test_count="$("$ROOT_DIR/scripts/selected-ui-probe-test-count" "$LOG")"
   echo "expected_selected_test_count: $expected_test_count" >> "$FACTS"
   echo "observed_selected_test_count: $executed_test_count" >> "$FACTS"
   if [ "$executed_test_count" -ne "$expected_test_count" ]; then

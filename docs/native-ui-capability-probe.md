@@ -97,7 +97,9 @@ with its facts attached; it never substitutes a smaller threshold. This path is
 enabled only by the workflow's test-runner environment, is not used by a local
 structural build, and changes neither runner defaults nor a personal Mac.
 
-The first failed-lane retry limits XCTest to keyboard menu traversal,
+The workflow defaults to the complete F1 XCTest suite. A maintainer may use
+the manual-dispatch `failed_lanes_only` input only for an explicitly reviewed
+diagnostic run. The first failed-lane retry limits XCTest to keyboard menu traversal,
 outer-window resize, and Appearance contrast, plus each case's existing
 copied-app launch preflight. Once resize and contrast have passed, a subsequent
 keyboard-only retry requires exactly one selected test to execute. Previously

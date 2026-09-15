@@ -7,6 +7,11 @@ on:
         description: Exact reviewed commit SHA to measure
         required: true
         type: string
+      failed_lanes_only:
+        description: Run only explicitly selected diagnostic lanes
+        required: false
+        default: false
+        type: boolean
   pull_request:
     types: [labeled]
 
@@ -56,7 +61,7 @@ jobs:
           TAKEFORM_UI_PROBE_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
           TAKEFORM_UI_PROBE_TIMEOUT_SECONDS: 180
           TAKEFORM_UI_PROBE_ALLOW_DISPLAY_MODE: "1"
-          TAKEFORM_UI_PROBE_FAILED_LANES_ONLY: "1"
+          TAKEFORM_UI_PROBE_FAILED_LANES_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.failed_lanes_only && '1' || '0' }}
         run: ./scripts/run-native-ui-capability-probe
       - name: Upload synthetic UI probe artifacts
         if: always()
