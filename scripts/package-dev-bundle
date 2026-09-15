@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+DESTINATION_DIR="${1:-"$ROOT_DIR/dist"}"
+APP_BUNDLE="$DESTINATION_DIR/Takeform.app"
+
+mkdir -p "$DESTINATION_DIR"
+swift build --package-path "$ROOT_DIR" -c release --product Takeform
+swift build --package-path "$ROOT_DIR" -c release --product TakeformDoctor
+BIN_DIR="$(swift build --package-path "$ROOT_DIR" -c release --show-bin-path)"
+
+bundle_identifier=""
+display_name=""
+development_version=""
+minimum_system_version=""
+while IFS='=' read -r key value; do
+  case "$key" in
+    bundleIdentifier) bundle_identifier="$value" ;;
+    displayName) display_name="$value" ;;
+    developmentVersion) development_version="$value" ;;
+    minimumSystemVersion) minimum_system_version="$value" ;;
+  esac
+done < <("$BIN_DIR/TakeformDoctor" identity)
+
+if [ -z "$bundle_identifier" ] || [ -z "$display_name" ] || [ -z "$development_version" ] || [ -z "$minimum_system_version" ]; then
+  echo "TakeformDoctor did not provide complete product metadata." >&2
+  exit 1
+fi
+
+rm -rf "$APP_BUNDLE"
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+cp "$BIN_DIR/Takeform" "$APP_BUNDLE/Contents/MacOS/Takeform"
+cp "$ROOT_DIR/design/identity/exports/Takeform.icns" "$APP_BUNDLE/Contents/Resources/Takeform.icns"
+
+cat >"$APP_BUNDLE/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>$display_name</string>
+  <key>CFBundleExecutable</key>
+  <string>Takeform</string>
+  <key>CFBundleIconFile</key>
+  <string>Takeform</string>
+  <key>CFBundleIdentifier</key>
+  <string>$bundle_identifier</string>
+  <key>CFBundleName</key>
+  <string>$display_name</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>$minimum_system_version</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>TakeformDevelopmentVersion</key>
+  <string>$development_version</string>
+</dict>
+</plist>
+PLIST
+
+"$BIN_DIR/TakeformDoctor" verify-identity "$APP_BUNDLE/Contents/Info.plist"
+codesign --force --options runtime --sign - --identifier "$bundle_identifier" "$APP_BUNDLE"
+codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+echo "$APP_BUNDLE"

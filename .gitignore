@@ -9,3 +9,4 @@ dist/
 renders/
 *.log
 fixtures/**/media/
+package-description.json
