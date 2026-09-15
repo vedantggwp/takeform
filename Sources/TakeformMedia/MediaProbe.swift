@@ -163,20 +163,32 @@ public struct ProbeMeasurement: Sendable, Equatable {
 }
 
 public struct MediaProbe: Sendable {
+    enum ProgressPoint: Sendable { case hashChunkRead, presentationSampleRead }
+
     public static let defaultHashChunkBytes = 64 * 1024
     public static let defaultMaximumStoredPresentationTimestamps = 96
 
     private let hashChunkBytes: Int
     private let maximumStoredPresentationTimestamps: Int
+    private let progress: (@Sendable (ProgressPoint) -> Void)?
 
     public init(
         hashChunkBytes: Int = MediaProbe.defaultHashChunkBytes,
         maximumStoredPresentationTimestamps: Int = MediaProbe.defaultMaximumStoredPresentationTimestamps
     ) {
+        self.init(hashChunkBytes: hashChunkBytes, maximumStoredPresentationTimestamps: maximumStoredPresentationTimestamps, progress: nil)
+    }
+
+    init(
+        hashChunkBytes: Int,
+        maximumStoredPresentationTimestamps: Int,
+        progress: (@Sendable (ProgressPoint) -> Void)?
+    ) {
         precondition(hashChunkBytes > 0)
         precondition(maximumStoredPresentationTimestamps > 1)
         self.hashChunkBytes = hashChunkBytes
         self.maximumStoredPresentationTimestamps = maximumStoredPresentationTimestamps
+        self.progress = progress
     }
 
     public func inspect(_ url: URL) async -> MediaProbeResult {
@@ -294,6 +306,8 @@ public struct MediaProbe: Sendable {
             try Task.checkCancellation()
             let data = try handle.read(upToCount: hashChunkBytes) ?? Data()
             if data.isEmpty { break }
+            progress?(.hashChunkRead)
+            try Task.checkCancellation()
             digest.update(data: data)
             byteLength += UInt64(data.count)
         }
@@ -430,6 +444,7 @@ public struct MediaProbe: Sendable {
         var deltaCount = 0
         var scannedCount = 0
         while let sample = output.copyNextSampleBuffer() {
+            progress?(.presentationSampleRead)
             try Task.checkCancellation()
             let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
             if let rational = RationalTime(timestamp), stored.count < maximumStoredPresentationTimestamps {

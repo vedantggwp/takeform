@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreVideo
+import Dispatch
 import Foundation
 import Testing
 @testable import TakeformMedia
@@ -120,6 +121,26 @@ struct TakeformMediaTests {
         #expect(await task.value == .failure(.cancelled))
     }
 
+    @Test func cancellationAfterHashingStartsReturnsTypedFailure() async throws {
+        let gate = ProgressGate()
+        let release = DispatchSemaphore(value: 0)
+        let input = try fixture("T/media/take1.mp4")
+        let probe = MediaProbe(
+            hashChunkBytes: 1024,
+            maximumStoredPresentationTimestamps: 8,
+            progress: { point in
+                guard point == .hashChunkRead else { return }
+                Task { await gate.signal() }
+                release.wait()
+            }
+        )
+        let task = Task { await probe.inspect(input) }
+        await gate.waitForSignal()
+        task.cancel()
+        release.signal()
+        #expect(await task.value == .failure(.cancelled))
+    }
+
     @Test func largeSourceUsesBoundedHashAndTimestampStorage() async throws {
         let facts = try success(await MediaProbe(hashChunkBytes: 32 * 1024, maximumStoredPresentationTimestamps: 8).inspect(try fixture("T/media/take1.mp4")))
         #expect(facts.source.byteLength > 100_000_000)
@@ -181,6 +202,23 @@ private func writeRotatedVideo(to url: URL) async throws {
     }
     guard writer.status == .completed else {
         throw writer.error ?? TestFailure("Cannot finish test movie")
+    }
+}
+
+private actor ProgressGate {
+    private var signalled = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func signal() {
+        guard !signalled else { return }
+        signalled = true
+        waiter?.resume()
+        waiter = nil
+    }
+
+    func waitForSignal() async {
+        guard !signalled else { return }
+        await withCheckedContinuation { waiter = $0 }
     }
 }
 
