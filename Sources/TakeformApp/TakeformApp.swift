@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import AVKit
 import SwiftUI
 import UniformTypeIdentifiers
 import TakeformCore
@@ -15,6 +16,15 @@ private final class DroppedURLs: @unchecked Sendable {
     private var values: [URL] = []
     func append(_ url: URL) { lock.lock(); values.append(url); lock.unlock() }
     func snapshot() -> [URL] { lock.lock(); defer { lock.unlock() }; return values }
+}
+
+/// The inspector receives this only after a fresh authority open verified the
+/// catalog object. Asset, package, and revision move together so an old open
+/// cannot combine an asset with a newer project.
+struct VerifiedAssetSelection: Equatable {
+    let asset: ManagedAsset
+    let packageURL: URL
+    let revision: Revision
 }
 
 @MainActor
@@ -100,16 +110,40 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedGrantID: UUID?
     @Published private(set) var importOutcomes: [ManagedImportOutcome] = []
     @Published var selectedAssetID: UUID?
+    @Published private(set) var verifiedAssetSelection: VerifiedAssetSelection?
     @Published var isDropTargeted = false
 
     private let client: any WorkspaceClient
     private var importTask: Task<Void, Never>?
+    private var selectionTask: Task<Void, Never>?
+    private var workspaceGeneration = 0
+    private var selectionGeneration = 0
+    private var requestedPackageURL: URL?
 
     init(client: any WorkspaceClient) { self.client = client }
 
     var document: ProjectDocument? { snapshot?.document }
     var packageURL: URL? { snapshot?.packageURL }
     var selectedEpisode: Episode? { document?.episodes.first { $0.id == selectedEpisodeID } }
+
+    private func beginWorkspaceUpdate(for packageURL: URL?) -> Int {
+        workspaceGeneration &+= 1
+        requestedPackageURL = packageURL
+        invalidateSelection()
+        return workspaceGeneration
+    }
+
+    private func invalidateSelection() {
+        selectionGeneration &+= 1
+        selectionTask?.cancel()
+        selectionTask = nil
+        selectedAssetID = nil
+        verifiedAssetSelection = nil
+    }
+
+    private static func samePackage(_ lhs: URL?, _ rhs: URL) -> Bool {
+        lhs?.standardizedFileURL == rhs.standardizedFileURL
+    }
 
     func openPanel() {
         let panel = NSOpenPanel()
@@ -125,21 +159,28 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func open(_ url: URL, rebind: Bool) {
+        let generation = beginWorkspaceUpdate(for: url)
         Task {
             isWorking = true; error = nil
             defer { isWorking = false }
             do {
                 let result = try await client.open(packageURL: url, rebindMovedPackage: rebind)
+                guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
+                let grants = (try? await client.listCLIGrants(packageURL: url)) ?? []
+                guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
                 snapshot = result
-                cliGrants = (try? await client.listCLIGrants(packageURL: url)) ?? []
+                cliGrants = grants
                 selectedGrantID = cliGrants.contains(where: { $0.id == selectedGrantID }) ? selectedGrantID : nil
                 pendingRebindURL = nil
                 selectedEpisodeID = result.document.episodes.first?.id
+                requestedPackageURL = nil
                 status = rebind ? "Rebound project at revision \(result.document.revision.value). Previous CLI grants were invalidated; pair again." : "Opened revision \(result.document.revision.value)."
             } catch let failure as WorkspaceFailure {
+                guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
                 pendingRebindURL = failure == .copyDecisionRequired ? url : nil
                 error = failure; status = failure.errorDescription ?? "Unable to open project."
             } catch {
+                guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
                 status = "Unable to open project. No changes were made."
             }
         }
@@ -168,23 +209,56 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func selectAsset(_ asset: ManagedAsset) {
-        guard let packageURL else { return }
-        Task {
+        guard let packageURL else {
+            error = .rejected("Open a project before inspecting media")
+            status = error?.errorDescription ?? "Unable to inspect media."
+            return
+        }
+        // Remove any prior preview while the authority checks the current
+        // catalog. A stale selection must not keep a player or image alive.
+        invalidateSelection()
+        let selection = selectionGeneration
+        let workspace = workspaceGeneration
+        selectionTask = Task { [weak self] in
+            guard let self else { return }
             do {
                 // `open` is the authority's digest/length verification gate;
                 // never hand a selected filesystem URL straight to a preview.
-                let verified = try await client.open(packageURL: packageURL, rebindMovedPackage: false)
+                let verified = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
+                guard !Task.isCancelled,
+                      self.selectionGeneration == selection,
+                      self.workspaceGeneration == workspace,
+                      Self.samePackage(self.packageURL, packageURL) else { return }
+                guard let verifiedAsset = WorkspacePresentation.assetForVerifiedPreview(document: verified.document, selectedAssetID: asset.id) else {
+                    selectedAssetID = nil
+                    verifiedAssetSelection = nil
+                    error = .missingObject("selected managed asset")
+                    status = error?.errorDescription ?? "Selected media is unavailable."
+                    return
+                }
                 snapshot = verified
-                selectedAssetID = verified.document.assets.contains(where: { $0.id == asset.id }) ? asset.id : nil
-                if selectedAssetID == nil { error = .missingObject("selected managed asset") }
-            } catch let failure as WorkspaceFailure { self.error = failure; selectedAssetID = nil }
-            catch { self.error = .corruptProject; selectedAssetID = nil }
+                selectedAssetID = verifiedAsset.id
+                verifiedAssetSelection = VerifiedAssetSelection(asset: verifiedAsset, packageURL: verified.packageURL, revision: verified.document.revision)
+            } catch let failure as WorkspaceFailure {
+                guard !Task.isCancelled, self.selectionGeneration == selection, self.workspaceGeneration == workspace else { return }
+                self.error = failure
+                self.status = failure.errorDescription ?? "Selected media is unavailable."
+                selectedAssetID = nil
+                verifiedAssetSelection = nil
+            } catch {
+                guard !Task.isCancelled, self.selectionGeneration == selection, self.workspaceGeneration == workspace else { return }
+                self.error = .corruptProject
+                self.status = WorkspaceFailure.corruptProject.errorDescription ?? "Selected media is unavailable."
+                selectedAssetID = nil
+                verifiedAssetSelection = nil
+            }
         }
     }
 
     private func importMedia(_ urls: [URL], into packageURL: URL) {
         guard !urls.isEmpty else { return }
         importTask?.cancel()
+        let generation = beginWorkspaceUpdate(for: packageURL)
         importTask = Task { [weak self] in
             guard let self else { return }
             self.isWorking = true
@@ -192,12 +266,21 @@ final class WorkspaceModel: ObservableObject {
             defer { self.isWorking = false; self.importTask = nil }
             do {
                 let outcomes = try await self.client.importMedia(packageURL: packageURL, sources: urls)
+                guard !Task.isCancelled, self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, packageURL) else { return }
                 self.importOutcomes = outcomes
                 if Task.isCancelled { self.status = "Media import cancelled."; return }
                 self.status = outcomes.map(Self.importMessage).joined(separator: "\n")
-                self.snapshot = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
-            } catch let failure as WorkspaceFailure { self.error = failure; self.status = failure.errorDescription ?? "Import failed." }
-            catch { self.status = "Import failed without committing incomplete media." }
+                let opened = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
+                guard !Task.isCancelled, self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, packageURL) else { return }
+                self.snapshot = opened
+                self.requestedPackageURL = nil
+            } catch let failure as WorkspaceFailure {
+                guard !Task.isCancelled, self.workspaceGeneration == generation else { return }
+                self.error = failure; self.status = failure.errorDescription ?? "Import failed."
+            } catch {
+                guard !Task.isCancelled, self.workspaceGeneration == generation else { return }
+                self.status = "Import failed without committing incomplete media."
+            }
         }
     }
 
@@ -220,17 +303,27 @@ final class WorkspaceModel: ObservableObject {
             guard let self else { return }
             guard response == .OK, let url = panel.url else { self.status = "Channel creation cancelled."; return }
             guard !FileManager.default.fileExists(atPath: url.path) else { self.error = .rejected("Choose a new project folder; that destination already exists"); self.status = self.error?.errorDescription ?? "Channel creation failed."; return }
+            let generation = self.beginWorkspaceUpdate(for: url)
             Task {
                 self.isWorking = true; self.error = nil
                 defer { self.isWorking = false }
                 do {
                     let created = try await self.client.createChannelPackage(packageURL: url, name: name, initialRecipe: initialRecipe)
+                    guard self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, url) else { return }
                     let document = created.document
+                    let grants = (try? await self.client.listCLIGrants(packageURL: url)) ?? []
+                    guard self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, url) else { return }
                     self.snapshot = created
-                    self.cliGrants = (try? await self.client.listCLIGrants(packageURL: url)) ?? []
+                    self.cliGrants = grants
+                    self.requestedPackageURL = nil
                     self.status = "Created \(name) at revision \(document.revision.value)."
-                } catch let failure as WorkspaceFailure { self.error = failure; self.status = failure.errorDescription ?? "Channel creation failed." }
-                catch { self.status = "Channel creation failed. No project changes were committed." }
+                } catch let failure as WorkspaceFailure {
+                    guard self.workspaceGeneration == generation else { return }
+                    self.error = failure; self.status = failure.errorDescription ?? "Channel creation failed."
+                } catch {
+                    guard self.workspaceGeneration == generation else { return }
+                    self.status = "Channel creation failed. No project changes were committed."
+                }
             }
         }
     }
@@ -242,19 +335,26 @@ final class WorkspaceModel: ObservableObject {
 
     func submit(_ command: ProjectCommand) {
         guard let document, let packageURL else { return }
+        let generation = beginWorkspaceUpdate(for: packageURL)
         Task {
             isWorking = true; error = nil
             defer { isWorking = false }
             do {
                 let result = try await client.execute(packageURL: packageURL, envelope: CommandEnvelope(expectedRevision: document.revision, command: command))
+                guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, packageURL) else { return }
                 status = WorkspacePresentation.commandMessage(result)
                 if case .applied(let next) = result.outcome {
                     snapshot = WorkspaceSnapshot(document: next, projectionMatches: true, packageURL: packageURL)
                     selectedEpisodeID = selectedEpisodeID ?? next.episodes.first?.id
                 }
+                requestedPackageURL = nil
             } catch let failure as WorkspaceFailure {
+                guard workspaceGeneration == generation else { return }
                 error = failure; status = failure.errorDescription ?? "No change was committed."
-            } catch { status = "No change was committed." }
+            } catch {
+                guard workspaceGeneration == generation else { return }
+                status = "No change was committed."
+            }
         }
     }
 
@@ -378,13 +478,27 @@ private struct WorkspaceView: View {
                         if document.assets.isEmpty { Text("No managed media yet. Imported originals are copied into this project unchanged.").foregroundStyle(.secondary) }
                         ForEach(document.assets) { asset in
                             Button { model.selectAsset(asset) } label: { HStack(alignment: .top, spacing: 12) {
-                                ManagedAssetPreview(asset: asset, packageURL: model.packageURL)
+                                Image(systemName: asset.mediaType == "image" ? "photo" : asset.mediaType == "audio" ? "waveform" : "film")
+                                    .frame(width: 108, height: 72)
                                 VStack(alignment: .leading) {
                                     Text(asset.filename)
                                     Text("Source asset · \(asset.mediaType) · \(asset.byteLength) bytes · \(asset.digest.prefix(12))").font(.caption.monospaced()).foregroundStyle(.secondary)
                                 }
                             }.padding(4).background(model.selectedAssetID == asset.id ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6)) }
                             .buttonStyle(.plain).accessibilityIdentifier("managed-asset-\(asset.digest.prefix(12))")
+                        }
+                        if let selected = model.verifiedAssetSelection {
+                            GroupBox("Selected source asset") {
+                                HStack(alignment: .top, spacing: 12) {
+                                    ManagedAssetPreview(asset: selected.asset, packageURL: selected.packageURL)
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(selected.asset.filename)
+                                        Text("Revision \(selected.revision.value) · \(selected.asset.mediaType) · \(selected.asset.byteLength) bytes · \(selected.asset.digest)").font(.caption.monospaced())
+                                        ManagedAssetProbeDetails(probe: selected.asset.probe)
+                                        Text("This is a source asset, not a timeline moment.").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }.accessibilityIdentifier("managed-asset-inspector")
                         }
                         HStack {
                             Button("Import footage…") { model.chooseMedia() }
@@ -520,7 +634,8 @@ private struct ManagedAssetPreview: View {
     let asset: ManagedAsset
     let packageURL: URL?
     @State private var image: NSImage?
-    @State private var unsupported = false
+    @State private var player: AVPlayer?
+    @State private var failure: String?
 
     var body: some View {
         Group {
@@ -528,8 +643,11 @@ private struct ManagedAssetPreview: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if unsupported {
-                Label("Preview unsupported", systemImage: "film")
+            } else if let player {
+                VideoPlayer(player: player)
+                    .accessibilityLabel(asset.mediaType == "audio" ? "Managed audio playback" : "Managed video playback")
+            } else if let failure {
+                Label(failure, systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -540,21 +658,70 @@ private struct ManagedAssetPreview: View {
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .task(id: asset.digest) { await loadPreview() }
+        .onDisappear { releasePlayer() }
     }
 
     @MainActor private func loadPreview() async {
-        guard let packageURL else { unsupported = true; return }
+        image = nil
+        releasePlayer()
+        failure = nil
+        guard let packageURL else { failure = "Preview unavailable"; return }
         let object = packageURL.appendingPathComponent(".takeform/objects/\(asset.digest)")
-        if let image = NSImage(contentsOf: object) { self.image = image; return }
-        let media = AVURLAsset(url: object)
-        let generator = AVAssetImageGenerator(asset: media)
-        generator.appliesPreferredTrackTransform = true
-        do {
-            let frame = try await generator.image(at: .zero).image
-            image = NSImage(cgImage: frame, size: .zero)
-        } catch {
-            unsupported = true
+        switch asset.mediaType {
+        case "image":
+            guard let loaded = NSImage(contentsOf: object) else { failure = "Image preview unavailable"; return }
+            image = loaded
+        case "video", "audio":
+            // The current `open` call selected this asset only after the
+            // authority checked this derived object. Never use a source URL.
+            player = AVPlayer(url: object)
+        default:
+            failure = "Preview unsupported for \(asset.mediaType)"
         }
+    }
+
+    @MainActor private func releasePlayer() {
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+    }
+}
+
+private struct ManagedAssetProbeDetails: View {
+    let probe: ManagedAssetProbe?
+
+    var body: some View {
+        if let probe {
+            VStack(alignment: .leading, spacing: 3) {
+                if let container = probe.containerIdentifier { Text("Container: \(container)") }
+                if let duration = rational(value: probe.durationValue, timescale: probe.durationTimescale) { Text("Measured duration: \(duration)") }
+                if let width = probe.imageDisplayedWidth, let height = probe.imageDisplayedHeight {
+                    Text("Image: \(width) × \(height)\(probe.imageOrientation.map { ", orientation \($0)" } ?? "")")
+                }
+                if let video = probe.video {
+                    Text("Video: \(video.displayedWidth) × \(video.displayedHeight)\(video.codec.map { ", \($0)" } ?? "")")
+                    if let range = video.timeRange, range.count == 2 { Text("Video range: \(range[0].value)/\(range[0].timescale) + \(range[1].value)/\(range[1].timescale)") }
+                    Text("Observed presentation deltas: \(video.observedPresentationDeltaCount)\(video.isVariableFrameRate == true ? " · variable frame rate" : "")")
+                }
+                ForEach(Array(probe.audio.enumerated()), id: \.offset) { _, audio in
+                    Text("Audio: \(audio.channels.map(String.init) ?? "?") channels · \(audio.sampleRate.map { String(format: "%.0f Hz", $0) } ?? "unknown rate")\(audio.codec.map { " · \($0)" } ?? "")")
+                }
+                if let liveID = probe.livePhotoComparisonIdentifier ?? probe.livePhotoIdentifier {
+                    Text("Live Photo identifier evidence: \(liveID)")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+            Text("No measured range is available for this legacy asset.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func rational(value: Int64?, timescale: Int32?) -> String? {
+        guard let value, let timescale, timescale > 0 else { return nil }
+        return "\(value)/\(timescale)"
     }
 }
 
