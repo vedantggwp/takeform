@@ -68,6 +68,12 @@ struct ContentView: View {
                     Text(String(format: "%@ #%llu %.2f ms %@", latency.kind.rawValue, latency.requestID, latency.milliseconds, store.state.acknowledgementStatus?.rawValue ?? "unknown"))
                         .monospacedDigit()
                 }
+                if !store.acknowledgementLog.isEmpty {
+                    Text(store.acknowledgementLog.joined(separator: " · "))
+                        .accessibilityLabel("Acknowledgement log")
+                        .accessibilityValue(store.acknowledgementLog.joined(separator: ", "))
+                        .monospacedDigit()
+                }
             }
             .font(.caption)
         }

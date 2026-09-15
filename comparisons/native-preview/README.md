@@ -2,7 +2,7 @@
 
 This is a native comparison host for issue #26. It is a SwiftUI app with a `WKWebView`, typed frame commands and an app-owned Node loopback helper. It does not contain a renderer, choose a renderer or prove decoded source media.
 
-The controlled session records a backend, snapshot identity, rational frame rate, frame bounds, requested frame, displayed frame and acknowledged playback state. Every command has a monotonic request ID. Only the response for the current request can update displayed frame or playback. Superseded responses set the stale notice and preserve displayed state. The host records matched monotonic request and acknowledgement instants and shows the latest latency. The diagnostic page acknowledges after `requestAnimationFrame`. That demonstrates a web-paint callback only. It is not a decoded-frame or renderer output acknowledgement.
+The controlled session records a backend, snapshot identity, rational frame rate, frame bounds, requested frame, displayed frame and acknowledged playback state. Every command has a monotonic request ID. Only the response for the current request can update displayed frame or playback. Superseded responses set the stale notice and preserve displayed state. The host records matched monotonic request and acknowledgement instants and shows the latest latency. The diagnostic page acknowledges after `requestAnimationFrame`. Its accessible delay control holds only the next acknowledgement for 150 ms to exercise stale-response handling. That demonstrates a web-paint callback only. It is not a decoded-frame or renderer output acknowledgement.
 
 ## Developer build
 

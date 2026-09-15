@@ -77,6 +77,17 @@ struct PreviewStoreLifecycleTests {
         #expect(!store.isExpectedMainDocument(URL(string: "http://127.0.0.1:8000/diagnostic.html")))
     }
 
+    @Test func acknowledgementLogRecordsAcceptedCurrentRequestThenStaleSupersededRequest() throws {
+        let session = try PreviewSession(snapshotID: "snapshot-a", backend: "Diagnostic", frameRate: Rational(30, 1), totalFrames: 3)
+        let store = PreviewStore(session: session)
+        store.markSent(.seek(requestID: 1, sessionID: session.id, snapshotID: session.snapshotID, frame: 1))
+        store.markSent(.seek(requestID: 2, sessionID: session.id, snapshotID: session.snapshotID, frame: 2))
+        store.acknowledge(PreviewResponse(requestID: 2, sessionID: session.id, snapshotID: session.snapshotID, displayedFrame: 2, playback: .paused, status: .painted))
+        store.acknowledge(PreviewResponse(requestID: 1, sessionID: session.id, snapshotID: session.snapshotID, displayedFrame: 1, playback: .paused, status: .painted))
+        #expect(store.session.acknowledgedFrame == 2)
+        #expect(store.acknowledgementLog == ["#2 accepted", "#1 stale"])
+    }
+
     @Test func rapidReplacementStopsOldHelperAndIgnoresStaleReadiness() async throws {
         var helpers: [FakeLoopbackHelper] = []
         let session = try PreviewSession(snapshotID: "snapshot-a", backend: "Diagnostic", frameRate: Rational(30, 1), totalFrames: 3)

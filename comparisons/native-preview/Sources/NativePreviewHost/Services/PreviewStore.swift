@@ -14,6 +14,7 @@ final class PreviewStore {
     var fixtureRoot: URL?
     var selectedPage = "diagnostic"
     var pendingCommand: PreviewCommand?
+    var acknowledgementLog: [String] = []
     var commandVersion = 0
     private var nextRequestID: UInt64 = 0
     private var helperGeneration: UInt64 = 0
@@ -116,7 +117,10 @@ final class PreviewStore {
 
     func acknowledge(_ response: PreviewResponse) {
         do {
-            if try state.acknowledge(response) == .accepted, state.lastLatency?.kind == .load {
+            let disposition = try state.acknowledge(response)
+            acknowledgementLog.append("#\(response.requestID) \(disposition == .accepted ? "accepted" : "stale")")
+            if acknowledgementLog.count > 4 { acknowledgementLog.removeFirst() }
+            if disposition == .accepted, state.lastLatency?.kind == .load {
                 helperStatus = "Selected page acknowledged its first frame."
             }
         } catch { state.fail(error) }
