@@ -9,8 +9,118 @@ import UniformTypeIdentifiers
 @_spi(Testing) @testable import TakeformAppAuthorityWire
 @testable import TakeformAuthorityAppServiceCore
 import TakeformCore
+@testable import TakeformApp
+
+private actor DelayedOpenWorkspaceClient: WorkspaceClient {
+    private var openContinuations: [CheckedContinuation<WorkspaceSnapshot, Error>] = []
+    private var importContinuations: [CheckedContinuation<[ManagedImportOutcome], Error>] = []
+
+    func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot {
+        try await withCheckedThrowingContinuation { openContinuations.append($0) }
+    }
+
+    func waitForOpenCount(_ count: Int) async {
+        while openContinuations.count < count { await Task.yield() }
+    }
+
+    func finishOpen(_ index: Int, with snapshot: WorkspaceSnapshot) {
+        openContinuations[index].resume(returning: snapshot)
+    }
+
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] {
+        try await withCheckedThrowingContinuation { importContinuations.append($0) }
+    }
+
+    func waitForImportCount(_ count: Int) async {
+        while importContinuations.count < count { await Task.yield() }
+    }
+
+    func finishImport(_ index: Int, with outcomes: [ManagedImportOutcome]) {
+        importContinuations[index].resume(returning: outcomes)
+    }
+    func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { throw WorkspaceFailure.authorityUnavailable }
+    func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { throw WorkspaceFailure.authorityUnavailable }
+    func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws { throw WorkspaceFailure.authorityUnavailable }
+    func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary] { [] }
+    func revokeCLI(packageURL: URL, grantID: UUID) async throws { throw WorkspaceFailure.authorityUnavailable }
+}
 
 final class WorkspaceClientTests: XCTestCase {
+    func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {
+        let asset = ManagedAsset(digest: String(repeating: "a", count: 64), byteLength: 1, filename: "still.png", mediaType: "image")
+        let document = ProjectDocument(assets: [asset])
+
+        XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: nil))
+        XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: UUID()))
+        XCTAssertEqual(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: asset.id), asset)
+    }
+
+    func testLateAssetSelectionCannotReplaceNewerVerifiedSelection() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/selection-race.takeform", isDirectory: true)
+        let first = ManagedAsset(digest: String(repeating: "a", count: 64), byteLength: 1, filename: "first.png", mediaType: "image")
+        let second = ManagedAsset(digest: String(repeating: "b", count: 64), byteLength: 2, filename: "second.png", mediaType: "image")
+        let snapshot = WorkspaceSnapshot(document: ProjectDocument(assets: [first, second], revision: Revision(7)), projectionMatches: true, packageURL: package)
+        let client = DelayedOpenWorkspaceClient()
+        let model = await MainActor.run { WorkspaceModel(client: client) }
+
+        await MainActor.run { model.open(package, rebind: false) }
+        await client.waitForOpenCount(1)
+        await client.finishOpen(0, with: snapshot)
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+        let openedDocument = await MainActor.run { model.document }
+        XCTAssertNotNil(openedDocument)
+
+        await MainActor.run { model.selectAsset(first) }
+        await client.waitForOpenCount(2)
+        await MainActor.run { model.selectAsset(second) }
+        await client.waitForOpenCount(3)
+
+        // Complete B first, then deliver the canceled A request afterwards.
+        await client.finishOpen(2, with: snapshot)
+        for _ in 0..<100 where await MainActor.run(body: { model.selectedAssetID != second.id }) { await Task.yield() }
+        await client.finishOpen(1, with: snapshot)
+        for _ in 0..<100 { await Task.yield() }
+
+        let selectedID = await MainActor.run { model.selectedAssetID }
+        XCTAssertEqual(selectedID, second.id)
+        let verified = await MainActor.run { model.verifiedAssetSelection }
+        XCTAssertEqual(verified?.asset, second)
+        XCTAssertEqual(verified?.packageURL, package)
+        XCTAssertEqual(verified?.revision, Revision(7))
+    }
+
+    func testImportSnapshotInvalidatesSelectionVerifiedWhileImportWasPending() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/import-selection-race.takeform", isDirectory: true)
+        let asset = ManagedAsset(digest: String(repeating: "c", count: 64), byteLength: 3, filename: "source.png", mediaType: "image")
+        let initial = WorkspaceSnapshot(document: ProjectDocument(assets: [asset], revision: Revision(7)), projectionMatches: true, packageURL: package)
+        let refreshed = WorkspaceSnapshot(document: ProjectDocument(assets: [asset], revision: Revision(8)), projectionMatches: true, packageURL: package)
+        let client = DelayedOpenWorkspaceClient()
+        let model = await MainActor.run { WorkspaceModel(client: client) }
+
+        await MainActor.run { model.open(package, rebind: false) }
+        await client.waitForOpenCount(1)
+        await client.finishOpen(0, with: initial)
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+
+        await MainActor.run { model.importDroppedMedia([URL(fileURLWithPath: "/private/tmp/source.png")]) }
+        await client.waitForImportCount(1)
+        await MainActor.run { model.selectAsset(asset) }
+        await client.waitForOpenCount(2)
+        await client.finishOpen(1, with: initial)
+        for _ in 0..<100 where await MainActor.run(body: { model.verifiedAssetSelection == nil }) { await Task.yield() }
+        let selectionBeforeImportRefresh = await MainActor.run { model.verifiedAssetSelection }
+        XCTAssertEqual(selectionBeforeImportRefresh?.revision, Revision(7))
+
+        await client.finishImport(0, with: [])
+        await client.waitForOpenCount(3)
+        await client.finishOpen(2, with: refreshed)
+        for _ in 0..<100 where await MainActor.run(body: { model.document?.revision != Revision(8) }) { await Task.yield() }
+
+        let selection = await MainActor.run { model.verifiedAssetSelection }
+        let refreshedRevision = await MainActor.run { model.document?.revision }
+        XCTAssertNil(selection)
+        XCTAssertEqual(refreshedRevision, Revision(8))
+    }
     private func validPNG() -> Data {
         let data = NSMutableData()
         let context = CGContext(data: nil, width: 8, height: 4, bitsPerComponent: 8, bytesPerRow: 32, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
@@ -37,6 +147,14 @@ final class WorkspaceClientTests: XCTestCase {
             throw WorkspaceFailure.authorityUnavailable
         }
         return (process.terminationStatus, output.fileHandleForReading.readDataToEndOfFile(), error.fileHandleForReading.readDataToEndOfFile())
+    }
+
+    private func stopBounded(_ process: Process, exited: DispatchSemaphore) -> Bool {
+        guard process.isRunning else { return true }
+        process.terminate()
+        if exited.wait(timeout: .now() + 2) == .success { return true }
+        _ = Darwin.kill(process.processIdentifier, SIGKILL)
+        return exited.wait(timeout: .now() + 1) == .success
     }
 
     func testUnavailableClientNeverSimulatesAnEdit() async {
@@ -215,9 +333,9 @@ final class WorkspaceClientTests: XCTestCase {
         let importedReadOnly = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", readOnlyGrant.id.uuidString], input: readOnlyToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(importedReadOnly.status, 0, String(decoding: importedReadOnly.error, as: UTF8.self))
 
-        let service = Process(); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }
+        let service = Process(); let serviceExited = DispatchSemaphore(value: 0); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }; service.terminationHandler = { _ in serviceExited.signal() }
         try service.run()
-        defer { if service.isRunning { service.terminate(); service.waitUntilExit() } }
+        defer { XCTAssertTrue(stopBounded(service, exited: serviceExited), "copied service did not terminate after TERM/KILL") }
         for _ in 0..<100 where !FileManager.default.fileExists(atPath: socket.path) { try? await Task.sleep(for: .milliseconds(10)) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
         try AppAuthoritySocket.verifyService(expectedService: artifacts.appendingPathComponent("TakeformAuthorityAppService"))
