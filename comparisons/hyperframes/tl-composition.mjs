@@ -178,7 +178,7 @@ function seek(time) {
       if (Math.abs(node.currentTime - sourceTime) > 0.002) waits.push(new Promise((resolveSeek) => { node.onseeked = () => resolveSeek(); node.currentTime = sourceTime; }));
     }
   }
-  for (const caption of state.captions) captions.get(caption.id).style.display = frame >= caption.startFrame && frame < caption.endFrame ? 'block' : 'none';
+  for (const caption of state.captions) captions.get(caption.id).style.display = frame >= caption.startFrame && frame < caption.endFrame ? '-webkit-box' : 'none';
   for (const chapter of state.chapters) chapters.get(chapter.id).style.display = frame >= chapter.startFrame && frame < chapter.endFrame ? 'block' : 'none';
   pending = Promise.all(waits);
   return pending;
@@ -190,9 +190,14 @@ seek(0);`;
 function page(payload) {
   const visuals = payload.visuals.map((visual) => visualMarkup(payload, visual)).join('');
   const tracks = payload.tracks.map((track) => audioMarkup(payload, track)).join('');
-  const captions = payload.captions.map((caption) => `<div id="${caption.id}" class="caption">${html(caption.caption.text)}</div>`).join('');
+  const captions = payload.captions.map((caption) => {
+    const profile = caption.caption.profile;
+    const margin = profile.safeMargin * 100;
+    const presentation = `background:${profile.backplate};bottom:${margin}%;color:${profile.color};font-family:${profile.fontFamily};font-size:${profile.fontSizePx}px;left:${margin}%;right:${margin}%;-webkit-line-clamp:${profile.maxLines}`;
+    return `<div id="${caption.id}" class="caption" data-caption-backplate="${html(profile.backplate)}" data-caption-font-size="${profile.fontSizePx}" data-caption-line-wrap="${html(profile.lineWrap)}" data-caption-max-lines="${profile.maxLines}" data-caption-safe-margin="${profile.safeMargin}" style="${html(presentation)}">${html(caption.caption.text)}</div>`;
+  }).join('');
   const chapters = payload.chapters.map((chapter) => `<div id="${chapter.id}" class="chapter" aria-label="${html(chapter.label)}">${html(chapter.label)}</div>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#101114}#root{position:relative;color:#f4f1ea;font-family:system-ui,sans-serif}video,img{position:absolute;box-sizing:border-box}.caption,.chapter{display:none;position:absolute;z-index:99;text-shadow:0 2px 4px #000}.caption{left:8%;right:8%;bottom:8%;font-size:42px;text-align:center}.chapter{left:4%;top:4%;font-size:26px}</style></head><body><main id="root" data-composition-id="takeform-${payload.fixtureId}" data-width="${payload.width}" data-height="${payload.height}" data-duration="${payload.durationSeconds}" data-no-timeline data-probe-marker="hyperframes-${payload.fixtureId.toLowerCase()}">${visuals}${tracks}${captions}${chapters}</main><script type="module" src="./composition.mjs"></script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#101114}#root{position:relative;color:#f4f1ea;font-family:system-ui,sans-serif}video,img{position:absolute;box-sizing:border-box}.caption,.chapter{display:none;position:absolute;z-index:99;text-shadow:0 2px 4px #000}.caption{box-decoration-break:clone;-webkit-box-orient:vertical;overflow:hidden;text-align:center;white-space:normal}.chapter{left:4%;top:4%;font-size:26px}</style></head><body><main id="root" data-composition-id="takeform-${payload.fixtureId}" data-width="${payload.width}" data-height="${payload.height}" data-duration="${payload.durationSeconds}" data-no-timeline data-probe-marker="hyperframes-${payload.fixtureId.toLowerCase()}">${visuals}${tracks}${captions}${chapters}</main><script type="module" src="./composition.mjs"></script></body></html>`;
 }
 
 export async function writeTlProject(snapshot, fixtureId, fixtureRoot, project, prepared, derivativeRoot) {

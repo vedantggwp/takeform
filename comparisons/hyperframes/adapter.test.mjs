@@ -144,6 +144,15 @@ test('T generates a producer-compiled composition with separate retimed audio an
     assert.ok(parsed.audio.some((track) => track.id.includes('oDlg2A') && track.playbackRate !== 1));
     assert.ok(parsed.audio.some((track) => track.fxChain && track.automation));
     assert.ok(html.includes('creator names the cut,'), 'corrected caption text must be emitted');
+    assert.ok(html.includes('data-caption-font-size="52"'));
+    assert.ok(html.includes('data-caption-safe-margin="0.06"'));
+    assert.ok(html.includes('data-caption-line-wrap="greedy-two-lines"'));
+    assert.ok(html.includes('data-caption-max-lines="2"'));
+    assert.ok(html.includes('data-caption-backplate="#101114"'));
+    assert.ok(html.includes('font-size:52px'));
+    assert.ok(html.includes('left:6%'));
+    assert.ok(html.includes('right:6%'));
+    assert.ok(html.includes('-webkit-line-clamp:2'));
     assert.deepEqual((await readdir(join(project, 'media'))).sort(), Object.values(payload.sources).map((source) => source.path.slice('media/'.length)).sort());
   } finally {
     await rm(project, {force: true, recursive: true});
