@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {freezeSnapshot} from '../common/index.mjs';
-import {framePayload, HyperframesAdapter, ownedProcessTree} from './adapter.mjs';
+import {framePayload, HyperframesAdapter, mediaPreparationReceipt, ownedProcessTree} from './adapter.mjs';
+import {longFilmSupport, talkingHeadSupport} from './fixture-support.mjs';
 
 const fixtureRoot = process.env.FIXTURE_ROOT;
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
@@ -32,4 +33,60 @@ test('cancellation is attempt-scoped and restart requires a fresh attempt id', (
 test('process sampling excludes unrelated processes and retains descendants', () => {
   const rows = [{pid: 10, ppid: 1}, {pid: 11, ppid: 10}, {pid: 12, ppid: 11}, {pid: 13, ppid: 1}];
   assert.deepEqual(ownedProcessTree(rows, 10).map((row) => row.pid), [10, 11, 12]);
+});
+
+test('future receipts distinguish semantic manifest and raw file fingerprints', () => {
+  const manifestBytes = Buffer.from('{"manifestDigest":"semantic","entries":[]}\n');
+  const receipt = mediaPreparationReceipt(manifestBytes, {manifestDigest: 'semantic'}, [{sourceId: 'still', prepared: {sha256: 'derived'}}]);
+  assert.equal(receipt.semanticManifestDigest, 'semantic');
+  assert.notEqual(receipt.rawManifestSha256, receipt.semanticManifestDigest);
+  assert.deepEqual(receipt.derivativeHashes, [{sourceId: 'still', sha256: 'derived'}]);
+});
+
+test('T support reads corrected caption edges, muted picture sound, and speech from frame state', async () => {
+  assert.ok(fixtureRoot);
+  const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot});
+  const support = talkingHeadSupport(snapshot);
+  assert.deepEqual(support.rate, {num: 30, den: 1});
+  assert.equal(support.frameCount, 2700);
+  assert.equal(support.pictureAudioMuted, true);
+  assert.ok(support.captions.length > 0);
+  for (const caption of support.captions) {
+    assert.deepEqual(support.stateAt(caption.startFrame).caption, caption.caption);
+    assert.notDeepEqual(support.stateAt(caption.endFrame - 1).caption, null);
+    if (caption.startFrame > 0) assert.notDeepEqual(support.stateAt(caption.startFrame - 1).caption, caption.caption);
+    if (caption.endFrame < support.frameCount) assert.notDeepEqual(support.stateAt(caption.endFrame).caption, caption.caption);
+  }
+  const dialogue = support.roles.filter((role) => role.role === 'dialogue');
+  assert.ok(dialogue.length > 0);
+  for (const role of dialogue) {
+    assert.deepEqual(support.stateAt(role.startFrame).audio.roles.find((candidate) => candidate.occurrenceId === role.occurrenceId)?.sourceTime, role.sourceTime);
+    assert.ok(role.sourceRate);
+  }
+  assert.ok(support.roles.filter((role) => role.role === 'music').every((role) => role.gainSamples.length > 0));
+  const music = support.producerAudioTracks.find((track) => track.sourceId === 'music');
+  assert.equal(music.automation.lanes[0].target, 'fx.hf-gain.gain');
+  assert.equal(music.fxChain.nodes[0].type, 'gain');
+  assert.ok(music.automation.lanes[0].points.length <= 512);
+});
+
+test('L support retains rational rate, all chapter labels, both handles at every crossfade, and continuous audio', async () => {
+  assert.ok(fixtureRoot);
+  const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot});
+  const support = longFilmSupport(snapshot);
+  assert.deepEqual(support.rate, {num: 24000, den: 1001});
+  assert.equal(support.frameCount, 43157);
+  assert.equal(support.chapters.length, 15);
+  assert.deepEqual(support.chapters.map((chapter) => chapter.label), Array.from({length: 15}, (_, index) => `chapter${String(index + 1).padStart(2, '0')}`));
+  assert.equal(support.crossfades.length, 14);
+  for (const crossfade of support.crossfades) {
+    assert.equal(crossfade.pictureSourceIds.length, 2);
+    assert.deepEqual(crossfade.audioSourceIds, crossfade.pictureSourceIds);
+    for (let frame = crossfade.startFrame; frame < crossfade.endFrame; frame += 1) {
+      assert.equal(support.stateAt(frame).audio.roles.length, 2);
+    }
+  }
+  assert.ok(support.producerAudioTracks.every((track) => track.automation?.lanes[0].target === 'volume' || track.volume === 1));
+  assert.ok(support.producerAudioTracks.every((track) => (track.automation?.lanes[0].points.length ?? 0) <= 512));
+  for (let frame = 0; frame < support.frameCount; frame += 1) assert.ok(support.stateAt(frame).audio.roles.length > 0);
 });

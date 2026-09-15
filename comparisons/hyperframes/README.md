@@ -10,6 +10,14 @@ Run the unit contract check with the frozen fixture root supplied by the coordin
 FIXTURE_ROOT=... node --test comparisons/hyperframes/adapter.test.mjs
 ```
 
+## T/L source support
+
+`fixture-support.mjs` is separate from the validated M builder. It exposes only shared `frameState` observations: T caption ranges, speech source-time/rate and its muted picture sound; L's `24000/1001` rate, chapter labels, all 14 two-handle crossfades and continuous audio. It also produces declarative audio-track input for a later T/L composition builder. T's linear-dB values use a pinned-producer `data-fx-chain` gain node with `data-automation` targeting `fx.hf-gain.gain`; L's linear gain uses the producer's `volume` lane. The plan retains the source rational values next to those attributes.
+
+This is based on pinned `@hyperframes/producer` 0.8.39 source: `parseAudioElements` reads `data-start`, `data-end`, `data-media-start`, `data-playback-rate`, `data-fx-chain` and `data-automation`; `resolveAutomation` accepts `fx.<nodeId>.<param>` targets; and `applyAudioFxChain` applies that gain automation to samples. The same source rejects imperative media `play`, `pause`, `currentTime` and `muted` assignments. No T or L browser bundle or render is created until M's cancellation/restart gates and a heavy lease are granted.
+
+Future attempts record the shared-media semantic `manifestDigest`, the raw manifest-file SHA-256, and each selected `sourceId` to derivative SHA-256 mapping. The two manifest fingerprints have different meanings and are never compared. The historical `m-cold-4` receipt predates this field and retains neither fingerprint.
+
 ## M capability receipt
 
 `m-cold-3` used the full 1920x1080, 30 fps, 480-frame M plan and selected the SDK's streaming screenshot route. It captured all 480 frames but strict completion failed without an MP4 because Chrome could not load `lp-mismatch.heic` and `station.heic` as image resources. `lp-matched.mov` is correctly treated as a video after the source-kind fix.
