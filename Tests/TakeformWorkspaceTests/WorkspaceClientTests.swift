@@ -11,6 +11,14 @@ import UniformTypeIdentifiers
 import TakeformCore
 
 final class WorkspaceClientTests: XCTestCase {
+    func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {
+        let asset = ManagedAsset(digest: String(repeating: "a", count: 64), byteLength: 1, filename: "still.png", mediaType: "image")
+        let document = ProjectDocument(assets: [asset])
+
+        XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: nil))
+        XCTAssertNil(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: UUID()))
+        XCTAssertEqual(WorkspacePresentation.assetForVerifiedPreview(document: document, selectedAssetID: asset.id), asset)
+    }
     private func validPNG() -> Data {
         let data = NSMutableData()
         let context = CGContext(data: nil, width: 8, height: 4, bitsPerComponent: 8, bytesPerRow: 32, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
