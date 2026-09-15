@@ -1,7 +1,9 @@
 import {createHash} from 'node:crypto';
+import {execFile} from 'node:child_process';
 import {mkdir, readdir, readFile, stat, statfs, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {promisify} from 'node:util';
 import {cleanupAttemptScratch, createAttempt, finishAttempt, freezeSnapshot, frameState, reserveStorage} from '../common/index.mjs';
 
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
@@ -9,6 +11,7 @@ const runtimeDefault = process.env.TAKEFORM_RUNTIME;
 const browserDefault = process.env.TAKEFORM_BROWSER_EXECUTABLE;
 const adapterDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const browserWrapper = resolve(adapterDirectory, '../runtime/browser/secure-browser-launcher.sh');
+const execute = promisify(execFile);
 const browserModule = String.raw`const state = await fetch('./state.json').then((response) => response.json());
 const root = document.getElementById('root');
 const nodes = new Map();
@@ -92,6 +95,24 @@ async function directoryBytes(directory) {
   return total;
 }
 
+export function ownedProcessTree(rows, rootPid) {
+  const owned = new Set([rootPid]);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const row of rows) if (owned.has(row.ppid) && !owned.has(row.pid)) { owned.add(row.pid); changed = true; }
+  }
+  return rows.filter((row) => owned.has(row.pid));
+}
+
+async function processTreeSample(rootPid) {
+  const {stdout} = await execute('ps', ['-axo', 'pid=,ppid=,rss=,pcpu=,comm=']);
+  const rows = stdout.trim().split('\n').filter(Boolean).map((line) => {
+    const [pid, ppid, rssKiB, cpuPercent, ...command] = line.trim().split(/\s+/);
+    return {cpuPercent: Number(cpuPercent), name: basename(command.join(' ')), pid: Number(pid), ppid: Number(ppid), rssBytes: Number(rssKiB) * 1024};
+  });
+  return ownedProcessTree(rows, rootPid);
+}
+
 export function framePayload(snapshot, fixtureId, prepared = new Map()) {
   const fixture = snapshot._manifests[fixtureId];
   const frames = Array.from({length: fixture.manifest.expected.frameCount}, (_, frame) => frameState(snapshot, fixtureId, frame));
@@ -159,8 +180,7 @@ export class HyperframesAdapter {
       const sampleFileSystem = await statfs(attemptRoot);
       lowestFreeBytes = Math.min(lowestFreeBytes, Number(sampleFileSystem.bavail * sampleFileSystem.bsize));
       highWaterBytes = Math.max(highWaterBytes, await directoryBytes(attemptRoot));
-      const usage = process.resourceUsage();
-      processSamples.push({atMs: Date.now() - started, cpuMicros: usage.userCPUTime + usage.systemCPUTime, maxRssKiB: usage.maxRSS});
+      processSamples.push({atMs: Date.now() - started, processes: await processTreeSample(process.pid), rssMeaning: 'aggregate-resident-bytes; shared pages may be counted per process'});
     }, 1000);
     process.env.TAKEFORM_BROWSER_EXECUTABLE = this.browser;
     const job = producer.createRenderJob({entryFile: 'index.html', format: 'mp4', fps: fixture.canonicalPlan.outputFrameRate, hdrMode: 'force-sdr', producerConfig, quality: 'standard', strictness: 'strict', workers: 1});
@@ -170,13 +190,13 @@ export class HyperframesAdapter {
       highWaterBytes = Math.max(highWaterBytes, await directoryBytes(attemptRoot));
       const finished = await finishAttempt(attempt, {status: job.status === 'complete' ? 'completed' : 'failed'});
       const cleaned = await cleanupAttemptScratch(finished);
-      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId};
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } catch (error) {
       const finished = await finishAttempt(attempt, {status: controller.signal.aborted ? 'interrupted' : 'failed'});
       const cleaned = await cleanupAttemptScratch(finished);
-      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId};
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId, samplingBlindSpots: 'one-second cadence; processes born and exited between samples are not observed'};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } finally {

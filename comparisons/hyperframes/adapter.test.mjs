@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {freezeSnapshot} from '../common/index.mjs';
-import {framePayload, HyperframesAdapter} from './adapter.mjs';
+import {framePayload, HyperframesAdapter, ownedProcessTree} from './adapter.mjs';
 
 const fixtureRoot = process.env.FIXTURE_ROOT;
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
@@ -27,4 +27,9 @@ test('cancellation is attempt-scoped and restart requires a fresh attempt id', (
   assert.equal(controller.signal.aborted, true);
   assert.throws(() => adapter.cancel('unknown'), /Unknown active attempt/);
   assert.throws(() => adapter.restart({fixtureId: 'M', previousAttemptId: 'm-cold-3', attemptRoot: 'm-cold-3'}), /new attempt id/);
+});
+
+test('process sampling excludes unrelated processes and retains descendants', () => {
+  const rows = [{pid: 10, ppid: 1}, {pid: 11, ppid: 10}, {pid: 12, ppid: 11}, {pid: 13, ppid: 1}];
+  assert.deepEqual(ownedProcessTree(rows, 10).map((row) => row.pid), [10, 11, 12]);
 });
