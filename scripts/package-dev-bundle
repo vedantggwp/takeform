@@ -69,7 +69,7 @@ if [ -n "$RENDERER_NODE_ROOT" ]; then
   EXPECTED_NODE_VERSION="$("$RENDERER_NODE" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).nodeVersion)' "$ROOT_DIR/renderer/runtime-profile.json")"
   ACTUAL_NODE_VERSION="$("$RENDERER_NODE" --version)"
   [ "$ACTUAL_NODE_VERSION" = "$EXPECTED_NODE_VERSION" ] || { echo "Renderer Node version does not match runtime-profile.json." >&2; exit 65; }
-  "$RENDERER_NODE" "$RENDERER_RUNTIME_SOURCE/doctor.mjs" --runtime "$RENDERER_RUNTIME_SOURCE" --package-only
+  "$RENDERER_NODE" "$ROOT_DIR/comparisons/runtime/doctor.mjs" --runtime "$RENDERER_RUNTIME_SOURCE" --package-only
 fi
 APP_BUNDLE="$DESTINATION_DIR/Takeform.app"
 
