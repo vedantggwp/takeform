@@ -90,6 +90,15 @@ struct TakeformMediaTests {
         }
     }
 
+    @Test func matchingIdentifiersWithWrongMediaKindsStayCandidates() async throws {
+        let still = try success(await probe.inspect(try fixture("M/media/lp-matched.heic")))
+        if case .candidate(let reason) = MediaProbe.pairLivePhoto(still: still, motion: still) {
+            #expect(reason == "Live Photo motion must be a video source")
+        } else {
+            Issue.record("Matching identifiers cannot confirm an image/image pair")
+        }
+    }
+
     @Test func absentLivePhotoIdentityStaysUnavailable() async throws {
         let still = try success(await probe.inspect(try fixture("M/media/station.heic")))
         let motion = try success(await probe.inspect(try fixture("M/media/clip-24.mov")))

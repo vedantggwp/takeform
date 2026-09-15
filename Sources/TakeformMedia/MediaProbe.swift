@@ -264,6 +264,12 @@ public struct MediaProbe: Sendable {
     /// Filename and timestamps are deliberately not evidence. A pair is
     /// confirmed only when both independently measured content identifiers agree.
     public static func pairLivePhoto(still: MediaSourceFacts, motion: MediaSourceFacts) -> LivePhotoPairEvidence {
+        guard still.image != nil else {
+            return .candidate(reason: "Live Photo still must be an image source")
+        }
+        guard motion.video != nil else {
+            return .candidate(reason: "Live Photo motion must be a video source")
+        }
         guard let stillID = still.livePhotoContentIdentifier else {
             return .unavailable(reason: "Still has no measured Live Photo content identifier")
         }
