@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {mkdtemp, readFile, readdir, rm} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {freezeSnapshot} from '../common/index.mjs';
@@ -11,6 +11,9 @@ import {tlPayload, writeTlProject} from './tl-composition.mjs';
 
 const fixtureRoot = process.env.FIXTURE_ROOT;
 const runtime = process.env.TAKEFORM_RUNTIME;
+const derivativeRoot = process.env.DERIVATIVE_ROOT;
+const mediaPrepManifest = process.env.MEDIA_PREP_MANIFEST;
+const mediaPrepModule = process.env.MEDIA_PREP_MODULE;
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
 
 async function pinnedPublicParsers(html) {
@@ -58,12 +61,20 @@ test('process sampling excludes unrelated processes and retains descendants', ()
   assert.deepEqual(ownedProcessTree(rows, 10).map((row) => row.pid), [10, 11, 12]);
 });
 
-test('future receipts distinguish semantic manifest and raw file fingerprints', () => {
-  const manifestBytes = Buffer.from('{"manifestDigest":"semantic","entries":[]}\n');
-  const receipt = mediaPreparationReceipt(manifestBytes, {manifestDigest: 'semantic'}, [{sourceId: 'still', prepared: {sha256: 'derived'}}]);
-  assert.equal(receipt.semanticManifestDigest, 'semantic');
+test('future receipts use the accepted shared validator output shape', async () => {
+  assert.ok(fixtureRoot);
+  assert.ok(derivativeRoot);
+  assert.ok(mediaPrepManifest);
+  assert.ok(mediaPrepModule);
+  const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot});
+  const loader = await import(pathToFileURL(resolve(mediaPrepModule)).href);
+  const manifestBytes = await readFile(mediaPrepManifest);
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  const entries = await loader.validateManifest(manifest, {derivativeRoot, expectedOriginals: loader.expectedOriginalsFromSnapshot(snapshot, 'M')});
+  const receipt = mediaPreparationReceipt(manifestBytes, manifest, entries);
+  assert.equal(receipt.semanticManifestDigest, manifest.manifestDigest);
   assert.notEqual(receipt.rawManifestSha256, receipt.semanticManifestDigest);
-  assert.deepEqual(receipt.derivativeHashes, [{sourceId: 'still', sha256: 'derived'}]);
+  assert.deepEqual(receipt.derivativeHashes, entries.map((entry) => ({sourceId: entry.sourceId, sha256: entry.sha256})));
 });
 
 test('T support reads corrected caption edges, muted picture sound, and speech from frame state', async () => {

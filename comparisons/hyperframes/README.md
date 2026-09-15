@@ -7,7 +7,7 @@ This arm builds a static browser ESM bundle from the shared `frameState` output.
 Run the unit contract check with the frozen fixture root supplied by the coordinator:
 
 ```sh
-FIXTURE_ROOT=... node --test comparisons/hyperframes/adapter.test.mjs
+FIXTURE_ROOT=... DERIVATIVE_ROOT=... MEDIA_PREP_MANIFEST=... MEDIA_PREP_MODULE=... node --test comparisons/hyperframes/adapter.test.mjs
 ```
 
 ## T/L source support
