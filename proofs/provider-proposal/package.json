@@ -1,0 +1,9 @@
+{
+  "name": "takeform-provider-proposal-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "proof": "node scripts/run-proof.mjs"
+  }
+}

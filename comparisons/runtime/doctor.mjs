@@ -11,6 +11,7 @@ const packages = [
   ['@hyperframes/producer', '0.8.39'],
   ['@hyperframes/engine', '0.8.39'],
   ['@hyperframes/player', '0.8.39'],
+  ['@remotion/bundler', '4.0.524'],
   ['remotion', '4.0.524'],
   ['@remotion/renderer', '4.0.524'],
   ['@remotion/player', '4.0.524'],
@@ -193,19 +194,22 @@ async function importsStatus(runtime) {
 
   try {
     const renderer = await importPackage(runtime, '@remotion/renderer');
+    const bundler = await importPackage(runtime, '@remotion/bundler');
     await importPackage(runtime, 'remotion');
     const publicApis = ['ensureBrowser', 'openBrowser', 'renderMedia'];
-    const missing = exportedFunctions(renderer.module, publicApis);
+    const bundlerPublicApis = ['bundle'];
+    const missing = [...exportedFunctions(renderer.module, publicApis), ...exportedFunctions(bundler.module, bundlerPublicApis)];
     result.remotion = {
       status: missing.length === 0 ? 'ok' : 'error',
       publicApis,
+      bundlerPublicApis,
     };
     if (result.remotion.status === 'error') {
-      result.remotion.error = {code: 'MISSING_EXPORT', message: 'Remotion renderer API is unavailable'};
+      result.remotion.error = {code: 'MISSING_EXPORT', message: 'Remotion renderer or bundler API is unavailable'};
       result.remotion.missing = missing;
     }
   } catch (error) {
-    result.remotion = {status: 'error', error: diagnostic(error, 'Remotion renderer import')};
+    result.remotion = {status: 'error', error: diagnostic(error, 'Remotion renderer or bundler import')};
   }
   return result;
 }

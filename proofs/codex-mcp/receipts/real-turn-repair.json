@@ -1,0 +1,96 @@
+{
+  "kind": "real_model_round_trip",
+  "codexVersion": "0.154.0",
+  "modelTurnStarted": true,
+  "ephemeral": true,
+  "sandbox": "read-only",
+  "configuration": "app-server caller-owned mcp_servers override",
+  "turnStartReturned": true,
+  "phases": {
+    "processStartedAt": "2026-09-14T23:29:16.341Z",
+    "initializedAt": "2026-09-14T23:29:16.798Z",
+    "preflightCompletedAt": "2026-09-14T23:29:17.769Z",
+    "turnStartRequestedAt": "2026-09-14T23:29:17.769Z",
+    "turnStartReturnedAt": "2026-09-14T23:29:17.859Z",
+    "turnCompletedAt": "2026-09-14T23:29:33.403Z",
+    "failedAt": "2026-09-14T23:29:33.405Z",
+    "processReapedAt": "2026-09-14T23:29:33.422Z"
+  },
+  "model": "gpt-5.6-terra",
+  "mcpServers": [
+    "takeform"
+  ],
+  "unrelatedServers": {
+    "count": 9,
+    "configuredForInvocation": "disabled",
+    "exposedTools": 0
+  },
+  "tools": [
+    "takeform_propose_edit",
+    "takeform_snapshot"
+  ],
+  "instructionSources": [],
+  "returnedSettings": {
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "reasoningEffort": "medium",
+    "approvalPolicy": null
+  },
+  "initialSnapshot": {
+    "revision": 1,
+    "scenes": [
+      {
+        "id": "scene-1",
+        "sentence": "Open with the creator's tension."
+      },
+      {
+        "id": "scene-2",
+        "sentence": "Show the one decision that changes the result."
+      },
+      {
+        "id": "scene-3",
+        "sentence": "End with a repeatable takeaway."
+      }
+    ]
+  },
+  "turn": {
+    "id": "01a0a240-e7cb-7b83-8f58-468ba6546d4a",
+    "status": "completed",
+    "errorCode": null
+  },
+  "result": "failed",
+  "failure": {
+    "category": "assertion_or_runtime_error",
+    "code": "ERR_ASSERTION",
+    "processCategory": "configuration"
+  },
+  "diagnostics": {
+    "receivedMethodCounts": {
+      "mcpServer/elicitation/request": 2,
+      "other": 39,
+      "thread/started": 1,
+      "thread/status/changed": 6,
+      "thread/tokenUsage/updated": 5,
+      "turn/completed": 1,
+      "turn/started": 1
+    },
+    "pendingRequestKinds": [],
+    "requestOutcomes": {
+      "declined": 2
+    }
+  },
+  "processExit": {
+    "code": 0,
+    "signal": null
+  },
+  "terminalScratchInventory": [
+    {
+      "name": "mcp-events.jsonl",
+      "bytes": 296
+    },
+    {
+      "name": "creator.sock",
+      "bytes": 0
+    }
+  ]
+}

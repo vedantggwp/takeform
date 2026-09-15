@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reference construction only. It is not an export source. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Takeform Three Cut Frame construction</title>
+  <desc id="desc">A 64-unit grid showing the three cuts that create the Takeform icon.</desc>
+  <rect width="64" height="64" fill="#F4F2EC"/>
+  <g id="glyph" fill-rule="evenodd">
+    <path id="take-one" fill="#E85C3C" d="M12 9h39l5 5v10H18L12 18z"/>
+    <path id="take-two" fill="#202124" d="M56 14v37l-5 5H40V45h5V25h-5l6-6z"/>
+    <path id="take-three" fill="#202124" d="M18 24v21h22v11H13l-5-5V19z"/>
+  </g>
+  <g id="eight-unit-grid" fill="none" stroke="#6E6E73" stroke-width=".5" opacity=".65">
+    <path d="M8 0v64M16 0v64M24 0v64M32 0v64M40 0v64M48 0v64M56 0v64M0 8h64M0 16h64M0 24h64M0 32h64M0 40h64M0 48h64M0 56h64"/>
+    <rect x="8" y="8" width="48" height="48"/>
+  </g>
+</svg>
