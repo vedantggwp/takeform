@@ -221,10 +221,12 @@ extension WorkspaceModel {
                 if status.logicalState != .completed || status.availability != .available { invalidatePreviewLoad() }
             } catch let failure as WorkspaceFailure {
                 guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
+                renderStatus = nil
                 renderMessage = failure.errorDescription ?? "Render status is unavailable."
                 invalidatePreviewLoad()
             } catch {
                 guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
+                renderStatus = nil
                 renderMessage = "Render status is unavailable."
                 invalidatePreviewLoad()
             }
@@ -464,6 +466,10 @@ struct EpisodeRenderControls: View {
                      ? "Request a render from the saved composition."
                      : "Save a composition before requesting a render.")
                     .foregroundStyle(.secondary)
+                if model.activeRender != nil {
+                    Button("Refresh status") { model.refreshRenderStatus() }
+                        .accessibilityIdentifier("episode-render-refresh")
+                }
             }
             if let message = model.renderMessage {
                 Text(message)

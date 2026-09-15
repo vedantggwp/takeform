@@ -110,6 +110,10 @@ private actor RecordingRenderWorkspaceClient: WorkspaceClient, RenderWorkspaceCl
         statusContinuations[index].resume(returning: status)
     }
 
+    func failStatus(_ index: Int, with error: Error) {
+        statusContinuations[index].resume(throwing: error)
+    }
+
     func waitForPlaybackRequests(_ count: Int) async {
         while playbackContinuations.count < count { await Task.yield() }
     }
@@ -324,6 +328,19 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(identity?.compositionDigest, digest)
         XCTAssertEqual(message, "Ready to preview the verified render.")
 
+        // A fresh status failure must not keep an old available state in the
+        // UI while its preview item has already been invalidated.
+        await MainActor.run { model.refreshRenderStatus() }
+        await client.waitForStatusRequests(4)
+        await client.failStatus(3, with: WorkspaceFailure.authorityUnavailable)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != nil }) { await Task.yield() }
+        let failedStatus = await MainActor.run { model.renderStatus }
+        let failedIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let failedMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(failedStatus)
+        XCTAssertNil(failedIdentity)
+        XCTAssertEqual(failedMessage, WorkspaceFailure.authorityUnavailable.errorDescription)
+
         // A current request that receives an authority source for different
         // render identity must clear the previously loaded item.
         let mismatchedJobID = UUID()
@@ -337,7 +354,10 @@ final class WorkspaceClientTests: XCTestCase {
             audioStreamCount: 0,
             artifactURL: URL(fileURLWithPath: "/private/tmp/mismatched-render.mp4")
         )
-        await MainActor.run { model.loadRenderedPreview() }
+        await MainActor.run {
+            model.renderStatus = completed
+            model.loadRenderedPreview()
+        }
         await client.waitForPlaybackRequests(4)
         await client.finishPlayback(3, with: mismatchedSource)
         for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity != nil }) { await Task.yield() }
