@@ -6,6 +6,13 @@ import TakeformWorkspace
 
 private final class ProcessExit: @unchecked Sendable {
     let signal = DispatchSemaphore(value: 0)
+    func wait(milliseconds: Int) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: self.signal.wait(timeout: .now() + .milliseconds(milliseconds)) == .success)
+            }
+        }
+    }
 }
 
 public actor AppAuthorityServiceClient: WorkspaceClient {
@@ -13,6 +20,7 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
     private var owned: (Process, ProcessExit)?
     private var activeRequests = 0
     private var closing = false
+    private var lastReapedProcessID: pid_t?
 
     public init() {
         let executable = Bundle.main.executableURL
@@ -69,17 +77,20 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
     }
 
     @_spi(Testing) public func ownedProcessID() -> pid_t? { owned?.0.processIdentifier }
+    @_spi(Testing) public func lastReapedPID() -> pid_t? { lastReapedProcessID }
 
     private func stopOwnedService() async {
-        guard let (process, _) = owned else { return }
+        guard let (process, exited) = owned else { return }
         if process.isRunning {
             process.terminate()
-            for _ in 0..<200 where process.isRunning { try? await Task.sleep(for: .milliseconds(10)) }
-            if process.isRunning {
+            var exitedNormally = await exited.wait(milliseconds: 2_000)
+            if !exitedNormally {
                 _ = Darwin.kill(process.processIdentifier, SIGKILL)
-                for _ in 0..<100 where process.isRunning { try? await Task.sleep(for: .milliseconds(10)) }
+                exitedNormally = await exited.wait(milliseconds: 1_000)
             }
+            if exitedNormally { lastReapedProcessID = process.processIdentifier }
         }
+        if !process.isRunning { lastReapedProcessID = process.processIdentifier }
         if owned?.0 === process { owned = nil }
     }
 

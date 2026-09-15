@@ -47,6 +47,55 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
         await client.shutdown()
         XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
+        let reapedPID = await client.lastReapedPID()
+        XCTAssertEqual(reapedPID, pid)
         if let pid { XCTAssertEqual(Darwin.kill(pid, 0), -1) }
+    }
+
+    func testWrongPeerSocketIsNotReplacedOrAdopted() async throws {
+        let socket = URL(fileURLWithPath: "/private/tmp/takeform-wrong-peer-\(UUID().uuidString).sock")
+        AppAuthoritySocket.setTestingPath(socket.path)
+        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        let listener = try AppAuthoritySocket.makeListener()
+        defer { listener.close() }
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let client = AppAuthorityServiceClient(serviceExecutable: root.appendingPathComponent(".build/debug/TakeformAuthorityAppService"))
+        do { try await client.startAndVerifyForTesting(); XCTFail("wrong peer must not be adopted") }
+        catch let failure as WorkspaceFailure { XCTAssertEqual(failure, .authorityUnavailable) }
+        let ownedPID = await client.ownedProcessID()
+        XCTAssertNil(ownedPID)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
+    }
+
+    func testReadinessTimeoutReapsOwnedChild() async throws {
+        let socket = URL(fileURLWithPath: "/private/tmp/takeform-readiness-timeout-\(UUID().uuidString).sock")
+        AppAuthoritySocket.setTestingPath(socket.path)
+        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        let client = AppAuthorityServiceClient(serviceExecutable: URL(fileURLWithPath: "/bin/sh"))
+        do { try await client.startAndVerifyForTesting(); XCTFail("service without a socket must time out") }
+        catch let failure as WorkspaceFailure { XCTAssertEqual(failure, .authorityUnavailable) }
+        let ownedPID = await client.ownedProcessID()
+        XCTAssertNil(ownedPID)
+        let reapedPID = await client.lastReapedPID()
+        XCTAssertNotNil(reapedPID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
+    }
+
+    func testCopiedCLIAfterServiceShutdownReportsActionableUnavailableWithoutMutation() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-cli-after-stop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/takeform"), to: root.appendingPathComponent("takeform"))
+        try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/TakeformAuthorityAppService"), to: root.appendingPathComponent("TakeformAuthorityAppService"))
+        let package = root.appendingPathComponent("Unchanged.takeform")
+        let command = CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "Denied", initialRecipe: [:]))
+        let process = Process(); let stderr = Pipe(); process.executableURL = root.appendingPathComponent("takeform")
+        process.arguments = ["execute", package.path, UUID().uuidString, String(decoding: try JSONEncoder().encode(command), as: UTF8.self)]
+        process.standardError = stderr; try process.run(); process.waitUntilExit()
+        let message = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertNotEqual(process.terminationStatus, 0)
+        XCTAssertTrue(message.contains("open Takeform"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.path))
     }
 }
