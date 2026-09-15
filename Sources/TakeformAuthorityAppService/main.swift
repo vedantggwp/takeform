@@ -26,11 +26,7 @@ while true {
         guard let role else { return }
         do {
             let request = try AppAuthoritySocket.receive(AppAuthorityRequest.self, fd)
-            if CreatorAuthorityService.allows(request, for: role) {
-                try AppAuthoritySocket.send(try CreatorAuthorityService.handle(request), fd)
-            } else {
-                try AppAuthoritySocket.send(AppAuthorityResponse.failure(.creatorAuthorizationRequired), fd)
-            }
+            try AppAuthoritySocket.send(CreatorAuthorityService.respond(to: request, from: role), fd)
         } catch {
             try? AppAuthoritySocket.send(AppAuthorityResponse.failure(CreatorAuthorityService.workspaceFailure(error)), fd)
         }

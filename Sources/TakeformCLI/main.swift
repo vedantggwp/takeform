@@ -119,11 +119,6 @@ case "execute":
     }
     do {
         let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: Data(arguments[3].utf8))
-        let fd = try AppAuthoritySocket.connect()
-        defer { close(fd) }
-        guard let requirement = AppAuthorityPeer.requirement(for: service), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else {
-            throw NSError(domain: "TakeformCLI", code: 1)
-        }
         let authenticationContext = LAContext()
         authenticationContext.interactionNotAllowed = true
         var query = credentialQuery(for: grantID)
@@ -132,8 +127,7 @@ case "execute":
         guard let tokenData = readCredential(query: query), let token = String(data: tokenData, encoding: .utf8), !token.isEmpty else {
             throw NSError(domain: "TakeformCLI", code: 2)
         }
-        try AppAuthoritySocket.send(AppAuthorityRequest.pairedExecute(URL(fileURLWithPath: arguments[1]), envelope, grantID, token), fd)
-        guard case let .result(result) = try AppAuthoritySocket.receive(AppAuthorityResponse.self, fd) else { throw NSError(domain: "TakeformCLI", code: 3) }
+        guard case let .result(result) = try AppAuthoritySocket.verifiedRequest(.pairedExecute(URL(fileURLWithPath: arguments[1]), envelope, grantID, token), expectedService: service) else { throw NSError(domain: "TakeformCLI", code: 3) }
         let output = try JSONEncoder().encode(result)
         FileHandle.standardOutput.write(output)
         FileHandle.standardOutput.write(Data("\n".utf8))

@@ -16,6 +16,12 @@ public enum CreatorAuthorityService {
         }
     }
 
+    public static func respond(to request: AppAuthorityRequest, from role: PeerRole) -> AppAuthorityResponse {
+        guard allows(request, for: role) else { return .failure(.creatorAuthorizationRequired) }
+        do { return try handle(request) }
+        catch { return .failure(workspaceFailure(error)) }
+    }
+
     private static func token() throws -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw AuthorityFailure.unauthorized }

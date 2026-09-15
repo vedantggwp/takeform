@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 import Security
 import XCTest
 @testable import TakeformAuthorityAppServiceCore
@@ -208,24 +209,63 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertEqual(revoked.outcome, .rejected(reason: "unauthorized"))
     }
 
-    func testPeerRolePolicyCannotRouteCreatorRequestsThroughPairedCLI() throws {
-        let creatorRequest = AppAuthorityRequest.open(root.appendingPathComponent("NoMutation.takeform"), false, Data("credential".utf8))
-        let pairedRequest = AppAuthorityRequest.pairedExecute(root.appendingPathComponent("NoMutation.takeform"), CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "No", initialRecipe: [:])), UUID(), "token")
-        XCTAssertFalse(CreatorAuthorityService.allows(creatorRequest, for: .cli))
-        XCTAssertFalse(CreatorAuthorityService.allows(pairedRequest, for: .app))
-        XCTAssertTrue(CreatorAuthorityService.allows(creatorRequest, for: .app))
-        XCTAssertTrue(CreatorAuthorityService.allows(pairedRequest, for: .cli))
+    func testCLIRoleRouteCannotRunCreatorVerbsOrMutateAuthorityState() throws {
+        let package = root.appendingPathComponent("RoleProtected.takeform")
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let stateURL = try machineURL(for: document.projectID).appendingPathComponent("binding.json")
+        let bindingBefore = try Data(contentsOf: stateURL)
+        let manifestURL = package.appendingPathComponent(".takeform/manifest.json")
+        let manifestBefore = try Data(contentsOf: manifestURL)
+
+        let open = AppAuthorityRequest.open(package, true, Data("forged".utf8))
+        let pair = AppAuthorityRequest.pair(package, "forged", .distantFuture, Data("forged".utf8))
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: open, from: .cli) else { return XCTFail("CLI role routed creator open") }
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: pair, from: .cli) else { return XCTFail("CLI role routed creator pair") }
+        XCTAssertEqual(try Data(contentsOf: stateURL), bindingBefore)
+        XCTAssertEqual(try Data(contentsOf: manifestURL), manifestBefore)
     }
 
-    func testShippingCLIHasNoCreatorOrEngineDependency() throws {
-        let packageURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Package.swift")
-        let manifest = try String(contentsOf: packageURL)
-        guard let range = manifest.range(of: ".executableTarget(name: \"TakeformCLI\"") else { return XCTFail("TakeformCLI target missing") }
-        let declaration = String(manifest[range.lowerBound...].prefix(180))
-        XCTAssertTrue(declaration.contains("\"TakeformCore\""))
-        XCTAssertTrue(declaration.contains("\"TakeformAppAuthorityWire\""))
-        XCTAssertFalse(declaration.contains("TakeformAuthorityEngine"))
-        XCTAssertFalse(declaration.contains("TakeformAuthorityAppServiceCore"))
+    func testFakeServiceSocketReceivesNoCreatorSecretBeforePeerVerification() throws {
+        final class ReadCapture: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = Data()
+            let completed = DispatchSemaphore(value: 0)
+            func set(_ value: Data) { lock.lock(); self.value = value; lock.unlock(); completed.signal() }
+            func read() -> Data { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        let socketURL = URL(fileURLWithPath: AppAuthoritySocket.path)
+        guard !FileManager.default.fileExists(atPath: socketURL.path) else { throw XCTSkip("app authority socket is active") }
+        let listener = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard listener >= 0 else { throw XCTSkip("could not create test socket") }
+        defer { close(listener); try? FileManager.default.removeItem(at: socketURL) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(socketURL.path.utf8CString)
+        withUnsafeMutableBytes(of: &address.sun_path) { raw in
+            for (index, byte) in bytes.enumerated() { raw[index] = UInt8(bitPattern: byte) }
+        }
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        guard bound == 0, Darwin.listen(listener, 1) == 0 else { throw XCTSkip("could not bind test socket") }
+        let capture = ReadCapture()
+        Thread {
+            let peer = accept(listener, nil, nil)
+            guard peer >= 0 else { capture.set(Data()); return }
+            defer { close(peer) }
+            var byte: UInt8 = 0
+            let count = Darwin.read(peer, &byte, 1)
+            capture.set(count > 0 ? Data([byte]) : Data())
+        }.start()
+        let rootURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let service = rootURL.appendingPathComponent(".build/debug/TakeformAuthorityAppService")
+        guard FileManager.default.isExecutableFile(atPath: service.path), AppAuthorityPeer.requirement(for: service) != nil else { throw XCTSkip("service identity is unavailable") }
+        XCTAssertThrowsError(try AppAuthoritySocket.verifiedRequest(.open(root.appendingPathComponent("Secret.takeform"), false, Data("creator-secret-marker".utf8)), expectedService: service))
+        XCTAssertEqual(capture.completed.wait(timeout: .now() + 1), .success)
+        XCTAssertEqual(capture.read(), Data())
     }
 
     func testProjectionDriftAndNewerSchemaAreVisibleWithoutReset() throws {

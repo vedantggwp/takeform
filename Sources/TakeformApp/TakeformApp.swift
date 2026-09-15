@@ -311,9 +311,8 @@ private struct SettingsView: View {
 private struct NativeAuthorityClient: WorkspaceClient {
     private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
     private func verifiedRequest(_ request: AppAuthorityRequest) throws -> AppAuthorityResponse {
-        let fd = try AppAuthoritySocket.connect(); defer { close(fd) }
-        guard let service = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService"), let requirement = AppAuthorityPeer.requirement(for: service), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else { throw WorkspaceFailure.authorityUnavailable }
-        try AppAuthoritySocket.send(request, fd); return try AppAuthoritySocket.receive(AppAuthorityResponse.self, fd)
+        guard let service = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService") else { throw WorkspaceFailure.authorityUnavailable }
+        return try AppAuthoritySocket.verifiedRequest(request, expectedService: service)
     }
     private func request(_ r: AppAuthorityRequest) async throws -> AppAuthorityResponse {
         do { return try await Task.detached { try verifiedRequest(r) }.value }
