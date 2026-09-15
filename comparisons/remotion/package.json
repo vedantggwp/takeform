@@ -4,5 +4,5 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {"node": ">=22 <23"},
-  "scripts": {"test": "node --test ./test/asset-server.test.mjs"}
+  "scripts": {"test": "node --test ./test/*.test.mjs"}
 }

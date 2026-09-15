@@ -1,5 +1,5 @@
 import {mkdir} from 'node:fs/promises';
-import {isAbsolute, join} from 'node:path';
+import {isAbsolute, join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createAttempt, frameState, reserveStorage} from '../common/index.mjs';
 
@@ -13,16 +13,29 @@ export function prepareAttempt({attemptId, attemptRoot, snapshot, fixtureId, run
   const expected = manifest.expected;
   const rate = manifest.canonicalPlan.outputFrameRate;
   const storage = reserveStorage({route: 'streaming', width: manifest.canonicalPlan.width, height: manifest.canonicalPlan.height, frameCount: expected.frameCount, expectedOutputBytes, decodeCacheBytes, pipelineBufferBytes, runtimeFreeFloorBytes, freeBytes});
-  const attempt = createAttempt({id: attemptId, snapshot, backend: {kind: 'renderer', identity: 'remotion', version: '4.0.524'}, attemptRoot, scratchPaths: [join(attemptRoot, 'bundle')], outputPath: join(attemptRoot, 'output.mp4')});
+  const attempt = createAttempt({id: attemptId, snapshot, backend: {kind: 'renderer', identity: 'remotion', version: '4.0.524'}, attemptRoot, scratchPaths: [join(attemptRoot, 'bundle'), join(attemptRoot, 'tmp')], outputPath: join(attemptRoot, 'output.mp4')});
   return Object.freeze({attempt, fixtureId, rate: rate.num / rate.den, frameCount: expected.frameCount, dimensions: {width: manifest.canonicalPlan.width, height: manifest.canonicalPlan.height}, storage});
 }
 
-export async function bundleAndRender({prepared, runtime, entryPoint, props, browserExecutable}) {
-  if (!isAbsolute(runtime) || !isAbsolute(entryPoint) || !isAbsolute(browserExecutable)) throw new Error('runtime, entryPoint, and browser executable must be absolute paths');
+const requireAttemptTmpdir = prepared => {
+  const tmpdir = prepared.attempt.scratchPaths[1];
+  if (!tmpdir || resolve(process.env.TMPDIR ?? '') !== resolve(tmpdir)) throw new Error('TMPDIR must name this attempt\'s owned tmp directory before importing Remotion SDK modules');
+  return tmpdir;
+};
+
+export async function bundleAttempt({prepared, runtime, entryPoint}) {
+  if (!isAbsolute(runtime) || !isAbsolute(entryPoint)) throw new Error('runtime and entry point must be absolute paths');
   await mkdir(prepared.attempt.attemptRoot, {recursive: true});
   await Promise.all(prepared.attempt.scratchPaths.map(directory => mkdir(directory, {recursive: true})));
-  const [bundler, renderer] = await Promise.all([import(bundlerModule(runtime)), import(rendererModule(runtime))]);
-  const serveUrl = await bundler.bundle({entryPoint, outDir: prepared.attempt.scratchPaths[0]});
+  requireAttemptTmpdir(prepared);
+  const bundler = await import(bundlerModule(runtime));
+  return bundler.bundle({entryPoint, outDir: prepared.attempt.scratchPaths[0], webpackOverride: config => ({...config, resolve: {...config.resolve, modules: [...(config.resolve?.modules ?? ['node_modules']), join(runtime, 'node_modules')]}})});
+}
+
+export async function bundleAndRender({prepared, runtime, entryPoint, props, browserExecutable}) {
+  if (!isAbsolute(browserExecutable)) throw new Error('browser executable must be an absolute path');
+  const serveUrl = await bundleAttempt({prepared, runtime, entryPoint});
+  const renderer = await import(rendererModule(runtime));
   await renderer.renderMedia({
     serveUrl,
     codec: 'h264',
