@@ -30,7 +30,7 @@ let package = Package(
         .target(name: "TakeformMedia"),
         .target(name: "TakeformRenderedPreview", dependencies: ["TakeformCore", "TakeformAppAuthorityWire"]),
         .target(name: "TakeformAppServiceClient", dependencies: ["TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
-        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient"]),
+        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient", "TakeformRenderedPreview"]),
         .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .executableTarget(name: "TakeformDoctor", dependencies: ["TakeformSupport"]),
         .executableTarget(name: "TakeformCLI", dependencies: ["TakeformCore", "TakeformAppAuthorityWire"]),
