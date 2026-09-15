@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Takeform Preview Diagnostic</title>
+  <style>body{background:#171717;color:#f4f4f4;font:16px -apple-system,sans-serif;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center}output{font:700 72px ui-monospace,monospace;display:block;margin:16px}p{color:#b8b8b8}button{font:inherit;padding:8px 12px}</style>
+</head>
+<body>
+  <main><p>Diagnostic page only. It is not renderer proof.</p><output id="frame">—</output><p id="status" aria-live="polite">Awaiting a typed native command.</p><button id="delay-next" type="button">Delay next acknowledgement</button><p id="delay-status">The next acknowledgement is immediate.</p></main>
+  <script>
+    let delayNextAcknowledgement = false;
+    const delayButton = document.querySelector('#delay-next');
+    const delayStatus = document.querySelector('#delay-status');
+    delayButton.addEventListener('click', () => {
+      delayNextAcknowledgement = true;
+      delayStatus.textContent = 'The next acknowledgement will wait 150 ms.';
+    });
+    window.takeformPreviewCommand = (command) => new Promise((resolve) => {
+      const delay = delayNextAcknowledgement;
+      delayNextAcknowledgement = false;
+      if (delay) delayStatus.textContent = 'The delayed acknowledgement is pending.';
+      const acknowledge = () => requestAnimationFrame(() => {
+        const frame = Number.isInteger(command.frame) ? command.frame : Number(document.querySelector('#frame').textContent) || 0;
+        const playback = command.type === 'play' ? 'playing' : command.type === 'pause' ? 'paused' : 'paused';
+        document.querySelector('#frame').textContent = frame + 1;
+        document.querySelector('#status').textContent = `${command.type} acknowledged after web paint`;
+        window.webkit.messageHandlers.takeformPreview.postMessage({requestID: command.requestID, sessionID: command.sessionID, snapshotID: command.snapshotID, displayedFrame: frame, playback, status: 'painted'});
+        if (delay) delayStatus.textContent = 'The next acknowledgement is immediate.';
+        resolve();
+      });
+      if (delay) window.setTimeout(acknowledge, 150);
+      else acknowledge();
+    });
+  </script>
+</body>
+</html>
