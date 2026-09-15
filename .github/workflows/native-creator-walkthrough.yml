@@ -58,6 +58,7 @@ jobs:
           TAKEFORM_CREATOR_WALKTHROUGH_ROOT: ${{ runner.temp }}/takeform-native-creator-walkthrough/test-inputs
           TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.pull_request.head.sha }}
           TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS: 180
+          TAKEFORM_CREATOR_WALKTHROUGH_ONLY_TESTING: TakeformNativeCreatorWalkthroughTests/TakeformNativeCreatorWalkthroughTests/testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen
         run: ./scripts/run-native-creator-walkthrough
       - name: Upload creator walkthrough artifacts
         if: always()
@@ -70,5 +71,6 @@ jobs:
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/xcodebuild.log
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/native-creator-walkthrough.xcresult
             ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/attachments
+            ${{ runner.temp }}/takeform-native-creator-walkthrough/artifacts/launch-diagnostics
           if-no-files-found: warn
           retention-days: 3

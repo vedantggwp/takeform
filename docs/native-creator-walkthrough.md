@@ -29,6 +29,15 @@ makes no renderer, preview-export, or media-acceptance claim. Render completion
 remains outside this suite until the reviewed renderer service adapter is in the
 copied bundle.
 
+The first hosted attempt ended before an app window was available: XCTest
+observed the copied app's launch PID transition to not-running, while the
+retained crash collection excluded Takeform. The next, single-case diagnostic
+keeps the same copied-app XCTest launch and 180-second cap. It retains only the
+attempt-bounded `process == "Takeform"` log stream, copied-binary loader and
+signature facts, exact XCTest PID/state observations, and matching Takeform
+crash reports whose process identity and incident time fall inside that attempt.
+It does not direct-launch the app or change product behavior.
+
 The first run does not claim drag-and-drop or an in-flight cancellation outcome.
 The next drag case will use XCTest's public
 `click(forDuration:thenDragTo:)` from a Finder element representing a

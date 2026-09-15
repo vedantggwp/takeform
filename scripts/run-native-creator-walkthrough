@@ -10,6 +10,7 @@ APP_BUNDLE="${TAKEFORM_CREATOR_WALKTHROUGH_APP:-}"
 SOURCE_SHA="${TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA:-}"
 TEST_ROOT="${TAKEFORM_CREATOR_WALKTHROUGH_ROOT:-}"
 TIMEOUT_SECONDS="${TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS:-180}"
+ONLY_TESTING="${TAKEFORM_CREATOR_WALKTHROUGH_ONLY_TESTING:-}"
 
 if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ] && [ "$MODE" != "--validate-runner-paths" ]; then
   echo "Usage: $0 [--build-for-testing|--validate-runner-paths]" >&2
@@ -42,9 +43,7 @@ canonical_runner_descendant() {
   local label="$2"
   local resolved
 
-  [ -n "${RUNNER_TEMP:-}" ] || { echo "RUNNER_TEMP is required for run mode" >&2; exit 2; }
-  resolved="$(python3 - "$RUNNER_TEMP" "$candidate" <<'PY'
-import os
+  resolved="$(python3 - "$RUNNER_TEMP_PHYSICAL" "$candidate" <<'PY'
 import sys
 from pathlib import Path
 
@@ -61,23 +60,31 @@ if resolved == runner:
     raise SystemExit("candidate must be a descendant of RUNNER_TEMP")
 print(resolved)
 PY
-)" || { echo "$label must be an absolute, canonical descendant of RUNNER_TEMP" >&2; exit 2; }
-  RUNNER_TEMP_PHYSICAL="$(python3 - "$RUNNER_TEMP" <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).resolve(strict=True))
-PY
-)" || { echo "RUNNER_TEMP could not be resolved" >&2; exit 2; }
+)" || { echo "$label must be an absolute, canonical descendant of RUNNER_TEMP" >&2; return 2; }
   printf '%s\n' "$resolved"
 }
 
 if [ "$MODE" = run ] || [ "$MODE" = "--validate-runner-paths" ]; then
+  [ -n "${RUNNER_TEMP:-}" ] || { echo "RUNNER_TEMP is required for run mode" >&2; exit 2; }
+  if ! RUNNER_TEMP_PHYSICAL="$(python3 - "$RUNNER_TEMP" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+)"; then
+    echo "RUNNER_TEMP could not be resolved" >&2
+    exit 2
+  fi
   if ! OUTPUT_DIR="$(canonical_runner_descendant "$OUTPUT_DIR" "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT")"; then
     exit 2
   fi
   if ! TEST_ROOT="$(canonical_runner_descendant "$TEST_ROOT" "TAKEFORM_CREATOR_WALKTHROUGH_ROOT")"; then
     exit 2
   fi
+fi
+if [ -n "$ONLY_TESTING" ] && { [ "$MODE" != run ] || ! [[ "$ONLY_TESTING" =~ ^TakeformNativeCreatorWalkthroughTests/TakeformNativeCreatorWalkthroughTests/test[A-Za-z0-9_]+$ ]]; }; then
+  echo "TAKEFORM_CREATOR_WALKTHROUGH_ONLY_TESTING is only supported for an exact creator XCTest method in run mode" >&2
+  exit 2
 fi
 
 if [ "$MODE" = "--validate-runner-paths" ]; then
@@ -101,8 +108,9 @@ DERIVED_DATA="$OUTPUT_DIR/DerivedData"
 LOG="$OUTPUT_DIR/xcodebuild.log"
 FACTS="$OUTPUT_DIR/facts.txt"
 ATTACHMENTS="$OUTPUT_DIR/attachments"
+LAUNCH_DIAGNOSTICS="$OUTPUT_DIR/launch-diagnostics"
 
-rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
+rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS" "$LAUNCH_DIAGNOSTICS"
 {
   echo "source_sha: ${SOURCE_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
   echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
@@ -112,6 +120,7 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
     echo "runner_temp: $RUNNER_TEMP_PHYSICAL"
     echo "safe_output: $OUTPUT_DIR"
     echo "safe_test_root: $TEST_ROOT"
+    echo "xctest_selection: ${ONLY_TESTING:-all_creator_walkthrough_cases}"
   fi
   xcodebuild -version
   sw_vers
@@ -135,6 +144,26 @@ command=(
   -derivedDataPath "$DERIVED_DATA"
   -resultBundlePath "$RESULT_BUNDLE"
 )
+if [ -n "$ONLY_TESTING" ]; then
+  command+=("-only-testing:$ONLY_TESTING")
+fi
+
+log_pid=""
+attempt_marker=""
+attempt_start_epoch=""
+if [ "$MODE" = run ]; then
+  mkdir -p "$LAUNCH_DIAGNOSTICS/crash-reports"
+  attempt_marker="$LAUNCH_DIAGNOSTICS/attempt-start"
+  : > "$attempt_marker"
+  attempt_start_epoch="$(date +%s)"
+  {
+    echo "attempt_start_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "attempt_start_epoch: $attempt_start_epoch"
+    otool -L "$APP_BUNDLE/Contents/MacOS/Takeform"
+  } >> "$FACTS" 2>&1
+  /usr/bin/log stream --style compact --level debug --predicate 'process == "Takeform"' > "$LAUNCH_DIAGNOSTICS/takeform-unified.log" 2>&1 &
+  log_pid=$!
+fi
 set -m
 if [ "$MODE" = run ]; then
   TEST_RUNNER_TAKEFORM_CREATOR_WALKTHROUGH_APP="$APP_BUNDLE" \
@@ -195,6 +224,80 @@ while kill -0 "$pid" 2>/dev/null; do
 done
 wait "$pid"
 status=$?
+
+if [ -n "$log_pid" ]; then
+  kill -TERM "$log_pid" 2>/dev/null || true
+  wait "$log_pid" 2>/dev/null || true
+fi
+if [ "$MODE" = run ]; then
+  attempt_end_epoch="$(date +%s)"
+  {
+    echo "attempt_end_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "attempt_end_epoch: $attempt_end_epoch"
+  } >> "$FACTS"
+  python3 - "$HOME/Library/Logs/DiagnosticReports" "$attempt_start_epoch" "$attempt_end_epoch" "$LAUNCH_DIAGNOSTICS/crash-reports" <<'PY' >> "$FACTS" 2>&1 || true
+import datetime as dt
+import json
+import re
+import shutil
+import sys
+from pathlib import Path
+
+reports = Path(sys.argv[1])
+start = float(sys.argv[2])
+end = float(sys.argv[3])
+destination = Path(sys.argv[4])
+if not reports.is_dir():
+    print("matching_takeform_crash_reports: diagnostic-report-directory-unavailable")
+    raise SystemExit(0)
+
+def timestamp(text: str) -> float | None:
+    try:
+        return dt.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
+    for pattern in ("%Y-%m-%d %H:%M:%S.%f %z", "%Y-%m-%d %H:%M:%S %z"):
+        try:
+            return dt.datetime.strptime(text, pattern).timestamp()
+        except ValueError:
+            continue
+    return None
+
+copied = 0
+for report in sorted(reports.glob("Takeform*")):
+    if report.suffix not in {".ips", ".crash"} or not report.is_file():
+        continue
+    text = report.read_text(errors="replace")
+    process = None
+    incident = None
+    try:
+        payload = json.loads(text)
+        process = payload.get("procName")
+        incident = timestamp(str(payload.get("captureTime", "")))
+    except json.JSONDecodeError:
+        process_match = re.search(r"^Process:\s*([^\s]+)", text, re.MULTILINE)
+        time_match = re.search(r"^Date/Time:\s*(.+)$", text, re.MULTILINE)
+        process = process_match.group(1) if process_match else None
+        incident = timestamp(time_match.group(1).strip()) if time_match else None
+    if process == "Takeform" and incident is not None and start <= incident <= end:
+        shutil.copy2(report, destination / report.name)
+        copied += 1
+        print(f"matching_takeform_crash_report: copied {report.name}")
+    else:
+        print(f"matching_takeform_crash_report: omitted {report.name} identity_or_time_outside_attempt")
+print(f"matching_takeform_crash_report_count: {copied}")
+PY
+  if [ -d "$RESULT_BUNDLE/Staging" ]; then
+    find "$RESULT_BUNDLE/Staging" -type f -name 'Session-*.log' -exec grep -H -E 'com\.takeform\.app@.*pid:|com\.takeform\.app \(pid:' {} + > "$LAUNCH_DIAGNOSTICS/xctest-takeform-pid-observations.txt" 2>/dev/null || true
+  else
+    : > "$LAUNCH_DIAGNOSTICS/xctest-takeform-pid-observations.txt"
+  fi
+  if [ ! -s "$LAUNCH_DIAGNOSTICS/xctest-takeform-pid-observations.txt" ]; then
+    echo "takeform_pid_observation: absent from retained XCTest diagnostics" >> "$FACTS"
+  else
+    echo "takeform_pid_observation: retained in launch-diagnostics/xctest-takeform-pid-observations.txt" >> "$FACTS"
+  fi
+fi
 
 if [ "$timed_out" -eq 1 ]; then
   echo "probe_timeout_seconds: $TIMEOUT_SECONDS" >> "$FACTS"
