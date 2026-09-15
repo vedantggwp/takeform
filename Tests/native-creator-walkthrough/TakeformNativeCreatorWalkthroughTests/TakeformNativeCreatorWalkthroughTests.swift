@@ -42,8 +42,13 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         app.buttons["workspace-create-episode"].click()
         XCTAssertTrue(app.staticTexts["Assembly"].waitForExistence(timeout: 10))
 
-        let clipMenu = app.buttons["composition-asset-picker"]
+        // SwiftUI exposes this Menu as a MenuButton on macOS. Resolve the
+        // unique accessibility identifier without assuming a Button subtype.
+        let clipMenu = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@", "composition-asset-picker"))
+            .firstMatch
         XCTAssertTrue(clipMenu.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForHittable(clipMenu, timeout: 5))
         clipMenu.click()
         XCTAssertTrue(app.menuItems["source.png"].waitForExistence(timeout: 5))
         app.menuItems["source.png"].click()

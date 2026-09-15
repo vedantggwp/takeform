@@ -79,6 +79,11 @@ grep -Eq 'replaceText\(folderField, with: path\.path, named: "Go to Folder path"
 grep -Eq 'predicate: NSPredicate\(format: "value == %@", value\)' "$TEST_SOURCE"
 grep -Eq 'value BEGINSWITH %@", "Revision "' "$TEST_SOURCE"
 grep -Eq 'let values = try url\.resourceValues\(forKeys: \[\.isRegularFileKey\]\)' "$TEST_SOURCE"
+grep -Eq 'identifier == %@", "composition-asset-picker"' "$TEST_SOURCE"
+if grep -Eq 'app\.buttons\["composition-asset-picker"\]' "$TEST_SOURCE"; then
+  echo "creator walkthrough must not assume the composition Menu is a Button" >&2
+  exit 1
+fi
 if [ "$(grep -Ec '\.typeText\(' "$TEST_SOURCE")" -ne 1 ]; then
   echo "creator walkthrough fields must use replaceText so prefilled values are never appended" >&2
   exit 1
