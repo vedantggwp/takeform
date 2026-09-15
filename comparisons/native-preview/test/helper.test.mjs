@@ -32,6 +32,16 @@ test('helper serves only granted local assets and shuts down', async () => {
   await new Promise(resolve => child.once('exit', resolve));
 });
 
+test('helper serves the diagnostic document beside its emitted helper resource', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-preview-diagnostic-'));
+  const {child, port} = await openHelper(root);
+  const response = await fetch(`http://127.0.0.1:${port}/diagnostic.html`);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /takeformPreviewCommand/);
+  child.kill('SIGTERM');
+  await new Promise(resolve => child.once('exit', resolve));
+});
+
 test('helper reports an unavailable explicit grant', async () => {
   const missing = join(tmpdir(), `takeform-preview-missing-${Date.now()}`);
   const child = spawn(process.execPath, [helper.pathname, '--port', '0', '--bundle-root', missing], {stdio: ['ignore', 'pipe', 'pipe']});

@@ -2,6 +2,7 @@ import {createServer} from 'node:http';
 import {createReadStream} from 'node:fs';
 import {realpath, stat} from 'node:fs/promises';
 import {extname, resolve, sep} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index], process.argv[index + 1]);
@@ -48,7 +49,7 @@ function byteRange(value, size) {
 
 async function servedPath(requestURL) {
   const decoded = decodeURIComponent(requestURL.pathname);
-  if (decoded === '/' || decoded === '/diagnostic.html') return new URL('./diagnostic.html', import.meta.url);
+  if (decoded === '/' || decoded === '/diagnostic.html') return fileURLToPath(new URL('./diagnostic.html', import.meta.url));
   const match = decoded.match(/^\/(bundle|fixtures)\/(.+)$/);
   if (!match || match[2].includes('\0')) return undefined;
   const root = roots[match[1]];
