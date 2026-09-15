@@ -8,6 +8,8 @@ APP_BUNDLE="$DESTINATION_DIR/Takeform.app"
 mkdir -p "$DESTINATION_DIR"
 swift build --package-path "$ROOT_DIR" -c release --product Takeform
 swift build --package-path "$ROOT_DIR" -c release --product TakeformDoctor
+swift build --package-path "$ROOT_DIR" -c release --product TakeformAuthorityAppService
+swift build --package-path "$ROOT_DIR" -c release --product takeform
 BIN_DIR="$(swift build --package-path "$ROOT_DIR" -c release --show-bin-path)"
 
 bundle_identifier=""
@@ -31,6 +33,8 @@ fi
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 cp "$BIN_DIR/Takeform" "$APP_BUNDLE/Contents/MacOS/Takeform"
+cp "$BIN_DIR/TakeformAuthorityAppService" "$APP_BUNDLE/Contents/MacOS/TakeformAuthorityAppService"
+cp "$BIN_DIR/takeform" "$APP_BUNDLE/Contents/MacOS/takeform"
 cp "$ROOT_DIR/design/identity/exports/Takeform.icns" "$APP_BUNDLE/Contents/Resources/Takeform.icns"
 
 cat >"$APP_BUNDLE/Contents/Info.plist" <<PLIST

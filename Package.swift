@@ -6,13 +6,35 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "TakeformSupport", targets: ["TakeformSupport"]),
-        .executable(name: "Takeform", targets: ["TakeformApp"]),
-        .executable(name: "TakeformDoctor", targets: ["TakeformDoctor"])
+        .library(name: "TakeformCore", targets: ["TakeformCore"]),
+        .library(name: "TakeformWorkspace", targets: ["TakeformWorkspace"]),
+        .library(name: "TakeformAppAuthorityWire", targets: ["TakeformAppAuthorityWire"]),
+        .executable(name: "TakeformAuthorityAppService", targets: ["TakeformAuthorityAppService"]),
+        // Keep the native app executable distinct from the lowercase CLI on
+        // case-insensitive volumes, where Takeform/takeform are one path.
+        .executable(name: "TakeformApp", targets: ["TakeformApp"]),
+        .executable(name: "TakeformDoctor", targets: ["TakeformDoctor"]),
+        .executable(name: "takeform", targets: ["TakeformCLI"]),
+        .executable(name: "TakeformAuthorityService", targets: ["TakeformAuthorityService"])
     ],
     targets: [
+        .target(name: "CSQLite", linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "TakeformSupport"),
-        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport"]),
+        .target(name: "TakeformCore"),
+        .target(name: "TakeformAuthorityEngine", dependencies: ["CSQLite", "TakeformCore"], path: "Sources/TakeformAuthority"),
+        .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
+        .target(name: "TakeformAppAuthorityWire", dependencies: ["TakeformCore", "TakeformWorkspace"]),
+        .target(name: "TakeformAppServiceClient", dependencies: ["TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient"]),
+        .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .executableTarget(name: "TakeformDoctor", dependencies: ["TakeformSupport"]),
-        .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"])
+        .executableTarget(name: "TakeformCLI", dependencies: ["TakeformCore", "TakeformAppAuthorityWire"]),
+        .executableTarget(name: "TakeformAuthorityService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore"]),
+        .executableTarget(name: "TakeformAuthorityHarness", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore"]),
+        .executableTarget(name: "TakeformAuthorityFaultHarness", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore"]),
+        .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"]),
+        .testTarget(name: "TakeformAuthorityTests", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformAppAuthorityWire", "TakeformCore"]),
+        .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore", "TakeformAppServiceClient", "TakeformAppAuthorityWire", "TakeformAuthorityAppServiceCore"])
     ]
 )

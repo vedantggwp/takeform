@@ -29,9 +29,27 @@ jobs:
           export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
           swift package describe --type json > package-description.json
           grep -Eq '"type"[[:space:]]*:[[:space:]]*"test"' package-description.json
+          python3 - <<'PY'
+          import json
+
+          with open("package-description.json") as source:
+              package = json.load(source)
+          targets = {target["name"]: target.get("target_dependencies", []) for target in package["targets"]}
+          direct = targets["TakeformCLI"]
+          assert set(direct) == {"TakeformCore", "TakeformAppAuthorityWire"}
+          closure = set()
+          pending = list(direct)
+          while pending:
+              target = pending.pop()
+              if target not in closure:
+                  closure.add(target)
+                  pending.extend(targets.get(target, []))
+          assert not {"TakeformAuthorityEngine", "TakeformAuthorityAppServiceCore"} & closure
+          PY
       - name: Test and release build
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift build --product TakeformAuthorityAppService
           swift test
           swift build -c release
       - name: Verify an ad-hoc copied bundle

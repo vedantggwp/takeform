@@ -19,6 +19,8 @@ plist_value() {
 }
 
 [ -x "$COPIED_APP/Contents/MacOS/Takeform" ]
+[ -x "$COPIED_APP/Contents/MacOS/TakeformAuthorityAppService" ]
+[ -x "$COPIED_APP/Contents/MacOS/takeform" ]
 [ -f "$COPIED_APP/Contents/Resources/Takeform.icns" ]
 [ "$(plist_value CFBundleIdentifier)" = "com.takeform.app" ]
 [ "$(plist_value CFBundleDisplayName)" = "Takeform" ]
