@@ -135,9 +135,29 @@ function profileRelativePath(path, label) {
   return path;
 }
 
-function containedPath(root, relativePath, label) {
-  const candidate = resolve(root, profileRelativePath(relativePath, label));
-  if (!candidate.startsWith(`${root}/`)) fail('INVALID_RUNTIME_PROFILE', `${label} escapes the runtime root`);
+async function requireContainedProfileFile(root, relativePath, label, executable = false) {
+  const parts = profileRelativePath(relativePath, label).split('/');
+  let directory = root;
+  for (const part of parts.slice(0, -1)) {
+    directory = join(directory, part);
+    let entry;
+    try {
+      entry = await lstat(directory);
+    } catch {
+      fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} parent is unavailable`);
+    }
+    if (!entry.isDirectory() || entry.isSymbolicLink()) fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} parent is not a real directory`);
+  }
+  const candidate = join(directory, parts[parts.length - 1]);
+  let entry;
+  try {
+    entry = await lstat(candidate);
+  } catch {
+    fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} is unavailable`);
+  }
+  if (!entry.isFile() || entry.isSymbolicLink() || executable && (entry.mode & 0o111) === 0) {
+    fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} is not a regular${executable ? ' executable' : ''} file`);
+  }
   return candidate;
 }
 
@@ -159,8 +179,7 @@ async function requireProfileLauncher(root, kind) {
   if (candidates.length !== 1) fail('INVALID_RUNTIME_PROFILE', `Runtime profile has an ambiguous ${kind} launcher`);
   const [launcher] = candidates;
   if (!launcher || !/^[a-f0-9]{64}$/.test(launcher.sha256 ?? '')) fail('INVALID_RUNTIME_PROFILE', `Runtime profile has no valid ${kind} launcher`);
-  const path = containedPath(root, launcher.path, `${kind} launcher`);
-  await requireExecutable(path, `${kind} launcher`);
+  const path = await requireContainedProfileFile(root, launcher.path, `${kind} launcher`, true);
   if (hash(await readFile(path)) !== launcher.sha256) fail('RUNTIME_LAUNCHER_MISMATCH', `${kind} launcher does not match the runtime profile`);
   return {kind, path, relativePath: launcher.path, sha256: launcher.sha256};
 }
@@ -168,7 +187,7 @@ async function requireProfileLauncher(root, kind) {
 async function requireProfileWorker(root) {
   const worker = runtimeProfile.worker;
   if (!worker || !/^[a-f0-9]{64}$/.test(worker.sha256 ?? '')) fail('INVALID_RUNTIME_PROFILE', 'Runtime profile has no valid worker hash');
-  const path = containedPath(root, worker.path, 'worker');
+  const path = await requireContainedProfileFile(root, worker.path, 'worker');
   if (hash(await readFile(path)) !== worker.sha256) fail('RUNTIME_WORKER_MISMATCH', 'Worker does not match the runtime profile');
   return {path: worker.path, sha256: worker.sha256};
 }
@@ -229,8 +248,8 @@ export async function validateRuntime(runtime) {
     packages,
     runtimeRoot: root,
     receiptFacts: {
-      browserWrapper: {path: browserWrapper.relativePath, sha256: browserWrapper.sha256},
-      worker,
+      browserWrapper: {kind: browserWrapper.kind, sha256: browserWrapper.sha256},
+      worker: {sha256: worker.sha256},
       browserTarget: await executableFacts(browserTargetExecutable, 'Browser target', ['--version']),
       ffmpeg: await executableFacts(ffmpegExecutable, 'FFmpeg', ['-version']),
       ffprobe: await executableFacts(ffprobeExecutable, 'FFprobe', ['-version']),

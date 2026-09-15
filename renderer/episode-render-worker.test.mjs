@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {chmod, copyFile, mkdtemp, lstat, readFile, rm, writeFile} from 'node:fs/promises';
+import {chmod, copyFile, mkdtemp, lstat, readFile, rm, symlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {compositionModule, runAttempt, runtimeProfile, validateRequest, validateRuntime, writeProject} from './episode-render-worker.mjs';
@@ -119,6 +119,34 @@ test('runtime rejects a modified packaged browser wrapper before renderer import
     }
     await writeFile(wrapper, '#!/bin/sh\nexit 0\n');
     await assert.rejects(validateRuntime({runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserTargetExecutable: browser, ffmpegExecutable: ffmpeg, ffprobeExecutable: ffprobe}), {code: 'RUNTIME_LAUNCHER_MISMATCH'});
+  } finally {
+    await rm(root, {force: true, recursive: true});
+  }
+});
+
+test('runtime rejects a symlinked profile launcher parent even when bytes match', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-runtime-symlinked-tools-'));
+  try {
+    const browser = join(root, 'browser');
+    const ffmpeg = join(root, 'ffmpeg');
+    const ffprobe = join(root, 'ffprobe');
+    await Promise.all([browser, ffmpeg, ffprobe].map(async (path) => {
+      await writeFile(path, '#!/bin/sh\nexit 0\n');
+      await chmod(path, 0o755);
+    }));
+    const {mkdir} = await import('node:fs/promises');
+    const externalTools = join(root, 'external-tools');
+    await mkdir(externalTools, {recursive: true});
+    await copyFile(new URL('./launchers/secure-browser-launcher.sh', import.meta.url), join(externalTools, 'secure-browser-launcher.sh'));
+    await chmod(join(externalTools, 'secure-browser-launcher.sh'), 0o755);
+    await symlink(externalTools, join(root, 'tools'));
+    await copyFile(new URL('./episode-render-worker.mjs', import.meta.url), join(root, 'episode-render-worker.mjs'));
+    for (const {path, name, version} of runtimeProfile.packages) {
+      const packageDirectory = join(root, 'node_modules', path);
+      await mkdir(packageDirectory, {recursive: true});
+      await writeFile(join(packageDirectory, 'package.json'), JSON.stringify({name, version}));
+    }
+    await assert.rejects(validateRuntime({runtimeRoot: root, nodeVersion: runtimeProfile.nodeVersion, browserTargetExecutable: browser, ffmpegExecutable: ffmpeg, ffprobeExecutable: ffprobe}), {code: 'RUNTIME_PROFILE_PATH_UNSAFE'});
   } finally {
     await rm(root, {force: true, recursive: true});
   }
