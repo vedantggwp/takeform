@@ -60,7 +60,11 @@ final class SyntheticMediaFixtures {
         return url
     }
 
-    func video(named name: String, rotated: Bool = false) async throws -> URL {
+    func video(
+        named name: String,
+        rotated: Bool = false,
+        presentationTimes: [Int64] = [0, 20, 73, 160, 230, 400]
+    ) async throws -> URL {
         let url = root.appending(path: name)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -84,7 +88,7 @@ final class SyntheticMediaFixtures {
         writer.add(input)
         guard writer.startWriting() else { throw writer.error ?? FixtureError("AVAssetWriter could not start") }
         writer.startSession(atSourceTime: .zero)
-        for time in [0, 20, 73, 160, 230, 400] {
+        for time in presentationTimes {
             while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(1)) }
             guard adaptor.append(try pixelBuffer(), withPresentationTime: CMTime(value: CMTimeValue(time), timescale: 600)) else {
                 throw writer.error ?? FixtureError("AVAssetWriter could not append synthetic frame")
@@ -120,7 +124,10 @@ final class SyntheticMediaFixtures {
     }
 
     func paddedVideo(named name: String, minimumLogicalBytes: UInt64) async throws -> URL {
-        let url = try await video(named: name)
+        let url = try await video(
+            named: name,
+            presentationTimes: [0, 20, 73, 160, 230, 400, 500, 620, 750, 900, 1_080, 1_250]
+        )
         let initial = try fileSize(url)
         guard initial < minimumLogicalBytes else { return url }
         let padding = minimumLogicalBytes - initial

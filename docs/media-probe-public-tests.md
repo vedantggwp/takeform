@@ -17,7 +17,7 @@ artifact.
 | Behavior | Public synthetic evidence |
 | --- | --- |
 | Source identity and orientation | An 8-by-4 HEIC with ImageIO orientation 6; the test independently hashes it and checks encoded versus displayed dimensions. |
-| Timing and transforms | A short H.264 MOV written at authored `0,20,73,160,230,400 / 600` PTS, plus an 8-by-4 rotated MOV. The synthetic test proves that exact ordered subsequence and unequal authored adjacent intervals, then reads the AVFoundation track transform. It makes no claim about any additional reader buffers; their classification is a separate production-semantics follow-up. |
+| Timing and transforms | Short H.264 MOVs written at uneven `0,20,73,160,230,400 / 600` and constant `0,100,200,300 / 600` presentation times, plus an 8-by-4 rotated MOV. MediaProbe discards zero-sample AVAssetReader timing boundaries before storing timestamps or computing cadence. Tests require exact real-sample timestamp lists/counts and VFR `true` versus CFR `false`, then read the AVFoundation track transform. Valid image-backed samples are not rejected for absent block data. |
 | Audio facts | Silent mono 22,050 Hz PCM AIFF and stereo 48,000 Hz AAC M4A, verified through probed track format facts. |
 | Duplicate and corrupt sources | A byte-for-byte copied PNG under a distinct name, and a malformed PNG with the typed per-file error. |
 | Live Photo evidence | HEIC MakerApple key 17 and QuickTime content identifiers on separate MOVs: matching, mismatched, image/image wrong-kind, and absent-ID cases. Pairing uses the probe's independently read facts. |

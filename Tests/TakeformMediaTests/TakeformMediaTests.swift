@@ -25,7 +25,7 @@ struct TakeformMediaTests {
         #expect(facts.measurement.processPeakResidentBytes != nil)
     }
 
-    @Test func vfrVideoRetainsMeasuredPresentationTimes() async throws {
+    @Test func realSamplesDriveVFRAndCFRPresentationFacts() async throws {
         let fixtures = try SyntheticMediaFixtures()
         defer { fixtures.cleanup() }
         let facts = try success(await probe.inspect(try await fixtures.video(named: "vfr.mov")))
@@ -35,6 +35,8 @@ struct TakeformMediaTests {
         }
         #expect(video.nominalFrameRate != nil)
         #expect(video.codecFourCC == "avc1")
+        #expect(video.presentationTimestamps == authoredTimestamps)
+        #expect(video.presentationTimestamps.count == 6)
         #expect(containsOrderedSubsequence(authoredTimestamps, in: video.presentationTimestamps))
         let authoredDeltas = zip(authoredTimestamps.dropFirst(), authoredTimestamps)
             .map { later, earlier in
@@ -45,7 +47,21 @@ struct TakeformMediaTests {
         #expect(video.isVariableFrameRate == true)
         #expect(video.timeRange?.duration.timescale ?? 0 > 0)
         #expect(facts.duration?.timescale ?? 0 > 0)
-        #expect(facts.measurement.presentationSamplesScanned > video.presentationTimestamps.count)
+        #expect(facts.measurement.presentationSamplesScanned == video.presentationTimestamps.count)
+
+        let cfrFacts = try success(await probe.inspect(try await fixtures.video(
+            named: "cfr.mov",
+            presentationTimes: [0, 100, 200, 300]
+        )))
+        let cfr = try #require(cfrFacts.video)
+        let cfrTimestamps = [0, 100, 200, 300].map {
+            RationalTime(value: Int64($0), timescale: 600)!
+        }
+        #expect(cfr.presentationTimestamps == cfrTimestamps)
+        #expect(cfr.presentationTimestamps.count == 4)
+        #expect(cfr.observedPresentationDeltaCount == 3)
+        #expect(cfr.isVariableFrameRate == false)
+        #expect(cfrFacts.measurement.presentationSamplesScanned == cfr.presentationTimestamps.count)
     }
 
     @Test func generatedRotatedVideoReportsEncodedAndDisplayedDimensions() async throws {
