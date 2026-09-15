@@ -444,6 +444,11 @@ public struct MediaProbe: Sendable {
         var deltaCount = 0
         var scannedCount = 0
         while let sample = output.copyNextSampleBuffer() {
+            // AVAssetReader can emit timing-only boundary buffers. They do not
+            // describe a displayed video sample and must not affect stored PTS
+            // or cadence classification. Do not require a block buffer here:
+            // valid image-backed samples may not expose one.
+            guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
             progress?(.presentationSampleRead)
             try Task.checkCancellation()
             let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
