@@ -78,6 +78,27 @@ test('helper streams closed, open, and suffix byte ranges', async () => {
   await new Promise(resolve => child.once('exit', resolve));
 });
 
+test('helper serves granted MOV assets as video/quicktime with byte ranges', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'takeform-preview-mov-'));
+  await writeFile(join(root, 'clip.mov'), Buffer.from('0123456789'));
+  const {child, port} = await openHelper(root);
+  const get = await fetch(`http://127.0.0.1:${port}/bundle/clip.mov`);
+  assert.equal(get.status, 200);
+  assert.equal(get.headers.get('content-type'), 'video/quicktime');
+  assert.equal(await get.text(), '0123456789');
+  const range = await fetch(`http://127.0.0.1:${port}/bundle/clip.mov`, {headers: {Range: 'bytes=2-4'}});
+  assert.equal(range.status, 206);
+  assert.equal(range.headers.get('content-range'), 'bytes 2-4/10');
+  assert.equal(await range.text(), '234');
+  const head = await fetch(`http://127.0.0.1:${port}/bundle/clip.mov`, {method: 'HEAD', headers: {Range: 'bytes=1-3'}});
+  assert.equal(head.status, 206);
+  assert.equal(head.headers.get('content-type'), 'video/quicktime');
+  assert.equal(head.headers.get('content-length'), '3');
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
+  child.kill('SIGTERM');
+  await new Promise(resolve => child.once('exit', resolve));
+});
+
 test('helper rejects a non-Node-22 runtime', {skip: Number(process.versions.node.split('.')[0]) === 22}, async () => {
   const child = spawn(process.execPath, [helper.pathname, '--port', '0'], {stdio: ['ignore', 'pipe', 'pipe']});
   const line = await new Promise(resolve => child.stdout.once('data', data => resolve(String(data))));
