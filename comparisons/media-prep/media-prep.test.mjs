@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createReadStream} from 'node:fs';
-import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, symlink} from 'node:fs/promises';
 import os from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -47,14 +47,19 @@ test('rejects duplicate, unknown, mismatched and escaping manifest entries', asy
   t.after(() => rm(temporary, {recursive: true, force: true}));
   const fixtureManifest = JSON.parse(await readFile(join(fixtureRoot, 'M', 'manifest.json'), 'utf8'));
   const expectedOriginals = Object.fromEntries(fixtureManifest.sources.map(source => [source.id, source.sha256]));
-  const {manifest} = await prepareMedia({fixtureRoot, derivativeRoot: temporary});
+  const manifest = JSON.parse(await readFile(join(process.env.TAKEFORM_DERIVATIVE_ROOT, 'manifest.json'), 'utf8'));
   const attempt = async mutate => {
     const value = structuredClone(manifest);
     mutate(value);
-    await validateManifest(value, {derivativeRoot: temporary, expectedOriginals});
+    await validateManifest(value, {derivativeRoot: process.env.TAKEFORM_DERIVATIVE_ROOT, expectedOriginals});
   };
   await assert.rejects(() => attempt(value => value.entries.push(structuredClone(value.entries[0]))), /duplicate/);
   await assert.rejects(() => attempt(value => { value.entries[0].sourceId = 'unknown'; }), /unknown/);
   await assert.rejects(() => attempt(value => { value.entries[0].original.sha256 = '0'.repeat(64); }), /original hash mismatch/);
   await assert.rejects(() => attempt(value => { value.entries[0].prepared.path = '../escape.png'; }), /escapes/);
+  const escaped = {schemaVersion: 1, entries: [structuredClone(manifest.entries.find(entry => entry.sourceId === 'station'))]};
+  await symlink(join(fixtureRoot, 'M', 'media', 'station.heic'), join(temporary, 'escaped.png'));
+  escaped.entries[0].prepared.path = 'escaped.png';
+  escaped.entries[0].prepared.sha256 = expectedOriginals.station;
+  await assert.rejects(() => validateManifest(escaped, {derivativeRoot: temporary, expectedOriginals}), /escapes/);
 });

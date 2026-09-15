@@ -75,7 +75,8 @@ export async function validateManifest(manifest, {derivativeRoot, expectedOrigin
     sourceIds.add(entry.sourceId);
     if (!(entry.sourceId in expectedOriginals)) throw new Error(`unknown source id: ${entry.sourceId}`);
     if (entry.original?.sha256 !== expectedOriginals[entry.sourceId]) throw new Error(`original hash mismatch: ${entry.sourceId}`);
-    const prepared = await ownedPath(root, entry.prepared?.path);
+    const prepared = await realpath(await ownedPath(root, entry.prepared?.path));
+    inside(root, prepared);
     const details = await stat(prepared);
     if (!details.isFile()) throw new Error(`prepared output is not a file: ${entry.sourceId}`);
     if (await fileHash(prepared) !== entry.prepared.sha256) throw new Error(`prepared hash mismatch: ${entry.sourceId}`);
