@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Native-app credential used only to authenticate the app's UDS creator session.
@@ -12,11 +13,13 @@ public enum CreatorCredentialStore {
     public static let account = "creator-session-v1"
 
     private static var query: [CFString: Any] {
-        [
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
-            kSecUseAuthenticationUI: kSecUseAuthenticationUIFail
+            kSecUseAuthenticationContext: context
         ]
     }
 
