@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SOURCE_APP="${1:-"$ROOT_DIR/dist/Takeform.app"}"
+
+if [ ! -d "$SOURCE_APP" ]; then
+  echo "Expected an app bundle at: $SOURCE_APP" >&2
+  exit 2
+fi
+
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/takeform-bundle.XXXXXX")"
+trap 'rm -rf "$WORK_DIR"' EXIT
+COPIED_APP="$WORK_DIR/Copied Takeform.app"
+ditto "$SOURCE_APP" "$COPIED_APP"
+
+plist_value() {
+  /usr/libexec/PlistBuddy -c "Print :$1" "$COPIED_APP/Contents/Info.plist"
+}
+
+[ -x "$COPIED_APP/Contents/MacOS/Takeform" ]
+[ -f "$COPIED_APP/Contents/Resources/Takeform.icns" ]
+[ "$(plist_value CFBundleIdentifier)" = "com.takeform.app" ]
+[ "$(plist_value CFBundleDisplayName)" = "Takeform" ]
+[ "$(plist_value TakeformDevelopmentVersion)" = "0.1.0-dev" ]
+[ "$(plist_value LSMinimumSystemVersion)" = "14.0" ]
+codesign --verify --deep --strict --verbose=2 "$COPIED_APP"
+codesign -dvvv "$COPIED_APP" 2>&1 | grep -F "Identifier=com.takeform.app"
+echo "Verified copied bundle: $COPIED_APP"

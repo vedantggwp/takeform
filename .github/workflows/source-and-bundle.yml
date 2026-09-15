@@ -1,0 +1,42 @@
+name: source-and-bundle
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-bundle:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Record pinned toolchain facts
+        run: |
+          test -d /Applications/Xcode_26.4.1.app/Contents/Developer
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+          uname -m
+          sw_vers
+          env | sort | grep -E '^(ImageOS|ImageVersion|RUNNER_OS|RUNNER_ARCH)=' || true
+          swift --version | grep -E 'Swift version 6\.3|Apple Swift version 6\.3'
+      - name: Require a production test target
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift package describe --type json > package-description.json
+          grep -Eq '"type"[[:space:]]*:[[:space:]]*"test"' package-description.json
+      - name: Test and release build
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift test
+          swift build -c release
+      - name: Verify an ad-hoc copied bundle
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          ./scripts/takeform-doctor
+          ./scripts/package-dev-bundle "$RUNNER_TEMP/takeform-release"
+          ./scripts/verify-dev-bundle "$RUNNER_TEMP/takeform-release/Takeform.app"
