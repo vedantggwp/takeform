@@ -121,13 +121,12 @@ struct RenderedPreviewTests {
         try bytes.write(to: source)
         let cache = try RenderArtifactCache(root: root)
         let store = RenderedPreviewStore(currentRevision: "rev-a")
-        let job = try store.begin(key: try key(bytes: bytes))
-        let staged = try cache.stageCopy(from: source)
-        store.cancel(jobID: job, stagedURL: staged, cache: cache)
+        let job = try store.begin(key: try key(bytes: bytes), cache: cache)
+        _ = try store.stage(jobID: job, from: source, cache: cache)
+        store.cancel(jobID: job, cache: cache)
         #expect(throws: RenderedPreviewFailure.self) {
-            try store.publish(jobID: job, stagedURL: staged, cache: cache)
+            try store.publish(jobID: job, cache: cache)
         }
-        #expect(!FileManager.default.fileExists(atPath: staged.path))
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "artifacts", directoryHint: .isDirectory).appending(path: try! key(bytes: bytes).artifactFilename).path))
     }
 
@@ -142,16 +141,35 @@ struct RenderedPreviewTests {
         try bytes.write(to: source)
         let cache = try RenderArtifactCache(root: root)
         let store = RenderedPreviewStore(currentRevision: "rev-a")
-        let job = try store.begin(key: try key(bytes: bytes))
-        let staged = try cache.stageCopy(from: source)
+        let job = try store.begin(key: try key(bytes: bytes), cache: cache)
+        let staged = try store.stage(jobID: job, from: source, cache: cache)
         try FileManager.default.removeItem(at: staged)
         try FileManager.default.createSymbolicLink(at: staged, withDestinationURL: outside)
-        store.cancel(jobID: job, stagedURL: staged, cache: cache)
+        store.cancel(jobID: job, cache: cache)
         guard case let .failed(message) = store.status else {
             Issue.record("Expected failed cleanup state, got \(store.status)")
             return
         }
         #expect(message.contains("could not clean"))
+    }
+
+    @Test @MainActor func staleJobCannotRemoveAnotherJobsStagingArtifact() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "rendered-preview-cross-job-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data("rendered-preview".utf8)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appending(path: "source.mp4")
+        try bytes.write(to: source)
+        let cache = try RenderArtifactCache(root: root)
+        let store = RenderedPreviewStore(currentRevision: "rev-a")
+        let oldJob = try store.begin(key: try key(bytes: bytes), cache: cache)
+        let activeJob = try store.begin(key: try key(revision: "rev-a", bytes: Data("active".utf8)), cache: cache)
+        _ = try store.stage(jobID: activeJob, from: source, cache: cache)
+        let stagedNames = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "staging", directoryHint: .isDirectory).path)
+        #expect(stagedNames.count == 1)
+        store.cancel(jobID: oldJob, cache: cache)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "staging", directoryHint: .isDirectory).path) == stagedNames)
+        #expect(throws: RenderedPreviewFailure.staleJob) { try store.publish(jobID: oldJob, cache: cache) }
     }
 }
 
