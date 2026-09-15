@@ -49,6 +49,10 @@ SwiftUI app with an on-demand Swift service. This foundation supplies only the
 native shell and development build path; project authority, rendering, and the
 remaining creator workflow are separate work.
 
+The typed storage and CLI boundary under development for the next foundation
+increment is described in [project authority](docs/project-authority.md). It
+does not add native project controls to this development app.
+
 ## Project management
 
 GitHub issues own scope, dependencies and acceptance evidence. Each implementation PR links its issue and includes appropriate live verification. See [the roadmap](docs/roadmap.md).

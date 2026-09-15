@@ -1,0 +1,77 @@
+import CSQLite
+import Foundation
+
+private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+enum SQLiteError: Error, LocalizedError {
+    case message(String)
+    var errorDescription: String? { switch self { case .message(let value): value } }
+}
+
+final class SQLiteDatabase {
+    private var handle: OpaquePointer?
+
+    init(path: URL) throws {
+        var opened: OpaquePointer?
+        guard sqlite3_open_v2(path.path, &opened, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            throw SQLiteError.message("Could not open SQLite database at \(path.path)")
+        }
+        handle = opened
+        try execute("PRAGMA foreign_keys = ON")
+        try execute("PRAGMA journal_mode = WAL")
+    }
+
+    deinit { sqlite3_close(handle) }
+
+    func execute(_ sql: String, bindings: [String] = []) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
+        defer { sqlite3_finalize(statement) }
+        for (index, value) in bindings.enumerated() {
+            guard sqlite3_bind_text(statement, Int32(index + 1), value, -1, sqliteTransient) == SQLITE_OK else { throw failure() }
+        }
+        var result = sqlite3_step(statement)
+        while result == SQLITE_ROW { result = sqlite3_step(statement) }
+        guard result == SQLITE_DONE else { throw failure() }
+    }
+
+    func value(_ sql: String, bindings: [String] = []) throws -> String? {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
+        defer { sqlite3_finalize(statement) }
+        for (index, value) in bindings.enumerated() {
+            guard sqlite3_bind_text(statement, Int32(index + 1), value, -1, sqliteTransient) == SQLITE_OK else { throw failure() }
+        }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return sqlite3_column_text(statement, 0).map { String(cString: $0) }
+    }
+
+    func row(_ sql: String, bindings: [String] = []) throws -> [String]? {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure() }
+        defer { sqlite3_finalize(statement) }
+        for (index, value) in bindings.enumerated() {
+            guard sqlite3_bind_text(statement, Int32(index + 1), value, -1, sqliteTransient) == SQLITE_OK else { throw failure() }
+        }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return (0..<sqlite3_column_count(statement)).map { index in
+            sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
+        }
+    }
+
+    func transaction<T>(_ work: () throws -> T) throws -> T {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let value = try work()
+            try execute("COMMIT")
+            return value
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    private func failure() -> SQLiteError {
+        SQLiteError.message(handle.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "Unknown SQLite error")
+    }
+}
