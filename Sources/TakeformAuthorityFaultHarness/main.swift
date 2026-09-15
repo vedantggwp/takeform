@@ -39,7 +39,7 @@ private func serviceStatus(_ fixture: Fixture, fault: String? = nil) throws -> I
     let harnessURL = executable.hasPrefix("/")
         ? URL(fileURLWithPath: executable)
         : URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(executable)
-    let service = harnessURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityEngineService")
+    let service = harnessURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityService")
     let process = Process()
     let input = Pipe()
     let completed = DispatchSemaphore(value: 0)
