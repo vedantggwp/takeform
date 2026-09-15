@@ -6,12 +6,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: source-and-bundle-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   source-and-bundle:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Record pinned toolchain facts
@@ -29,10 +34,40 @@ jobs:
           export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
           swift package describe --type json > package-description.json
           grep -Eq '"type"[[:space:]]*:[[:space:]]*"test"' package-description.json
-      - name: Test and release build
+          python3 - <<'PY'
+          import json
+
+          with open("package-description.json") as source:
+              package = json.load(source)
+          targets = {target["name"]: target.get("target_dependencies", []) for target in package["targets"]}
+          direct = targets["TakeformCLI"]
+          assert set(direct) == {"TakeformCore", "TakeformAppAuthorityWire"}
+          closure = set()
+          pending = list(direct)
+          while pending:
+              target = pending.pop()
+              if target not in closure:
+                  closure.add(target)
+                  pending.extend(targets.get(target, []))
+          assert not {"TakeformAuthorityEngine", "TakeformAuthorityAppServiceCore"} & closure
+          PY
+      - name: Build authority service
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
-          swift test
+          swift build --product TakeformAuthorityAppService
+      - name: XCTest suite
+        timeout-minutes: 10
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift test --enable-xctest --disable-swift-testing --no-parallel --verbose
+      - name: Swift Testing suite
+        timeout-minutes: 10
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
+          swift test --disable-xctest --enable-swift-testing --no-parallel --verbose
+      - name: Release build
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
           swift build -c release
       - name: Verify an ad-hoc copied bundle
         run: |
