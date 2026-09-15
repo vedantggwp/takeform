@@ -256,6 +256,7 @@ final class EpisodeCompositionEditorState: ObservableObject {
     @Published var message: String?
     @Published var needsResolution = false
     @Published var isSaving = false
+    private var activeSaveContext: Context?
 
     var isDirty: Bool { draft != baseline }
 
@@ -272,6 +273,8 @@ final class EpisodeCompositionEditorState: ObservableObject {
         guard context.revision != incoming.revision else { return }
         if isDirty {
             self.context = incoming
+            activeSaveContext = nil
+            isSaving = false
             needsResolution = true
             message = "The committed composition changed. Reload to resolve it, or keep this local draft and adjust it."
         } else {
@@ -336,6 +339,7 @@ final class EpisodeCompositionEditorState: ObservableObject {
         do {
             let composition = try draft.composition(assets: document.assets)
             isSaving = true
+            activeSaveContext = context
             message = nil
             model.submit(.replaceEpisodeComposition(episodeID: episode.id, composition: composition)) { [weak self] completion in
                 self?.receive(completion, for: context, packageURL: packageURL, episode: episode)
@@ -350,7 +354,13 @@ final class EpisodeCompositionEditorState: ObservableObject {
     }
 
     func receive(_ completion: WorkspaceCommandCompletion, for request: Context, packageURL: URL, episode: Episode) {
-        guard context == request else { return }
+        guard activeSaveContext == nil || activeSaveContext == request else { return }
+        guard context == request else {
+            activeSaveContext = nil
+            isSaving = false
+            return
+        }
+        activeSaveContext = nil
         isSaving = false
         switch completion {
         case .applied(let document):
@@ -375,6 +385,7 @@ final class EpisodeCompositionEditorState: ObservableObject {
         baseline = loaded
         needsResolution = false
         isSaving = false
+        activeSaveContext = nil
         message = nil
     }
 
