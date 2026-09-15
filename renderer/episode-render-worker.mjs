@@ -1,10 +1,16 @@
 import {createHash} from 'node:crypto';
-import {mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
+import {access, mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
-const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const schemaVersion = 1;
+const runtimePackages = [
+  ['@hyperframes/producer', '@hyperframes/producer', '0.8.39'],
+  ['@hyperframes/engine', '@hyperframes/engine', '0.8.39'],
+  ['@hyperframes/player', '@hyperframes/player', '0.8.39'],
+  ['@hyperframes/player/node_modules/@hyperframes/core', '@hyperframes/core', '0.8.39'],
+  ['@hyperframes/core', '@hyperframes/core', '0.8.40'],
+];
 
 function fail(code, message) {
   const error = new Error(message);
@@ -27,21 +33,6 @@ function requestHash(request) {
   return hash(JSON.stringify(request.snapshot));
 }
 
-function activeAt(range, time) {
-  const start = seconds(range.start);
-  const end = start + seconds(range.duration);
-  return time >= start && time < end;
-}
-
-function sourceTime(occurrence, compositionTime) {
-  const source = normalizedSource(occurrence.source);
-  if (source.type !== 'video') return null;
-  const output = occurrence.outputRange;
-  const outputDuration = seconds(output.duration);
-  if (outputDuration <= 0) fail('INVALID_RANGE', 'Occurrence output duration must be positive');
-  return seconds(source.start) + (compositionTime - seconds(output.start)) * seconds(source.duration) / outputDuration;
-}
-
 function normalizedSource(source) {
   if (source?.type === 'still') return source;
   if (source?.type === 'video' && source.range) return source;
@@ -52,19 +43,6 @@ function normalizedSource(source) {
     if (range?.start && range?.duration) return {type: 'video', range};
   }
   fail('INVALID_SOURCE', 'Worker request has an unsupported source encoding');
-}
-
-function styleFor(rect, layer, order) {
-  return {
-    display: 'none',
-    height: `${seconds(rect.height) * 100}%`,
-    left: `${seconds(rect.x) * 100}%`,
-    objectFit: 'cover',
-    position: 'absolute',
-    top: `${seconds(rect.y) * 100}%`,
-    width: `${seconds(rect.width) * 100}%`,
-    zIndex: String(layer * 1000 + order),
-  };
 }
 
 function sortedOccurrences(composition) {
@@ -81,15 +59,25 @@ export function validateRequest(request) {
     fail('INVALID_REQUEST', 'Worker request is missing its required identity or stage fields');
   }
   const {snapshot} = request;
-  if (!snapshot.projectID || !snapshot.episodeID || !snapshot.compositionDigest || !snapshot.composition || !Array.isArray(snapshot.assets)) {
+  if (!snapshot.projectID || !snapshot.episodeID || !snapshot.compositionDigest || !snapshot.composition || !Array.isArray(snapshot.assets) || snapshot.format !== 'mp4') {
     fail('INVALID_SNAPSHOT', 'Worker request has an incomplete render snapshot');
   }
   if (!Array.isArray(request.resolvedObjects) || request.resolvedObjects.length === 0) fail('MISSING_OBJECTS', 'Worker request has no resolved objects');
   if (snapshot.composition.clipAudioPolicy !== 'muted') fail('UNSUPPORTED_AUDIO_POLICY', 'This worker supports only the declared silent montage policy');
+  const assets = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
   const objects = new Map(request.resolvedObjects.map((entry) => [entry.assetID, entry]));
+  if (assets.size !== snapshot.assets.length || objects.size !== request.resolvedObjects.length) {
+    fail('DUPLICATE_ASSET_BINDING', 'Worker request contains duplicate asset bindings');
+  }
+  for (const asset of snapshot.assets) {
+    const object = objects.get(asset.id);
+    if (!asset.id || !asset.digest || !Number.isInteger(asset.byteLength) || asset.byteLength < 0 || !object || object.digest !== asset.digest || object.byteLength !== asset.byteLength || !object.localPath) {
+      fail('OBJECT_BINDING_MISMATCH', 'Snapshot asset does not match its resolved object');
+    }
+  }
   for (const occurrence of snapshot.composition.occurrences) {
     const object = objects.get(occurrence.assetID);
-    if (!object || object.digest !== occurrence.assetDigest || !object.localPath) fail('OBJECT_BINDING_MISMATCH', 'Occurrence does not match a resolved object');
+    if (!assets.has(occurrence.assetID) || !object || object.digest !== occurrence.assetDigest || !object.localPath) fail('OBJECT_BINDING_MISMATCH', 'Occurrence does not match a resolved object');
     if (!occurrence.outputRect) fail('MISSING_OUTPUT_RECT', 'Occurrence has no normalized output rectangle');
     seconds(occurrence.outputRange.start); seconds(occurrence.outputRange.duration);
     for (const key of ['x', 'y', 'width', 'height']) seconds(occurrence.outputRect[key]);
@@ -146,31 +134,84 @@ async function atomicJson(path, value) {
   await rename(temporary, path);
 }
 
-async function runtimeVersions(runtime) {
-  const packages = ['@hyperframes/producer', '@hyperframes/engine'];
-  return Object.fromEntries(await Promise.all(packages.map(async (name) => {
-    const metadata = JSON.parse(await readFile(join(runtime, 'node_modules', name, 'package.json'), 'utf8'));
-    return [name, metadata.version];
-  })));
+async function requireExecutable(path, label) {
+  if (typeof path !== 'string' || !path.startsWith('/')) fail('INVALID_RUNTIME', `${label} must be an absolute executable path`);
+  try {
+    await access(path, 1);
+  } catch {
+    fail('RUNTIME_EXECUTABLE_UNAVAILABLE', `${label} is not executable`);
+  }
+  return resolve(path);
+}
+
+export async function validateRuntime(runtime) {
+  if (!runtime || typeof runtime.runtimeRoot !== 'string' || !runtime.runtimeRoot.startsWith('/')) fail('INVALID_RUNTIME', 'Runtime root must be an absolute path');
+  if (runtime.nodeVersion !== process.version) fail('NODE_VERSION_MISMATCH', 'Worker Node version does not match its selected runtime profile');
+  const root = resolve(runtime.runtimeRoot);
+  const packages = [];
+  for (const [path, name, version] of runtimePackages) {
+    let metadata;
+    try {
+      metadata = JSON.parse(await readFile(join(root, 'node_modules', path, 'package.json'), 'utf8'));
+    } catch {
+      fail('RUNTIME_PACKAGE_UNAVAILABLE', `${name} package metadata is unavailable`);
+    }
+    if (metadata.name !== name || metadata.version !== version) fail('RUNTIME_PACKAGE_MISMATCH', `${name} package identity does not match the pinned runtime`);
+    packages.push({path, name, version});
+  }
+  return {
+    browserExecutable: await requireExecutable(runtime.browserExecutable, 'Browser'),
+    ffmpegExecutable: await requireExecutable(runtime.ffmpegExecutable, 'FFmpeg'),
+    ffprobeExecutable: await requireExecutable(runtime.ffprobeExecutable, 'FFprobe'),
+    nodeVersion: process.version,
+    packages,
+    runtimeRoot: root,
+  };
+}
+
+function receiptInput(request) {
+  return {
+    compositionDigest: request.snapshot.compositionDigest,
+    snapshotSHA256: requestHash(request),
+    assets: request.snapshot.assets.map(({id, digest}) => ({id, digest})),
+  };
+}
+
+async function writeFailureReceipt(request, receiptPath, progress, error, signal) {
+  const receipt = {
+    schemaVersion,
+    jobID: request.jobID,
+    attemptID: request.attemptID,
+    outcome: signal?.aborted ? 'cancelled' : 'failed',
+    input: request.snapshot ? receiptInput(request) : undefined,
+    progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress},
+    error: {code: error?.code ?? 'RENDER_FAILED', phase: 'worker'},
+  };
+  await atomicJson(receiptPath, receipt);
 }
 
 export async function runAttempt(request, {signal} = {}) {
-  const {project} = await writeProject(request);
-  const output = join(request.stageDirectory, request.outputFileName);
-  const runtime = resolve(request.runtime.runtimeRoot);
-  const producer = await import(pathToFileURL(join(runtime, 'node_modules/@hyperframes/producer/dist/index.js')).href);
   const progress = [];
-  const job = producer.createRenderJob({entryFile: 'index.html', format: 'mp4', fps: {num: request.snapshot.composition.output.frameRate.value, den: request.snapshot.composition.output.frameRate.timescale}, quality: 'standard', workers: 1});
   const receiptPath = join(request.stageDirectory, 'attempt-receipt.json');
   try {
+    validateRequest(request);
+    if (signal?.aborted) fail('CANCELLED_BEFORE_START', 'Worker attempt was cancelled before it started');
+    const runtime = await validateRuntime(request.runtime);
+    const {project} = await writeProject(request);
+    const output = join(request.stageDirectory, request.outputFileName);
+    // HyperFrames reads these documented executable overrides while its modules initialize.
+    process.env.HYPERFRAMES_FFMPEG_PATH = runtime.ffmpegExecutable;
+    process.env.HYPERFRAMES_FFPROBE_PATH = runtime.ffprobeExecutable;
+    const producer = await import(pathToFileURL(join(runtime.runtimeRoot, 'node_modules/@hyperframes/producer/dist/index.js')).href);
+    const producerConfig = {...producer.DEFAULT_CONFIG, browserGpuMode: 'software', chromePath: runtime.browserExecutable, enableBrowserPool: false};
+    const job = producer.createRenderJob({entryFile: 'index.html', format: request.snapshot.format, fps: {num: request.snapshot.composition.output.frameRate.value, den: request.snapshot.composition.output.frameRate.timescale}, producerConfig, quality: 'standard', strictness: 'strict', workers: 1});
     await producer.executeRenderJob(job, project, output, (_job, message) => progress.push({message: String(message).slice(0, 240)}), signal);
     const outputStat = await stat(output);
-    const receipt = {schemaVersion, jobID: request.jobID, attemptID: request.attemptID, outcome: 'succeeded', input: {compositionDigest: request.snapshot.compositionDigest, snapshotSHA256: requestHash(request), assets: request.snapshot.assets.map(({id, digest}) => ({id, digest}))}, runtime: {nodeVersion: process.version, packages: await runtimeVersions(runtime)}, progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress}, artifact: {fileName: basename(output), byteLength: outputStat.size, sha256: hash(await readFile(output))}};
+    const receipt = {schemaVersion, jobID: request.jobID, attemptID: request.attemptID, outcome: 'succeeded', input: receiptInput(request), runtime, progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress}, artifact: {fileName: basename(output), byteLength: outputStat.size, sha256: hash(await readFile(output))}};
     await atomicJson(receiptPath, receipt);
     return receipt;
   } catch (error) {
-    const receipt = {schemaVersion, jobID: request.jobID, attemptID: request.attemptID, outcome: signal?.aborted ? 'cancelled' : 'failed', input: {compositionDigest: request.snapshot.compositionDigest, snapshotSHA256: requestHash(request)}, progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress}, error: {code: error?.code ?? 'RENDER_FAILED', phase: 'producer'}};
-    await atomicJson(receiptPath, receipt);
+    await writeFailureReceipt(request, receiptPath, progress, error, signal);
     throw error;
   }
 }
