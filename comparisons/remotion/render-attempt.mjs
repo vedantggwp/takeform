@@ -6,6 +6,13 @@ import {createAttempt, frameState, reserveStorage} from '../common/index.mjs';
 const rendererModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/renderer/dist/esm/index.mjs')).href;
 const bundlerModule = runtime => pathToFileURL(join(runtime, 'node_modules/@remotion/bundler/dist/index.js')).href;
 
+export const compositionProps = ({snapshot, fixtureId, origin}) => Object.freeze({
+  snapshot,
+  fixtureId,
+  origin,
+  sourceKinds: Object.fromEntries(snapshot.sources.filter(source => source.fixtureId === fixtureId && source.status === 'selected').map(source => [source.sourceId, ['still', 'livePhotoStill'].includes(snapshot._manifests[fixtureId].manifest.sources.find(item => item.id === source.sourceId)?.kind) ? 'image' : 'media'])),
+});
+
 export function prepareAttempt({attemptId, attemptRoot, snapshot, fixtureId, runtime, expectedOutputBytes, decodeCacheBytes, pipelineBufferBytes, runtimeFreeFloorBytes, freeBytes}) {
   if (!isAbsolute(runtime)) throw new Error('runtime must be a caller-supplied absolute path');
   const manifest = snapshot._manifests?.[fixtureId]?.manifest;
@@ -32,20 +39,58 @@ export async function bundleAttempt({prepared, runtime, entryPoint}) {
   return bundler.bundle({entryPoint, outDir: prepared.attempt.scratchPaths[0], webpackOverride: config => ({...config, resolve: {...config.resolve, modules: [...(config.resolve?.modules ?? ['node_modules']), join(runtime, 'node_modules')]}})});
 }
 
-export async function bundleAndRender({prepared, runtime, entryPoint, props, browserExecutable}) {
+const expectedComposition = prepared => ({id: `takeform-${prepared.fixtureId}`, width: prepared.dimensions.width, height: prepared.dimensions.height, fps: prepared.rate, durationInFrames: prepared.frameCount});
+
+const assertCanonicalComposition = (prepared, composition) => {
+  const expected = expectedComposition(prepared);
+  for (const [key, value] of Object.entries(expected)) if (composition?.[key] !== value) throw new Error(`public composition metadata mismatch for ${key}`);
+  return composition;
+};
+
+export async function discoverComposition({prepared, runtime, entryPoint, props, browserExecutable}) {
   if (!isAbsolute(browserExecutable)) throw new Error('browser executable must be an absolute path');
   const serveUrl = await bundleAttempt({prepared, runtime, entryPoint});
+  const renderer = await import(rendererModule(runtime));
+  const expected = expectedComposition(prepared);
+  const options = {serveUrl, inputProps: props, browserExecutable, chromeMode: 'chrome-for-testing'};
+  const compositions = await renderer.getCompositions(options);
+  if (!compositions.some(composition => composition.id === expected.id)) throw new Error(`public composition ${expected.id} is not registered`);
+  const composition = assertCanonicalComposition(prepared, await renderer.selectComposition({...options, id: expected.id}));
+  return Object.freeze({serveUrl, composition});
+}
+
+export async function bundleAndRender({prepared, runtime, entryPoint, props, browserExecutable}) {
+  const {serveUrl, composition} = await discoverComposition({prepared, runtime, entryPoint, props, browserExecutable});
   const renderer = await import(rendererModule(runtime));
   await renderer.renderMedia({
     serveUrl,
     codec: 'h264',
-    composition: {id: `takeform-${prepared.fixtureId}`, width: prepared.dimensions.width, height: prepared.dimensions.height, fps: prepared.rate, durationInFrames: prepared.frameCount},
+    composition,
     inputProps: props,
     outputLocation: prepared.attempt.outputPath,
     browserExecutable,
     chromeMode: 'chrome-for-testing',
     concurrency: 1,
   });
+}
+
+export async function captureDiagnosticStill({prepared, runtime, entryPoint, props, browserExecutable, frame, outputLocation}) {
+  if (!Number.isSafeInteger(frame) || frame < 0 || frame >= prepared.frameCount) throw new Error('diagnostic frame is outside the selected composition');
+  if (!isAbsolute(outputLocation) || resolve(outputLocation) !== resolve(join(prepared.attempt.attemptRoot, 'diagnostic.png'))) throw new Error('diagnostic output must use this attempt\'s owned diagnostic.png path');
+  const {serveUrl, composition} = await discoverComposition({prepared, runtime, entryPoint, props, browserExecutable});
+  const renderer = await import(rendererModule(runtime));
+  await renderer.renderStill({
+    serveUrl,
+    composition,
+    inputProps: props,
+    frame,
+    output: outputLocation,
+    imageFormat: 'png',
+    browserExecutable,
+    chromeMode: 'chrome-for-testing',
+    concurrency: 1,
+  });
+  return outputLocation;
 }
 
 export const stateAtFrame = ({snapshot, fixtureId, frame}) => frameState(snapshot, fixtureId, frame);

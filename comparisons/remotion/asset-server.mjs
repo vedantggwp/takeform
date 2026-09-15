@@ -26,10 +26,34 @@ const parseRange = (header, size) => {
   return {start, end};
 };
 
-async function grantsFor({fixtureRoot, snapshot, fixtureId}) {
+async function ownedFiles(rootPath, entries) {
+  const root = await realpathAsync(rootPath);
+  const files = new Map();
+  for (const entry of entries) {
+    if (!entry || typeof entry.sourceId !== 'string' || typeof entry.path !== 'string' || files.has(entry.sourceId)) throw new Error('prepared sources must have unique source IDs and relative paths');
+    const lexical = resolve(root, entry.path);
+    if (!isInside(root, lexical)) throw new Error(`prepared path escaped derivative root for ${entry.sourceId}`);
+    const details = await lstatAsync(lexical);
+    if (details.isSymbolicLink() || !details.isFile()) throw new Error(`prepared source is unavailable for ${entry.sourceId}`);
+    const physical = await realpathAsync(lexical);
+    if (!isInside(root, physical)) throw new Error(`prepared path escaped derivative root for ${entry.sourceId}`);
+    files.set(entry.sourceId, physical);
+  }
+  return files;
+}
+
+async function grantsFor({fixtureRoot, snapshot, fixtureId, derivativeRoot, derivativeSources = []}) {
   const root = await realpathAsync(fixtureRoot);
+  if (!Array.isArray(derivativeSources) || (derivativeSources.length > 0 && !derivativeRoot)) throw new Error('prepared sources require an explicit derivative root');
+  const prepared = derivativeSources.length > 0 ? await ownedFiles(derivativeRoot, derivativeSources) : new Map();
+  const selected = new Set(snapshot.sources.filter(item => item.fixtureId === fixtureId && item.status === 'selected').map(item => item.sourceId));
+  for (const sourceId of prepared.keys()) if (!selected.has(sourceId)) throw new Error(`prepared source is not selected for ${fixtureId}: ${sourceId}`);
   const grants = new Map();
   for (const source of snapshot.sources.filter(item => item.fixtureId === fixtureId && item.status === 'selected')) {
+    if (prepared.has(source.sourceId)) {
+      grants.set(source.sourceId, prepared.get(source.sourceId));
+      continue;
+    }
     const lexical = resolve(root, source.path);
     if (!isInside(root, lexical)) throw new Error(`source path escaped fixture root for ${source.sourceId}`);
     const details = await lstatAsync(lexical);
@@ -42,8 +66,8 @@ async function grantsFor({fixtureRoot, snapshot, fixtureId}) {
   return grants;
 }
 
-export async function startAssetServer({fixtureRoot, snapshot, fixtureId}) {
-  const grants = await grantsFor({fixtureRoot, snapshot, fixtureId});
+export async function startAssetServer({fixtureRoot, snapshot, fixtureId, derivativeRoot, derivativeSources}) {
+  const grants = await grantsFor({fixtureRoot, snapshot, fixtureId, derivativeRoot, derivativeSources});
   const server = createServer(async (request, response) => {
     if (!request.url || !['GET', 'HEAD'].includes(request.method)) {
       response.writeHead(405, {'Allow': 'GET, HEAD'});

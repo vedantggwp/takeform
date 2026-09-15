@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, symlink, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, rm, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -37,4 +37,21 @@ test('rejects traversal, unknown source, unsupported method, and symlink grant',
   await server.close();
   await symlink(join(root, 'M', 'media', 'harbor.png'), join(root, 'M', 'media', 'linked.png'));
   await assert.rejects(startAssetServer({fixtureRoot: root, snapshot: {sources: [{fixtureId: 'M', sourceId: 'linked', status: 'selected', path: 'M/media/linked.png'}]}, fixtureId: 'M'}), /unavailable/);
+});
+
+test('serves a caller-validated prepared derivative by its authoritative source ID', async t => {
+  const root = await fixture();
+  const derivatives = await mkdtemp(join(tmpdir(), 'takeform-remotion-derivatives-'));
+  await writeFile(join(derivatives, 'station.png'), 'prepared bytes');
+  t.after(() => rm(derivatives, {recursive: true, force: true}));
+  const server = await startAssetServer({
+    fixtureRoot: root,
+    snapshot: {sources: [{fixtureId: 'M', sourceId: 'harbor', status: 'selected', path: 'M/media/harbor.png'}, {fixtureId: 'M', sourceId: 'station', status: 'selected', path: 'M/media/harbor.png'}]},
+    fixtureId: 'M',
+    derivativeRoot: derivatives,
+    derivativeSources: [{sourceId: 'station', path: 'station.png', sha256: 'validated-by-media-prep'}],
+  });
+  t.after(() => server.close());
+  assert.equal(await (await fetch(server.assetURL('station'))).text(), 'prepared bytes');
+  await assert.rejects(startAssetServer({fixtureRoot: root, snapshot: {sources: [{fixtureId: 'M', sourceId: 'harbor', status: 'selected', path: 'M/media/harbor.png'}]}, fixtureId: 'M', derivativeRoot: derivatives, derivativeSources: [{sourceId: 'unselected', path: 'station.png'}]}), /not selected/);
 });
