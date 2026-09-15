@@ -1,5 +1,6 @@
 import CoreGraphics
 import CryptoKit
+import Darwin
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -169,6 +170,102 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertThrowsError(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: root.appendingPathComponent("other-export.mp4"), decision: .refuseExisting, credential: credential), "one export operation ID must not be reused for another destination")
     }
 
+    func testServiceOwnedWorkerCompletesAndExportsWithoutClobbering() throws {
+        let package = root.appendingPathComponent("Worker.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        guard case let .applied(channel) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Harbor", initialRecipe: [:])), credential: credential).outcome,
+              case let .applied(episodes) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: channel.revision, command: .createEpisode(name: "Recap", recipeVersion: 1)), credential: credential).outcome,
+              let episode = episodes.episodes.first else { return XCTFail("worker project setup failed") }
+        let source = root.appendingPathComponent("still.png")
+        try png().write(to: source)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: credential).first else { return XCTFail("worker asset setup failed") }
+        let composition = try makeComposition(episodeID: episode.id, asset: asset)
+        let imported = try authority.open().document
+        guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: imported.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: composition)), credential: credential).outcome else { return XCTFail("worker composition setup failed") }
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let request = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4))
+        let runtime = try fakeRenderRuntime()
+        let coordinator = RenderExecutionCoordinator.shared
+        coordinator.installTestRuntime { _ in runtime }
+        defer { coordinator.clearTestRuntime() }
+        guard case let .result(renderResult) = CreatorAuthorityService.respond(to: .requestRender(package, request, Data(credential.utf8)), from: .app),
+              case let .renderRequested(status) = renderResult.outcome else { return XCTFail("app worker request route failed") }
+        var completedInput: RenderAttemptInput?
+        for _ in 0..<100 {
+            let candidate = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+            if candidate.status.logicalState == .completed, coordinator.availability(for: candidate) == .available { completedInput = candidate; break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        let finalInput = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+        let finalState = finalInput.status.logicalState
+        let failureCode = coordinator.failureCode(for: finalInput) ?? "none"
+        _ = try XCTUnwrap(completedInput, "worker did not publish a verified artifact; final state \(finalState), completion \(failureCode)")
+        let pairedToken = "paired-render-worker"
+        let paired = try authority.issuePairedCLIGrant(credential: credential, label: "worker", scopes: [.editProject], expiresAt: .distantFuture, rawToken: pairedToken)
+        guard case let .renderMaterialization(.descriptor(descriptor)) = CreatorAuthorityService.respond(to: .pairedMaterializeRender(package, status.jobID, CommandID(), paired.id, pairedToken), from: .cli) else { return XCTFail("paired materialization route did not expose the verified descriptor") }
+        XCTAssertEqual(descriptor.jobID, status.jobID)
+        let destination = root.appendingPathComponent("export.mp4")
+        guard case let .renderExport(.exported(exported)) = CreatorAuthorityService.respond(to: .pairedExportRender(package, status.jobID, CommandID(), destination, .refuseExisting, paired.id, pairedToken), from: .cli) else { return XCTFail("paired export route did not publish the verified artifact") }
+        XCTAssertEqual(exported, descriptor)
+        XCTAssertEqual(try Data(contentsOf: destination), Data("render".utf8))
+        guard case .failure(.rejected) = CreatorAuthorityService.respond(to: .pairedExportRender(package, status.jobID, CommandID(), destination, .refuseExisting, paired.id, pairedToken), from: .cli) else { return XCTFail("no-clobber collision must reject rather than replace the destination") }
+        XCTAssertEqual(try Data(contentsOf: destination), Data("render".utf8))
+        let movedPackage = root.appendingPathComponent("MovedWorker.takeform")
+        try FileManager.default.moveItem(at: package, to: movedPackage)
+        let movedAuthority = try ProjectAuthority(packageURL: movedPackage)
+        _ = try movedAuthority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
+        let movedInput = try movedAuthority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+        XCTAssertEqual(coordinator.materialization(for: movedInput), .unavailable(movedInput.status), "machine-local artifact availability must not survive an explicit package rebind")
+    }
+
+    func testCancelledWorkerIsReapedAndCannotPublishItsLateReceipt() throws {
+        let package = root.appendingPathComponent("CancelledWorker.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        guard case let .applied(channel) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Harbor", initialRecipe: [:])), credential: credential).outcome,
+              case let .applied(episodes) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: channel.revision, command: .createEpisode(name: "Recap", recipeVersion: 1)), credential: credential).outcome,
+              let episode = episodes.episodes.first else { return XCTFail("worker project setup failed") }
+        let source = root.appendingPathComponent("still.png")
+        try png().write(to: source)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: credential).first else { return XCTFail("worker asset setup failed") }
+        let composition = try makeComposition(episodeID: episode.id, asset: asset)
+        let imported = try authority.open().document
+        guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: imported.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: composition)), credential: credential).outcome else { return XCTFail("worker composition setup failed") }
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let request = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4))
+        guard case let .renderRequested(status) = try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential).outcome else { return XCTFail("worker request setup failed") }
+        let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+        let slowWorker = "#!/bin/sh\ntrap '' TERM\nstage=\"$TAKEFORM_RENDER_STAGE\"\njob=\"$TAKEFORM_RENDER_JOB\"\nattempt=\"$TAKEFORM_RENDER_ATTEMPT\"\nhash=\"$TAKEFORM_RENDER_SNAPSHOT_SHA256\"\n/bin/sleep 0.25\nprintf render > \"$stage/render.mp4\"\nsha=$(/usr/bin/shasum -a 256 \"$stage/render.mp4\" | /usr/bin/awk '{print $1}')\nprintf '{\\\"schemaVersion\\\":1,\\\"jobID\\\":\\\"%s\\\",\\\"attemptID\\\":\\\"%s\\\",\\\"outcome\\\":\\\"succeeded\\\",\\\"input\\\":{\\\"compositionDigest\\\":\\\"ignored\\\",\\\"snapshotSHA256\\\":\\\"%s\\\",\\\"assets\\\":[]},\\\"artifact\\\":{\\\"fileName\\\":\\\"render.mp4\\\",\\\"byteLength\\\":6,\\\"sha256\\\":\\\"%s\\\"}}' \"$job\" \"$attempt\" \"$hash\" \"$sha\" > \"$stage/attempt-receipt.json\"\n"
+        let runtime = try fakeRenderRuntime(workerScript: slowWorker)
+        let coordinator = RenderExecutionCoordinator { projectID in projectID == input.snapshot.projectID ? runtime : nil }
+        XCTAssertEqual(coordinator.start(authority: authority, input: input), .running)
+        let cancelled = try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: CommandID(), credential: credential)
+        XCTAssertEqual(cancelled.logicalState, .cancelled)
+        coordinator.cancel(projectID: input.snapshot.projectID, jobID: status.jobID)
+
+        var reaped: pid_t?
+        for _ in 0..<100 {
+            let candidate = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+            reaped = coordinator.lastReapedPID(for: candidate)
+            if reaped != nil { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        let final = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
+        XCTAssertEqual(final.status.logicalState, .cancelled)
+        let pid = try XCTUnwrap(reaped, "the owned child was not reaped")
+        XCTAssertEqual(Darwin.kill(pid, 0), -1)
+        XCTAssertEqual(errno, ESRCH)
+        XCTAssertEqual(coordinator.materialization(for: final), .unavailable(final.status))
+        let machineJob = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Takeform/Authority/\(input.snapshot.projectID.uuidString)/renders/\(status.jobID.uuidString)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: machineJob.appendingPathComponent("current.json").path), "a late receipt must not publish a cancelled job")
+        let late = try authority.transitionRenderRequest(jobID: status.jobID, snapshotSHA256: SHA256.hash(data: input.snapshotJSON).map { String(format: "%02x", $0) }.joined(), to: .completed)
+        XCTAssertEqual(late.logicalState, .cancelled, "a retained worker receipt cannot revive a cancelled request")
+    }
+
     func testLegacyOccurrenceDefaultsToFullCanvasOutputRect() throws {
         let occurrence = CompositionOccurrence(assetID: UUID(), assetDigest: String(repeating: "a", count: 64), source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop())
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(occurrence)) as? [String: Any])
@@ -216,5 +313,23 @@ final class EpisodeCompositionTests: XCTestCase {
         CGImageDestinationAddImage(destination, context.makeImage()!, nil)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return data as Data
+    }
+
+    private func fakeRenderRuntime(workerScript: String? = nil) throws -> RenderWorkerRuntime {
+        let runtime = root.appendingPathComponent("fake-runtime")
+        try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
+        let node = runtime.appendingPathComponent("node")
+        let worker = runtime.appendingPathComponent("worker")
+        let browser = runtime.appendingPathComponent("browser")
+        let ffmpeg = runtime.appendingPathComponent("ffmpeg")
+        let ffprobe = runtime.appendingPathComponent("ffprobe")
+        try "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo v22.22.1; exit 0; fi\nworker=\"$1\"; shift; exec \"$worker\" \"$@\"\n".write(to: node, atomically: true, encoding: .utf8)
+        let defaultWorker = "#!/bin/sh\nstage=\"$TAKEFORM_RENDER_STAGE\"\njob=\"$TAKEFORM_RENDER_JOB\"\nattempt=\"$TAKEFORM_RENDER_ATTEMPT\"\nhash=\"$TAKEFORM_RENDER_SNAPSHOT_SHA256\"\nprintf render > \"$stage/render.mp4\"\nsha=$(/usr/bin/shasum -a 256 \"$stage/render.mp4\" | /usr/bin/awk '{print $1}')\nprintf '{\\\"schemaVersion\\\":1,\\\"jobID\\\":\\\"%s\\\",\\\"attemptID\\\":\\\"%s\\\",\\\"outcome\\\":\\\"succeeded\\\",\\\"input\\\":{\\\"compositionDigest\\\":\\\"ignored\\\",\\\"snapshotSHA256\\\":\\\"%s\\\",\\\"assets\\\":[]},\\\"artifact\\\":{\\\"fileName\\\":\\\"render.mp4\\\",\\\"byteLength\\\":6,\\\"sha256\\\":\\\"%s\\\"}}' \"$job\" \"$attempt\" \"$hash\" \"$sha\" > \"$stage/attempt-receipt.json\"\n"
+        try (workerScript ?? defaultWorker).write(to: worker, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho FakeTool 1.0\n".write(to: browser, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho FakeTool 1.0\n".write(to: ffmpeg, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\"}]}\\n'; fi\n".write(to: ffprobe, atomically: true, encoding: .utf8)
+        for url in [node, worker, browser, ffmpeg, ffprobe] { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path) }
+        return RenderWorkerRuntime(node: node, worker: worker, runtimeRoot: runtime, browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe)
     }
 }

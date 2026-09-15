@@ -59,6 +59,18 @@ private struct RenderOperationFingerprint: Codable {
     let exportDecision: EpisodeRenderExportDecision?
 }
 
+/// This is internal service input, not a portable public descriptor. The JSON
+/// bytes are exactly those stored in project.sqlite and are hashed verbatim in
+/// the worker request/receipt handshake.
+struct RenderAttemptInput: Sendable {
+    let status: EpisodeRenderRequestStatus
+    let snapshot: EpisodeRenderSnapshot
+    let snapshotJSON: Data
+    /// Digest of the current machine binding, retained only by the service to
+    /// prevent a machine-local artifact being reused after rebind or move.
+    let machineBindingDigest: String
+}
+
 public final class ProjectAuthority {
     private let packageURL: URL
     private let initialProjectID: UUID?
@@ -66,6 +78,10 @@ public final class ProjectAuthority {
     private var database: SQLiteDatabase!
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+
+    /// Internal to the app-service core. The worker coordinator resolves only
+    /// assets that this authority has already revalidated for its package.
+    var packageURLForRender: URL { packageURL }
 
     public convenience init(packageURL: URL) throws {
         try self.init(packageURL: packageURL, initialProjectID: nil, afterInitialBind: nil)
@@ -364,14 +380,41 @@ public final class ProjectAuthority {
         return next
     }
 
-    private func renderStatus(jobID: UUID) throws -> EpisodeRenderRequestStatus {
-        guard let row = try database.row("SELECT episode_id, expected_revision, composition_digest, format, logical_state FROM render_requests WHERE job_id = ?", bindings: [jobID.uuidString]),
-              row.count == 5,
+    /// Internal app-service input for the machine worker. It stays outside the
+    /// portable public authority API and carries no local worker descriptor.
+    func renderAttemptInput(jobID: UUID) throws -> RenderAttemptInput {
+        guard let row = try database.row("SELECT episode_id, expected_revision, composition_digest, format, logical_state, snapshot FROM render_requests WHERE job_id = ?", bindings: [jobID.uuidString]),
+              row.count == 6,
               let episodeID = UUID(uuidString: row[0]),
               let revision = Int64(row[1]),
               let format = EpisodeRenderFormat(rawValue: row[3]),
               let logicalState = EpisodeRenderLogicalState(rawValue: row[4]) else { throw AuthorityFailure.missingRenderRequest }
-        return EpisodeRenderRequestStatus(jobID: jobID, episodeID: episodeID, requestedRevision: Revision(revision), compositionDigest: row[2], format: format, logicalState: logicalState, progress: .indeterminate, availability: .unavailable)
+        let snapshotJSON = Data(row[5].utf8)
+        let snapshot = try decode(EpisodeRenderSnapshot.self, row[5])
+        guard snapshot.episodeID == episodeID,
+              snapshot.requestedRevision == Revision(revision),
+              snapshot.compositionDigest == row[2],
+              snapshot.format == format else { throw AuthorityFailure.corruptDatabase }
+        let machine = try loadMachineState(for: snapshot.projectID)
+        guard let binding = machine.binding, binding.canonicalPath == packageURL.path else { throw AuthorityFailure.copyDecisionRequired }
+        let status = EpisodeRenderRequestStatus(jobID: jobID, episodeID: episodeID, requestedRevision: Revision(revision), compositionDigest: row[2], format: format, logicalState: logicalState, progress: .indeterminate, availability: .unavailable)
+        return RenderAttemptInput(status: status, snapshot: snapshot, snapshotJSON: snapshotJSON, machineBindingDigest: digest(of: try encoder.encode(binding)))
+    }
+
+    private func renderStatus(jobID: UUID) throws -> EpisodeRenderRequestStatus {
+        try renderAttemptInput(jobID: jobID).status
+    }
+
+    /// Called only by the app-service-owned worker coordinator. A late receipt
+    /// cannot change a cancelled or superseded logical request.
+    func transitionRenderRequest(jobID: UUID, snapshotSHA256: String, to state: EpisodeRenderLogicalState) throws -> EpisodeRenderRequestStatus {
+        try database.transaction {
+            let input = try renderAttemptInput(jobID: jobID)
+            guard digest(of: input.snapshotJSON) == snapshotSHA256 else { throw AuthorityFailure.unauthorized }
+            guard input.status.logicalState == .requested else { return input.status }
+            try database.execute("UPDATE render_requests SET logical_state = ? WHERE job_id = ?", bindings: [state.rawValue, jobID.uuidString])
+            return EpisodeRenderRequestStatus(jobID: input.status.jobID, episodeID: input.status.episodeID, requestedRevision: input.status.requestedRevision, compositionDigest: input.status.compositionDigest, format: input.status.format, logicalState: state, progress: .indeterminate, availability: .unavailable)
+        }
     }
 
     private func cancelRender(jobID: UUID, operationID: CommandID) throws -> EpisodeRenderRequestStatus {
@@ -401,6 +444,39 @@ public final class ProjectAuthority {
             let status = try renderStatus(jobID: jobID)
             try database.execute("INSERT INTO render_operation_results(id, fingerprint, result) VALUES (?, ?, ?)", bindings: [operationID.value.uuidString, fingerprint, try encode(status)])
             return status
+        }
+    }
+
+    /// Materialization and export persist their own typed operation result so
+    /// an idempotent retry never changes from an unavailable response into a
+    /// descriptor merely because a later worker attempt finished.
+    func recordRenderMaterialization(jobID: UUID, operationID: CommandID, result: EpisodeRenderMaterialization) throws -> EpisodeRenderMaterialization {
+        try recordTypedRenderOperation(table: "render_materialization_results", jobID: jobID, operationID: operationID, fingerprint: try encode(RenderOperationFingerprint(kind: "materialize", jobID: jobID, destinationDigest: nil, exportDecision: nil)), result: result)
+    }
+
+    func recordRenderExport(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision, result: EpisodeRenderExportResult) throws -> EpisodeRenderExportResult {
+        let destinationDigest = digest(of: Data(destination.standardizedFileURL.path.utf8))
+        let fingerprint = try encode(RenderOperationFingerprint(kind: "export", jobID: jobID, destinationDigest: destinationDigest, exportDecision: decision))
+        return try recordTypedRenderOperation(table: "render_export_results", jobID: jobID, operationID: operationID, fingerprint: fingerprint, result: result)
+    }
+
+    func existingRenderExport(jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision) throws -> EpisodeRenderExportResult? {
+        let destinationDigest = digest(of: Data(destination.standardizedFileURL.path.utf8))
+        let fingerprint = try encode(RenderOperationFingerprint(kind: "export", jobID: jobID, destinationDigest: destinationDigest, exportDecision: decision))
+        guard let stored = try database.value("SELECT result FROM render_export_results WHERE id = ?", bindings: [operationID.value.uuidString]) else { return nil }
+        guard let previousFingerprint = try database.value("SELECT fingerprint FROM render_export_results WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+        return try decode(EpisodeRenderExportResult.self, stored)
+    }
+
+    private func recordTypedRenderOperation<Result: Codable>(table: String, jobID: UUID, operationID: CommandID, fingerprint: String, result: Result) throws -> Result {
+        try database.transaction {
+            if let stored = try database.value("SELECT result FROM \(table) WHERE id = ?", bindings: [operationID.value.uuidString]) {
+                guard let previousFingerprint = try database.value("SELECT fingerprint FROM \(table) WHERE id = ?", bindings: [operationID.value.uuidString]), previousFingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+                return try decode(Result.self, stored)
+            }
+            _ = try renderStatus(jobID: jobID)
+            try database.execute("INSERT INTO \(table)(id, fingerprint, result) VALUES (?, ?, ?)", bindings: [operationID.value.uuidString, fingerprint, try encode(result)])
+            return result
         }
     }
 
@@ -446,6 +522,8 @@ public final class ProjectAuthority {
             try opened.execute("CREATE TABLE IF NOT EXISTS history (revision INTEGER PRIMARY KEY, before_state TEXT NOT NULL, after_state TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)")
             try opened.execute("CREATE TABLE IF NOT EXISTS render_requests (job_id TEXT PRIMARY KEY, command_id TEXT UNIQUE NOT NULL, episode_id TEXT NOT NULL, expected_revision INTEGER NOT NULL, composition_digest TEXT NOT NULL, format TEXT NOT NULL, snapshot TEXT NOT NULL, logical_state TEXT NOT NULL)")
             try opened.execute("CREATE TABLE IF NOT EXISTS render_operation_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_materialization_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS render_export_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
             database = opened
         } catch { throw AuthorityFailure.corruptDatabase }
     }
@@ -554,9 +632,19 @@ extension ProjectAuthority {
         return try renderStatus(jobID: jobID)
     }
 
+    func renderAttemptInputForAuthenticatedCreator(jobID: UUID, credential: String) throws -> RenderAttemptInput {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        return try renderAttemptInput(jobID: jobID)
+    }
+
     public func renderStatusForPairedCLI(jobID: UUID, grantID: UUID, token: String) throws -> EpisodeRenderRequestStatus {
         _ = try openForPairedImport(grantID: grantID, token: token)
         return try renderStatus(jobID: jobID)
+    }
+
+    func renderAttemptInputForPairedCLI(jobID: UUID, grantID: UUID, token: String) throws -> RenderAttemptInput {
+        _ = try openForPairedImport(grantID: grantID, token: token)
+        return try renderAttemptInput(jobID: jobID)
     }
 
     public func cancelEpisodeRenderForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> EpisodeRenderRequestStatus {

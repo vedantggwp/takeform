@@ -136,6 +136,13 @@ enum ManagedImport {
         }
     }
 
+    /// Returns the package-owned object only after the same containment and
+    /// byte checks used for catalog/reopen validation.
+    static func verifiedObjectURL(_ asset: ManagedAsset, package: URL) throws -> URL {
+        try verifyObject(asset, package: package)
+        return package.appendingPathComponent(".takeform/objects/\(asset.digest)")
+    }
+
     private static func sourceStat(_ url: URL) throws -> stat {
         try regularStat(url, failure: .invalidSource)
     }

@@ -10,6 +10,9 @@ public enum EpisodeRenderLogicalState: String, Codable, Equatable, Sendable {
     case cancelled
     case interrupted
     case failed
+    /// A worker attempt completed logically. Artifact availability is still a
+    /// machine-local observation that must be revalidated before use.
+    case completed
 }
 
 /// Worker progress is either reported by the producer or honestly unknown.
@@ -22,6 +25,8 @@ public enum EpisodeRenderProgress: Codable, Equatable, Sendable {
 /// project.sqlite and cannot survive a move or rebind by assertion alone.
 public enum EpisodeRenderAvailability: String, Codable, Equatable, Sendable {
     case queued
+    case running
+    case available
     case unavailable
 }
 
