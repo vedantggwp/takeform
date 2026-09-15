@@ -86,7 +86,7 @@ This is the documented `xcodebuild` transport for test-runner variables in the
 After a failed-lane run finds that the hosted screen cannot fit the unchanged
 1024-by-700 initial outer-window gate, the CI-only failed-lane retry may use
 public CoreGraphics display-mode APIs before it launches Takeform. The runner
-enumerates desktop-usable modes, records their IOKit IDs and point/pixel sizes,
+enumerates desktop-usable modes, records their IOKit IDs and mode/pixel sizes,
 then selects only a supported mode of at least 1280 by 900 points. It confirms
 the resulting `NSScreen.visibleFrame` is at least 1024 by 700 before launching
 the copied app. The original mode, selected mode, post-switch frame, and

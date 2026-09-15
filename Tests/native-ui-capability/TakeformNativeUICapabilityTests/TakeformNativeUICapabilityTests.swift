@@ -677,6 +677,7 @@ private final class DisplayModeLease {
                 chosenMode: \(modeDescription(chosenMode))
                 configuredScreenFrame: \(configuredScreen.frame)
                 configuredVisibleFrame: \(configuredScreen.visibleFrame)
+                configuredBackingScaleFactor: \(configuredScreen.backingScaleFactor)
                 availableModes:
                 \(allModeFacts)
                 """
@@ -715,6 +716,7 @@ private final class DisplayModeLease {
         restoredMode: \(Self.modeDescription(originalMode))
         restoredScreenFrame: \(restoredScreen.frame)
         restoredVisibleFrame: \(restoredScreen.visibleFrame)
+        restoredBackingScaleFactor: \(restoredScreen.backingScaleFactor)
         chosenModeWas: \(Self.modeDescription(chosenMode))
         originalScreenWas: \(originalScreen.frame) visible \(originalScreen.visibleFrame)
         enumeratedModesWere:
@@ -744,9 +746,11 @@ private final class DisplayModeLease {
     ) throws -> NSScreen {
         let deadline = Date().addingTimeInterval(3)
         repeat {
-            if let screen = NSScreen.screens.first(where: { (try? screenDisplayID(for: $0)) == displayID }),
-               screen.frame.size.width == CGFloat(mode.width),
-               screen.frame.size.height == CGFloat(mode.height),
+            if let currentMode = CGDisplayCopyDisplayMode(displayID),
+               currentMode.ioDisplayModeID == mode.ioDisplayModeID,
+               currentMode.pixelWidth == mode.pixelWidth,
+               currentMode.pixelHeight == mode.pixelHeight,
+               let screen = NSScreen.screens.first(where: { (try? screenDisplayID(for: $0)) == displayID }),
                screen.visibleFrame.width >= requiringVisibleSize.width,
                screen.visibleFrame.height >= requiringVisibleSize.height {
                 return screen
@@ -756,10 +760,11 @@ private final class DisplayModeLease {
 
         let observed = NSScreen.screens.map { screen in
             let observedDisplayID = (try? screenDisplayID(for: screen)).map { String($0) } ?? "unavailable"
-            return "frame=\(screen.frame) visible=\(screen.visibleFrame) displayID=\(observedDisplayID)"
+            return "frame=\(screen.frame) visible=\(screen.visibleFrame) backingScale=\(screen.backingScaleFactor) displayID=\(observedDisplayID)"
         }.joined(separator: "\n")
+        let currentModeFacts = CGDisplayCopyDisplayMode(displayID).map(modeDescription) ?? "unavailable"
         throw ProbeConfigurationError.displayModeUnavailable(
-            "display did not settle within 3s for \(modeDescription(mode)); requiredVisible=\(requiringVisibleSize); observedScreens:\n\(observed)"
+            "display did not settle within 3s for \(modeDescription(mode)); currentMode=\(currentModeFacts); requiredVisible=\(requiringVisibleSize); observedScreens:\n\(observed)"
         )
     }
 
@@ -776,7 +781,7 @@ private final class DisplayModeLease {
     }
 
     private static func modeDescription(_ mode: CGDisplayMode) -> String {
-        "id=\(mode.ioDisplayModeID) points=\(mode.width)x\(mode.height) pixels=\(mode.pixelWidth)x\(mode.pixelHeight) refresh=\(mode.refreshRate) ioFlags=\(mode.ioFlags) usable=\(mode.isUsableForDesktopGUI())"
+        "id=\(mode.ioDisplayModeID) modeSize=\(mode.width)x\(mode.height) pixels=\(mode.pixelWidth)x\(mode.pixelHeight) refresh=\(mode.refreshRate) ioFlags=\(mode.ioFlags) usable=\(mode.isUsableForDesktopGUI())"
     }
 }
 
