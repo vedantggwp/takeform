@@ -140,7 +140,30 @@ case "execute":
         fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr)
         exit(3)
     }
+case "import":
+    guard arguments.count >= 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]) else {
+        fputs("usage: takeform import <package> <grant-id> <source>...\n", stderr)
+        exit(1)
+    }
+    do {
+        try AppAuthoritySocket.verifyService(expectedService: service)
+        let authenticationContext = LAContext()
+        authenticationContext.interactionNotAllowed = true
+        var query = credentialQuery(for: grantID)
+        query[kSecReturnData] = true
+        query[kSecUseAuthenticationContext] = authenticationContext
+        guard let tokenData = readCredential(query: query), let token = String(data: tokenData, encoding: .utf8), !token.isEmpty else {
+            throw NSError(domain: "TakeformCLI", code: 2)
+        }
+        let sources = arguments.dropFirst(3).map { URL(fileURLWithPath: $0) }
+        guard case let .importOutcomes(outcomes) = try AppAuthoritySocket.verifiedRequest(.pairedImport(URL(fileURLWithPath: arguments[1]), sources, grantID, token), expectedService: service) else { throw NSError(domain: "TakeformCLI", code: 3) }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(outcomes))
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr)
+        exit(3)
+    }
 default:
-    fputs("usage: takeform <import-paired-credential|forget-paired-credential|execute> ...\n", stderr)
+    fputs("usage: takeform <import-paired-credential|forget-paired-credential|execute|import> ...\n", stderr)
     exit(2)
 }

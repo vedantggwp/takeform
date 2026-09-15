@@ -3,39 +3,47 @@ import Darwin
 import Foundation
 import TakeformCore
 
-/// Authority-only copy/promotion primitive. It never mutates the source and only
-/// removes the UUID staging directory it created. Catalog commit is deliberately
-/// a separate revisioned command after this result has a durable object.
+/// Authority-only copy/promotion primitive. It never mutates a source and only
+/// removes the UUID staging directory it created. The catalog commit remains a
+/// separate revisioned command after this result has a durable object.
 enum ManagedImport {
     enum Failure: Error, Equatable {
         case invalidSource
         case sourceChanged
         case objectCollision
+        case unsafePackagePath
         case durability
     }
 
-    /// The hooks are internal so focused fault tests can make the copy change
-    /// state at a known byte boundary. The app-service route does not supply
-    /// either hook.
+    /// The hooks are internal so focused fault tests can change state at a
+    /// known byte boundary. The app-service route supplies neither hook.
     static func stageAndPromoteSync(
         source: URL,
         package: URL,
         shouldCancel: (() -> Bool)? = nil,
         afterChunk: ((Int) -> Void)? = nil
     ) throws -> ManagedAsset {
+        let sourceBefore = try sourceStat(source)
+        let state = package.appendingPathComponent(".takeform", isDirectory: true)
+        try requireRegularDirectory(state)
+        let stagingRoot = state.appendingPathComponent("staging", isDirectory: true)
+        try ensureRegularDirectory(stagingRoot)
+
         let token = UUID().uuidString
-        let staging = package.appendingPathComponent(".takeform/staging/\(token)")
-        let staged = staging.appendingPathComponent("bytes")
-        let stagingRoot = staging.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        let staging = stagingRoot.appendingPathComponent(token, isDirectory: true)
+        try createOwnedDirectory(staging)
         defer { try? FileManager.default.removeItem(at: staging) }
-        let input = try FileHandle(forReadingFrom: source)
+        try requireRegularDirectory(staging)
+
+        let staged = staging.appendingPathComponent("bytes")
+        let input = try openRegularFile(source, flags: O_RDONLY, failure: .invalidSource)
         defer { try? input.close() }
-        var before = stat()
-        guard fstat(input.fileDescriptor, &before) == 0, (before.st_mode & S_IFMT) == S_IFREG else { throw Failure.invalidSource }
-        FileManager.default.createFile(atPath: staged.path, contents: nil)
-        let output = try FileHandle(forWritingTo: staged)
+        var sourceFDBefore = stat()
+        guard fstat(input.fileDescriptor, &sourceFDBefore) == 0, sameIdentity(sourceBefore, sourceFDBefore) else {
+            throw Failure.invalidSource
+        }
+
+        let output = try createStagedFile(staged)
         var digest = SHA256()
         var count: UInt64 = 0
         var chunk = 0
@@ -56,16 +64,32 @@ enum ManagedImport {
             try? output.close()
             throw error
         }
-        var after = stat()
-        guard fstat(input.fileDescriptor, &after) == 0, sameIdentity(before, after) else { throw Failure.sourceChanged }
-        let hash = hex(digest.finalize())
-        let objects = package.appendingPathComponent(".takeform/objects", isDirectory: true)
-        try FileManager.default.createDirectory(at: objects, withIntermediateDirectories: true)
+
+        var sourceFDAfter = stat()
+        let sourceAfter = try sourceStat(source)
+        guard fstat(input.fileDescriptor, &sourceFDAfter) == 0,
+              sameIdentity(sourceBefore, sourceAfter),
+              sameIdentity(sourceFDBefore, sourceFDAfter),
+              sameIdentity(sourceBefore, sourceFDBefore) else { throw Failure.sourceChanged }
+
+        // Before linking, every package-owned path must still be the expected
+        // non-symlink type. A hard link then preserves immutable staged bytes;
+        // the closed staging file descriptor cannot keep a writable alias open.
+        _ = try regularStat(staged, failure: .unsafePackagePath)
+        try requireRegularDirectory(stagingRoot)
+        let objects = state.appendingPathComponent("objects", isDirectory: true)
+        try ensureRegularDirectory(objects)
         try syncDirectory(objects)
+        let hash = hex(digest.finalize())
         let object = objects.appendingPathComponent(hash)
         if link(staged.path, object.path) != 0 {
             guard errno == EEXIST else { throw Failure.durability }
-            guard try fileFacts(at: object) == (hash, count) else { throw Failure.objectCollision }
+            do {
+                guard try fileFacts(at: object) == (hash, count) else { throw Failure.objectCollision }
+            } catch let failure as Failure {
+                if failure == .unsafePackagePath { throw failure }
+                throw Failure.objectCollision
+            }
         }
         try syncDirectory(objects)
         return ManagedAsset(digest: hash, byteLength: count, filename: source.lastPathComponent, mediaType: mediaType(for: source))
@@ -75,13 +99,76 @@ enum ManagedImport {
         guard asset.digest.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
               asset.byteLength > 0,
               !asset.filename.isEmpty else { throw AuthorityFailure.corruptDatabase }
-        let object = package.appendingPathComponent(".takeform/objects/\(asset.digest)")
-        guard FileManager.default.fileExists(atPath: object.path) else { throw AuthorityFailure.missingObject("objects/\(asset.digest)") }
-        guard try fileFacts(at: object) == (asset.digest, asset.byteLength) else { throw AuthorityFailure.missingObject("objects/\(asset.digest)") }
+        let objectName = "objects/\(asset.digest)"
+        let state = package.appendingPathComponent(".takeform", isDirectory: true)
+        let objects = state.appendingPathComponent("objects", isDirectory: true)
+        do {
+            try requireRegularDirectory(state)
+            try requireRegularDirectory(objects)
+            let object = objects.appendingPathComponent(asset.digest)
+            guard try fileFacts(at: object) == (asset.digest, asset.byteLength) else { throw Failure.objectCollision }
+        } catch {
+            // A catalog must never follow an object or storage-root symlink to
+            // make outside bytes appear to be portable media.
+            throw AuthorityFailure.missingObject(objectName)
+        }
+    }
+
+    private static func sourceStat(_ url: URL) throws -> stat {
+        try regularStat(url, failure: .invalidSource)
+    }
+
+    private static func regularStat(_ url: URL, failure: Failure) throws -> stat {
+        var info = stat()
+        guard Darwin.lstat(url.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else { throw failure }
+        return info
+    }
+
+    private static func requireRegularDirectory(_ url: URL) throws {
+        var info = stat()
+        guard Darwin.lstat(url.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { throw Failure.unsafePackagePath }
+    }
+
+    private static func ensureRegularDirectory(_ url: URL) throws {
+        var info = stat()
+        if Darwin.lstat(url.path, &info) == 0 {
+            guard (info.st_mode & S_IFMT) == S_IFDIR else { throw Failure.unsafePackagePath }
+            return
+        }
+        guard errno == ENOENT, Darwin.mkdir(url.path, S_IRWXU) == 0 else { throw Failure.unsafePackagePath }
+        try requireRegularDirectory(url)
+    }
+
+    private static func createOwnedDirectory(_ url: URL) throws {
+        guard Darwin.mkdir(url.path, S_IRWXU) == 0 else { throw Failure.durability }
+        try requireRegularDirectory(url)
+    }
+
+    private static func createStagedFile(_ url: URL) throws -> FileHandle {
+        let descriptor = Darwin.open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { throw Failure.durability }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else {
+            Darwin.close(descriptor)
+            throw Failure.unsafePackagePath
+        }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    private static func openRegularFile(_ url: URL, flags: Int32, failure: Failure) throws -> FileHandle {
+        let descriptor = Darwin.open(url.path, flags | O_NOFOLLOW)
+        guard descriptor >= 0 else { throw failure }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else {
+            Darwin.close(descriptor)
+            throw failure
+        }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
     private static func fileFacts(at url: URL) throws -> (String, UInt64) {
-        let input = try FileHandle(forReadingFrom: url)
+        _ = try regularStat(url, failure: .unsafePackagePath)
+        let input = try openRegularFile(url, flags: O_RDONLY, failure: .unsafePackagePath)
         defer { try? input.close() }
         var digest = SHA256()
         var count: UInt64 = 0
@@ -101,7 +188,8 @@ enum ManagedImport {
     }
 
     private static func syncDirectory(_ url: URL) throws {
-        let descriptor = Darwin.open(url.path, O_RDONLY)
+        try requireRegularDirectory(url)
+        let descriptor = Darwin.open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
         guard descriptor >= 0 else { throw Failure.durability }
         defer { Darwin.close(descriptor) }
         guard fsync(descriptor) == 0 else { throw Failure.durability }

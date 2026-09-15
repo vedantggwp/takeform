@@ -378,6 +378,27 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/staging").appendingPathComponent("bytes").path))
     }
 
+    func testPairedImportUsesEditGrantAndRefusesInvalidOrRevokedGrantBeforeStaging() throws {
+        let package = root.appendingPathComponent("PairedImport.takeform")
+        let source = root.appendingPathComponent("paired.mov")
+        try Data(repeating: 0x55, count: 90_000).write(to: source)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let grant = try authority.issuePairedCLIGrant(credential: "creator", label: "paired import", scopes: [.editProject], expiresAt: .distantFuture, rawToken: "paired-token")
+
+        let denied = try authority.importManagedSources([source], grantID: grant.id, token: "wrong-token")
+        guard case .failed = denied.first else { return XCTFail("wrong paired token must be denied") }
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/staging").path))
+
+        let imported = try authority.importManagedSources([source], grantID: grant.id, token: "paired-token")
+        guard case .imported = imported.first else { return XCTFail("active edit grant should import") }
+        try authority.revokePairedCLIGrant(credential: "creator", grantID: grant.id)
+        let revoked = try authority.importManagedSources([source], grantID: grant.id, token: "paired-token")
+        guard case .failed = revoked.first else { return XCTFail("revoked paired token must be denied") }
+    }
+
     func testManagedImportCancellationAndSourceChangeLeaveNoCatalogReference() throws {
         let package = root.appendingPathComponent("Cancelled.takeform")
         let source = root.appendingPathComponent("source.mov")
@@ -404,6 +425,30 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertTrue(try authority.open().document.assets.isEmpty)
         let staging = package.appendingPathComponent(".takeform/staging")
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: staging.path)) ?? [], [])
+    }
+
+    func testManagedImportRejectsPathnameReplacementWithoutPromotingOrCatalogingBytes() throws {
+        let package = root.appendingPathComponent("Replaced.takeform")
+        let source = root.appendingPathComponent("source.mov")
+        let replacement = root.appendingPathComponent("replacement.mov")
+        let originalBytes = Data(repeating: 0x21, count: 130_000)
+        let replacementBytes = Data(repeating: 0x22, count: 130_000)
+        try originalBytes.write(to: source)
+        try replacementBytes.write(to: replacement)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+
+        XCTAssertThrowsError(try ManagedImport.stageAndPromoteSync(source: source, package: package, afterChunk: { chunk in
+            guard chunk == 1 else { return }
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.moveItem(at: replacement, to: source)
+        })) { XCTAssertEqual($0 as? ManagedImport.Failure, .sourceChanged) }
+
+        XCTAssertEqual(try Data(contentsOf: source), replacementBytes)
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: package.appendingPathComponent(".takeform/staging").path)) ?? [], [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.appendingPathComponent(".takeform/objects").path))
     }
 
     func testManagedImportCollisionPreservesExistingObjectAndMissingObjectIsVisibleOnReopen() throws {
@@ -433,5 +478,37 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertThrowsError(try ProjectAuthority(packageURL: package).open()) {
             XCTAssertEqual($0 as? AuthorityFailure, .missingObject("objects/\(asset.digest)"))
         }
+    }
+
+    func testManagedImportRejectsSymlinkedObjectInsteadOfReadingOutsidePackage() throws {
+        let package = root.appendingPathComponent("Symlink.takeform")
+        let source = root.appendingPathComponent("source.mov")
+        let bytes = Data(repeating: 0x71, count: 90_000)
+        try bytes.write(to: source)
+        let authority = try ProjectAuthority(packageURL: package)
+        let document = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false).document
+        projectIDs.insert(document.projectID)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let outside = root.appendingPathComponent("outside-bytes")
+        try bytes.write(to: outside)
+        let object = package.appendingPathComponent(".takeform/objects/\(digest)")
+        try FileManager.default.createDirectory(at: object.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: object, withDestinationURL: outside)
+
+        let result = try authority.importManagedSources([source], credential: "creator")
+        guard result.count == 1, case .failed = result[0] else { return XCTFail("symlink collision must fail") }
+        XCTAssertEqual(try Data(contentsOf: outside), bytes)
+        XCTAssertTrue(try authority.open().document.assets.isEmpty)
+
+        try FileManager.default.removeItem(at: object)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: "creator").first else {
+            return XCTFail("regular object should import")
+        }
+        try FileManager.default.removeItem(at: object)
+        try FileManager.default.createSymbolicLink(at: object, withDestinationURL: outside)
+        XCTAssertThrowsError(try ProjectAuthority(packageURL: package).open()) {
+            XCTAssertEqual($0 as? AuthorityFailure, .missingObject("objects/\(asset.digest)"))
+        }
+        XCTAssertEqual(try Data(contentsOf: outside), bytes)
     }
 }

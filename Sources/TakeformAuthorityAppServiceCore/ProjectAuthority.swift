@@ -110,14 +110,31 @@ public final class ProjectAuthority {
     }
 
     func importManagedSources(_ sources: [URL], credential: String, shouldCancel: (() -> Bool)? = nil) throws -> [ManagedImportOutcome] {
+        try importManagedSources(sources, shouldCancel: shouldCancel, authorize: {
+            try self.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        }, commit: { asset, opened in
+            try self.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .addManagedAsset(asset)), credential: credential)
+        })
+    }
+
+    func importManagedSources(_ sources: [URL], grantID: UUID, token: String, shouldCancel: (() -> Bool)? = nil) throws -> [ManagedImportOutcome] {
+        try importManagedSources(sources, shouldCancel: shouldCancel, authorize: {
+            try self.openForPairedImport(grantID: grantID, token: token)
+        }, commit: { asset, _ in
+            let current = try self.openForPairedImport(grantID: grantID, token: token)
+            return try self.executeAuthorized(CommandEnvelope(expectedRevision: current.document.revision, command: .addManagedAsset(asset)))
+        })
+    }
+
+    private func importManagedSources(_ sources: [URL], shouldCancel: (() -> Bool)?, authorize: () throws -> ProjectOpenState, commit: (ManagedAsset, ProjectOpenState) throws -> CommandResult) throws -> [ManagedImportOutcome] {
         var outcomes: [ManagedImportOutcome] = []
         for (index, source) in sources.enumerated() {
             do {
                 // Authenticate before allocating staging or touching package state.
-                let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+                let opened = try authorize()
                 let asset = try ManagedImport.stageAndPromoteSync(source: source, package: packageURL, shouldCancel: shouldCancel)
                 if opened.document.assets.contains(where: { $0.digest == asset.digest }) { outcomes.append(.duplicate(digest: asset.digest, filename: asset.filename)); continue }
-                let result = try executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .addManagedAsset(asset)), credential: credential)
+                let result = try commit(asset, opened)
                 if case .applied = result.outcome { outcomes.append(.imported(asset)) } else { outcomes.append(.failed(filename: asset.filename, reason: "catalog conflict")) }
             } catch is CancellationError {
                 outcomes.append(.cancelled(filename: source.lastPathComponent))
@@ -127,6 +144,17 @@ public final class ProjectAuthority {
             catch { outcomes.append(.failed(filename: source.lastPathComponent, reason: String(describing: error))) }
         }
         return outcomes
+    }
+
+    private func openForPairedImport(grantID: UUID, token: String) throws -> ProjectOpenState {
+        let opened = try open()
+        let state = try loadMachineState(for: opened.document.projectID)
+        let grant = state.grants.first(where: { $0.id == grantID })
+        guard grant?.isActive == true,
+              grant?.authorityEpoch == state.binding?.epoch,
+              grant?.tokenDigest == tokenDigest(token),
+              grant?.scopes.contains(.editProject) == true else { throw AuthorityFailure.unauthorized }
+        return opened
     }
 
     private func executeAuthorized(_ envelope: CommandEnvelope) throws -> CommandResult {

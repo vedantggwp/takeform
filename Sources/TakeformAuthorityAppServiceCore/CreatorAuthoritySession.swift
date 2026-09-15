@@ -13,7 +13,7 @@ public enum CreatorAuthorityService {
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
+        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute), (.cli, .pairedImport): true
         default: false
         }
     }
@@ -66,6 +66,9 @@ public enum CreatorAuthorityService {
         case let .pairedExecute(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.execute(envelope, grantID: grantID, token: token))
+        case let .pairedImport(url, sources, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .importOutcomes(try authority.importManagedSources(sources, grantID: grantID, token: token))
         }
     }
 
@@ -82,6 +85,7 @@ public enum CreatorAuthorityService {
             case .invalidSource: return .rejected("Choose a readable regular file")
             case .sourceChanged: return .rejected("The source changed while it was copied; no media was added")
             case .objectCollision: return .rejected("An existing managed object does not match its digest")
+            case .unsafePackagePath: return .rejected("Takeform refused an unsafe media storage path")
             case .durability: return .rejected("Takeform could not durably promote this media")
             }
         }
