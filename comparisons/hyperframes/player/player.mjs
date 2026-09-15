@@ -1,11 +1,13 @@
 import {createHash} from 'node:crypto';
 import {copyFile, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {extname, join, resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {freezeSnapshot, frameState} from '../../common/index.mjs';
 
 const ACCEPTED_COMMIT = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
 const PLAYER_VERSION = '0.8.39';
+const HYPERFRAMES_COMMIT = 'd13a89b6707203a2efe2cfcd4e996e0ad0aa4573';
+const HYPERFRAMES_SOURCE = 'https://github.com/heygen-com/hyperframes';
 const seconds = value => value.ticks / value.timescale;
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
 const json = value => `${JSON.stringify(stable(value), null, 2)}\n`;
@@ -80,14 +82,32 @@ function indexHtml(snapshotId, model) {
 }
 
 async function runtimeFiles(runtime, bundleRoot) {
-  const player = join(runtime, 'node_modules/@hyperframes/player/dist/hyperframes-player.global.js');
-  const core = join(runtime, 'node_modules/@hyperframes/player/node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js');
-  const packageFile = join(runtime, 'node_modules/@hyperframes/player/package.json');
-  const packageInfo = JSON.parse(await readFile(packageFile, 'utf8'));
-  if (packageInfo.version !== PLAYER_VERSION) throw new Error(`expected @hyperframes/player ${PLAYER_VERSION}`);
+  const playerRoot = join(runtime, 'node_modules/@hyperframes/player');
+  const coreRoot = join(playerRoot, 'node_modules/@hyperframes/core');
+  const player = join(playerRoot, 'dist/hyperframes-player.global.js');
+  const core = join(coreRoot, 'dist/hyperframe.runtime.iife.js');
+  const [playerPackage, corePackage] = await Promise.all([readFile(join(playerRoot, 'package.json'), 'utf8'), readFile(join(coreRoot, 'package.json'), 'utf8')]);
+  if (JSON.parse(playerPackage).version !== PLAYER_VERSION || JSON.parse(corePackage).version !== PLAYER_VERSION) throw new Error(`expected HyperFrames packages ${PLAYER_VERSION}`);
+  const license = join(playerRoot, 'LICENSE');
+  const licenseText = await readFile(license, 'utf8');
+  if (!licenseText.includes('Apache License') || !licenseText.includes('Copyright 2026 HeyGen, Inc.')) throw new Error('expected HyperFrames Apache-2.0 license text');
+  const notices = fileURLToPath(new URL('./THIRD_PARTY_NOTICES.md', import.meta.url));
+  const noticesText = await readFile(notices, 'utf8');
+  for (const value of ['@hyperframes/player@0.8.39', '@hyperframes/core@0.8.39', HYPERFRAMES_SOURCE, 'v0.8.39', HYPERFRAMES_COMMIT]) if (!noticesText.includes(value)) throw new Error('HyperFrames third-party inventory is incomplete');
   await mkdir(join(bundleRoot, 'runtime'), {recursive: true});
-  await Promise.all([copyFile(player, join(bundleRoot, 'runtime/hyperframes-player.global.js')), copyFile(core, join(bundleRoot, 'runtime/hyperframe.runtime.iife.js'))]);
-  return {coreSha256: await fileHash(core), playerSha256: await fileHash(player)};
+  await mkdir(join(bundleRoot, 'LICENSES'), {recursive: true});
+  await Promise.all([
+    copyFile(player, join(bundleRoot, 'runtime/hyperframes-player.global.js')),
+    copyFile(core, join(bundleRoot, 'runtime/hyperframe.runtime.iife.js')),
+    copyFile(license, join(bundleRoot, 'LICENSES/Apache-2.0-HeyGen.txt')),
+    copyFile(notices, join(bundleRoot, 'THIRD_PARTY_NOTICES.md'))
+  ]);
+  return {
+    coreSha256: await fileHash(core),
+    playerSha256: await fileHash(player),
+    license: {path: 'LICENSES/Apache-2.0-HeyGen.txt', sha256: await fileHash(license)},
+    thirdPartyNotices: {path: 'THIRD_PARTY_NOTICES.md', sha256: await fileHash(notices)}
+  };
 }
 
 async function stagedAssets({snapshot, fixtureRoot, derivativeRoot, mediaPrepManifestPath, mediaPrepModulePath, bundleRoot}) {

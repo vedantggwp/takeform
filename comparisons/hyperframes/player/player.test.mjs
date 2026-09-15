@@ -24,8 +24,9 @@ test('M Player bundle uses pinned local runtime, frameState media, and the appro
   assert.equal(station.preparedSha256, 'b7b06cbf3075abc4f5b6a464235dd60ed3c91244599d9982ce9c92bc5ce1853d');
   const clip24 = receipt.sourceAssets.find(asset => asset.sourceId === 'clip24');
   assert.deepEqual({sourceExtension: clip24.sourceExtension, servedExtension: clip24.servedExtension}, {sourceExtension: '.mov', servedExtension: '.mov'});
-  const [index, composition, verification] = await Promise.all([
-    readFile(join(root, 'index.html'), 'utf8'), readFile(join(root, 'composition.html'), 'utf8'), readFile(join(root, 'verification.json'), 'utf8')
+  const [index, composition, verification, notices, license] = await Promise.all([
+    readFile(join(root, 'index.html'), 'utf8'), readFile(join(root, 'composition.html'), 'utf8'), readFile(join(root, 'verification.json'), 'utf8'),
+    readFile(join(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'), readFile(join(root, 'LICENSES/Apache-2.0-HeyGen.txt'), 'utf8')
   ]);
   assert.match(index, /<hyperframes-player/);
   assert.doesNotMatch(index, /window\.__|__timelines|gsap/i);
@@ -35,4 +36,11 @@ test('M Player bundle uses pinned local runtime, frameState media, and the appro
   const state = JSON.parse(verification);
   assert.deepEqual(state.frames[180].media, [{occurrenceId: 'oClip24', sourceId: 'clip24', sourceTimeSeconds: 1}]);
   assert.deepEqual(state.frames[300].media, [{occurrenceId: 'oClip2997', sourceId: 'clip2997', sourceTimeSeconds: 1}]);
+  assert.match(notices, /@hyperframes\/player.*0\.8\.39/s);
+  assert.match(notices, /@hyperframes\/core.*0\.8\.39/s);
+  assert.match(notices, /d13a89b6707203a2efe2cfcd4e996e0ad0aa4573/);
+  assert.match(notices, /c47ac3a56fb41be0423a17f000dc7ec6cec60814942ad4c49086bffd4fe20883/);
+  assert.match(notices, /ef6bc0878ca69592c3fd911325f9452eb8e483d98255caaaae2e7b79b8df6cbc/);
+  assert.match(license, /Apache License/);
+  assert.match(license, /Copyright 2026 HeyGen, Inc\./);
 });

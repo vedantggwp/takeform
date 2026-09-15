@@ -8,6 +8,8 @@ The bundle uses Player’s public `seek`, `play`, and `pause` methods. Its nativ
 
 The current host helper serves video under `.mp4` or `.webm`, while M also has H.264 MOV sources. The bundle preserves their original `.mov` path and bytes; their helper delivery is therefore an open host-side MIME allowlist requirement. `bundle-manifest.json` retains the original hash and source/served extensions. No media bytes, source times, or retime factors change.
 
+`THIRD_PARTY_NOTICES.md` inventories the copied `@hyperframes/player` and nested `@hyperframes/core` browser artifacts, including exact source, tag, commit, version, and hashes. Every generated bundle includes that inventory and the Apache-2.0 text at `LICENSES/Apache-2.0-HeyGen.txt`.
+
 ## Build
 
 ```sh
