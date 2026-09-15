@@ -42,6 +42,32 @@ replacement service, and tells the user to open Takeform when authority is
 unavailable. The grant issuer used by the process integration test is test-only.
 Neither shipping executable can mint creator authority.
 
+## Paired render CLI
+
+The shipping CLI already routes paired render operations through the same
+authenticated app service as the native app. It requires an app-issued
+`editProject` grant that has first been imported into the CLI Keychain; the CLI
+does not create grants or start the app-session service.
+
+```sh
+takeform render-request PACKAGE.takeform GRANT_ID REQUEST_JSON
+takeform render-status PACKAGE.takeform GRANT_ID JOB_ID
+takeform render-cancel PACKAGE.takeform GRANT_ID JOB_ID OPERATION_ID
+takeform render-materialize PACKAGE.takeform GRANT_ID JOB_ID OPERATION_ID
+takeform render-export PACKAGE.takeform GRANT_ID JOB_ID OPERATION_ID DESTINATION.mp4
+```
+
+`REQUEST_JSON` is a `CommandEnvelope` whose request ID is stable for a retry:
+
+```json
+{"id":{"value":"<command-uuid>"},"expectedRevision":{"value":<revision>},"command":{"requestEpisodeRender":{"episodeID":"<episode-uuid>","compositionDigest":"<lowercase-sha256>","format":"mp4"}}}
+```
+
+The source/process tests exercise these typed routes with disposable fixtures.
+They do not establish native app launch, project setup, pairing, worker render,
+materialization, or export acceptance. Those require the native setup path and
+an actual saved-project run.
+
 Run the focused source and process checks with:
 
 ```sh
