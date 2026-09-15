@@ -114,7 +114,7 @@ enum ManagedImport {
         else if facts.video != nil { mediaType = "video" }
         else if !facts.audio.isEmpty { mediaType = "audio" }
         else { throw Failure.unsupportedMedia }
-        return ManagedAsset(digest: asset.digest, byteLength: asset.byteLength, filename: asset.filename, mediaType: mediaType)
+        return ManagedAsset(digest: asset.digest, byteLength: asset.byteLength, filename: asset.filename, mediaType: mediaType, probe: portableProbe(facts))
     }
 
     static func verifyObject(_ asset: ManagedAsset, package: URL) throws {
@@ -216,6 +216,14 @@ enum ManagedImport {
         }
         done.wait()
         return box.result ?? .failure(.unreadableFile)
+    }
+
+    private static func portableProbe(_ facts: MediaSourceFacts) -> ManagedAssetProbe {
+        func rational(_ value: RationalTime?) -> ManagedAssetProbe.Rational? { value.map { .init($0.value, $0.timescale) } }
+        func range(_ value: RationalTimeRange?) -> [ManagedAssetProbe.Rational]? { guard let value else { return nil }; return [.init(value.start.value, value.start.timescale), .init(value.duration.value, value.duration.timescale)] }
+        let video = facts.video.map { ManagedAssetProbe.Video(codec: $0.codecFourCC, encodedWidth: $0.encodedWidth, encodedHeight: $0.encodedHeight, displayedWidth: $0.displayedWidth, displayedHeight: $0.displayedHeight, transform: $0.preferredTransform, nominalFrameRate: $0.nominalFrameRate, timeRange: range($0.timeRange), presentationTimestamps: $0.presentationTimestamps.map { .init($0.value, $0.timescale) }, observedPresentationDeltaCount: $0.observedPresentationDeltaCount, isVariableFrameRate: $0.isVariableFrameRate) }
+        let audio = facts.audio.map { ManagedAssetProbe.Audio(codec: $0.codecFourCC, channels: $0.channels, sampleRate: $0.sampleRate, timeRange: range($0.timeRange)) }
+        return ManagedAssetProbe(containerIdentifier: facts.containerIdentifier, durationValue: rational(facts.duration)?.value, durationTimescale: rational(facts.duration)?.timescale, imageEncodedWidth: facts.image?.encodedWidth, imageEncodedHeight: facts.image?.encodedHeight, imageDisplayedWidth: facts.image?.displayedWidth, imageDisplayedHeight: facts.image?.displayedHeight, imageOrientation: facts.image?.orientation, video: video, audio: audio, livePhotoIdentifier: facts.livePhotoContentIdentifier?.value, livePhotoComparisonIdentifier: facts.livePhotoContentIdentifier?.comparisonValue, livePhotoProvenance: facts.livePhotoContentIdentifier?.provenance.rawValue, livePhotoNormalization: facts.livePhotoContentIdentifier?.normalization.rawValue)
     }
 
     private static func sameIdentity(_ lhs: stat, _ rhs: stat) -> Bool {
