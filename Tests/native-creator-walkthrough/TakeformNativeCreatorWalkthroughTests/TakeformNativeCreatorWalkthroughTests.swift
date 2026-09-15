@@ -185,8 +185,16 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let url = try runnerRoot().appendingPathComponent(name)
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 4, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
         guard let rep else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 1) }
-        rep.setColor(NSColor.systemTeal)
-        rep.fill()
+        guard let pixels = rep.bitmapData else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 2) }
+        for row in 0..<rep.pixelsHigh {
+            for column in 0..<rep.pixelsWide {
+                let offset = row * rep.bytesPerRow + column * 4
+                pixels[offset] = 0x9B // B
+                pixels[offset + 1] = 0xB8 // G
+                pixels[offset + 2] = 0x0F // R
+                pixels[offset + 3] = 0xFF // A
+            }
+        }
         guard let data = rep.representation(using: .png, properties: [:]) else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 2) }
         try data.write(to: url, options: .atomic)
         return url
