@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 import TakeformAuthorityEngine
 import TakeformCore
 import TakeformWorkspace
@@ -11,6 +12,7 @@ public enum AuthorityFailure: Error, Equatable, LocalizedError {
     case newerSchema(Int)
     case copyDecisionRequired
     case unauthorized
+    case creationCollision
     case creationCleanupFailed
     public var errorDescription: String? { String(describing: self) }
 }
@@ -250,13 +252,15 @@ public final class ProjectAuthority {
 }
 
 extension ProjectAuthority {
-    static func createChannelPackage(at destination: URL, name: String, initialRecipe: [String: String], credential: String, afterInitialBind: (() throws -> Void)? = nil, afterInitialize: (() throws -> Void)? = nil) throws -> WorkspaceSnapshot {
+    static func createChannelPackage(at destination: URL, name: String, initialRecipe: [String: String], credential: String, temporaryDirectoryName: String? = nil, afterInitialBind: (() throws -> Void)? = nil, afterInitialize: (() throws -> Void)? = nil) throws -> WorkspaceSnapshot {
         let destination = destination.standardizedFileURL
         guard !FileManager.default.fileExists(atPath: destination.path), !name.isEmpty else { throw AuthorityFailure.unauthorized }
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(destination.lastPathComponent).creating-\(UUID().uuidString)")
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(destination.lastPathComponent).creating-\(temporaryDirectoryName ?? UUID().uuidString)")
         let temporaryProjectID = UUID()
+        var temporaryOwned = false
         var movedToDestination = false
         func removeOwnedArtifacts() -> Bool {
+            guard temporaryOwned else { return false }
             let ownedURLs = [temporary] + (movedToDestination ? [destination] : [])
             var cleanupFailed = false
             for url in ownedURLs where FileManager.default.fileExists(atPath: url.path) {
@@ -272,6 +276,8 @@ extension ProjectAuthority {
             return cleanupFailed
         }
         do {
+            try reserveTemporaryDirectory(at: temporary)
+            temporaryOwned = true
             let authority = try ProjectAuthority(packageURL: temporary, initialProjectID: temporaryProjectID, afterInitialBind: afterInitialBind)
             let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
             try afterInitialize?()
@@ -285,6 +291,13 @@ extension ProjectAuthority {
         } catch {
             if removeOwnedArtifacts() { throw AuthorityFailure.creationCleanupFailed }
             throw error
+        }
+    }
+
+    private static func reserveTemporaryDirectory(at url: URL) throws {
+        guard Darwin.mkdir(url.path, S_IRWXU) == 0 else {
+            if errno == EEXIST { throw AuthorityFailure.creationCollision }
+            throw AuthorityFailure.unauthorized
         }
     }
 }

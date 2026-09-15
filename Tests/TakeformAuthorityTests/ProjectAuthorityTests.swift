@@ -217,6 +217,15 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
 
+        let collidingTemporary = root.appendingPathComponent(".Atomic.takeform.creating-collision")
+        try FileManager.default.createDirectory(at: collidingTemporary, withIntermediateDirectories: false)
+        let collisionMarker = collidingTemporary.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: collisionMarker)
+        XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator", temporaryDirectoryName: "collision"))
+        XCTAssertEqual(try Data(contentsOf: collisionMarker), Data("keep".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
+
         XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator") { throw NSError(domain: "test", code: 1) })
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
