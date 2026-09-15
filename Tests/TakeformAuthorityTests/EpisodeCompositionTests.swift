@@ -157,6 +157,12 @@ final class EpisodeCompositionTests: XCTestCase {
         let pairedGrant = try authority.issuePairedCLIGrant(credential: credential, label: "render", scopes: [.editProject], expiresAt: .distantFuture, rawToken: pairedToken)
         guard case let .renderStatus(pairedStatus) = CreatorAuthorityService.respond(to: .pairedRenderStatus(package, status.jobID, pairedGrant.id, pairedToken), from: .cli) else { return XCTFail("paired status route failed") }
         XCTAssertEqual(pairedStatus, cancelled)
+        guard case let .renderContext(context) = CreatorAuthorityService.respond(to: .pairedRenderContext(package, episode.id, pairedGrant.id, pairedToken), from: .cli) else { return XCTFail("paired render context route failed") }
+        XCTAssertEqual(context.episodeID, episode.id)
+        XCTAssertEqual(context.revision, replaced.revision)
+        XCTAssertEqual(context.compositionDigest, SHA256.hash(data: try replacement.canonicalData()).map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(context.output, replacement.output)
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .pairedRenderContext(package, episode.id, pairedGrant.id, pairedToken), from: .app) else { return XCTFail("app role must not impersonate paired render context") }
         guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .requestRender(package, request, Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not use app creator render route") }
         let materialized = try authority.materializeEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: CommandID(), credential: credential)
         XCTAssertEqual(materialized, .unavailable(cancelled))
@@ -204,6 +210,16 @@ final class EpisodeCompositionTests: XCTestCase {
         _ = try XCTUnwrap(completedInput, "worker did not publish a verified artifact; final state \(finalState), completion \(failureCode)")
         let pairedToken = "paired-render-worker"
         let paired = try authority.issuePairedCLIGrant(credential: credential, label: "worker", scopes: [.editProject], expiresAt: .distantFuture, rawToken: pairedToken)
+        guard case let .renderPlaybackSource(playback) = CreatorAuthorityService.respond(to: .playbackSource(package, status.jobID, CommandID(), Data(credential.utf8)), from: .app) else { return XCTFail("app playback route did not return a freshly verified source") }
+        XCTAssertEqual(playback.jobID, status.jobID)
+        XCTAssertEqual(playback.requestedRevision, status.requestedRevision)
+        XCTAssertEqual(playback.compositionDigest, status.compositionDigest)
+        XCTAssertEqual(playback.output, composition.output)
+        XCTAssertEqual(playback.videoStreamCount, 1)
+        XCTAssertEqual(playback.audioStreamCount, 0)
+        XCTAssertEqual(playback.descriptor.jobID, status.jobID)
+        XCTAssertEqual(try Data(contentsOf: playback.artifactURL), Data("render".utf8))
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .playbackSource(package, status.jobID, CommandID(), Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not receive an app playback URL") }
         guard case let .renderMaterialization(.descriptor(descriptor)) = CreatorAuthorityService.respond(to: .pairedMaterializeRender(package, status.jobID, CommandID(), paired.id, pairedToken), from: .cli) else { return XCTFail("paired materialization route did not expose the verified descriptor") }
         XCTAssertEqual(descriptor.jobID, status.jobID)
         let destination = root.appendingPathComponent("export.mp4")
@@ -218,6 +234,55 @@ final class EpisodeCompositionTests: XCTestCase {
         _ = try movedAuthority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
         let movedInput = try movedAuthority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential)
         XCTAssertEqual(coordinator.materialization(for: movedInput), .unavailable(movedInput.status), "machine-local artifact availability must not survive an explicit package rebind")
+        guard case .failure = CreatorAuthorityService.respond(to: .playbackSource(movedPackage, status.jobID, CommandID(), Data(credential.utf8)), from: .app) else { return XCTFail("a rebound package must not receive the prior machine-local playback URL") }
+    }
+
+    func testAppRuntimeSetupIsBoundedIdempotentAndNeverAvailableToCLI() throws {
+        let package = root.appendingPathComponent("Runtime.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machineRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Takeform/Authority/\(opened.document.projectID.uuidString)/renders", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: machineRoot) }
+
+        let runtime = try fakeRenderRuntime()
+        let coordinator = RenderExecutionCoordinator.shared
+        coordinator.installTestRuntime { _ in runtime }
+        defer { coordinator.clearTestRuntime() }
+        let selectors = RenderRuntimeSelectors(browser: runtime.browser, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        let operationID = CommandID()
+        guard case let .renderRuntimeReadiness(.ready(node, browser, ffmpeg, ffprobe)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("validated app runtime setup failed") }
+        XCTAssertEqual(node, "v22.22.1")
+        XCTAssertEqual(browser, "FakeTool 1.0")
+        XCTAssertEqual(ffmpeg, "FakeTool 1.0")
+        XCTAssertEqual(ffprobe, "FakeTool 1.0")
+        let browserWithEquivalentSpelling = runtime.browser.deletingLastPathComponent()
+            .appendingPathComponent("unused")
+            .appendingPathComponent("..")
+            .appendingPathComponent(runtime.browser.lastPathComponent)
+        let equivalentSelectors = RenderRuntimeSelectors(browser: browserWithEquivalentSpelling, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        guard case .renderRuntimeReadiness(.ready) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, equivalentSelectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("equivalent canonical selector paths must replay one setup operation") }
+        guard case let .renderRuntimeReadiness(.ready(replayedNode, replayedBrowser, replayedFFmpeg, replayedFFprobe)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("an exact setup replay did not return its stored readiness") }
+        XCTAssertEqual(replayedNode, node)
+        XCTAssertEqual(replayedBrowser, browser)
+        XCTAssertEqual(replayedFFmpeg, ffmpeg)
+        XCTAssertEqual(replayedFFprobe, ffprobe)
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, CommandID(), Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not configure renderer selectors") }
+
+        let invalid = root.appendingPathComponent("not-executable")
+        try Data("not executable".utf8).write(to: invalid)
+        let invalidSelectors = RenderRuntimeSelectors(browser: invalid, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        guard case let .renderRuntimeReadiness(.unavailable(reason)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, invalidSelectors, CommandID(), Data(credential.utf8)), from: .app) else { return XCTFail("invalid runtime setup was accepted") }
+        XCTAssertTrue(reason.contains("regular executable"))
+        guard case .failure(.rejected) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, invalidSelectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("a reused setup operation ID must reject changed selectors") }
+        guard case .renderRuntimeReadiness(.ready) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(package, Data(credential.utf8)), from: .app) else { return XCTFail("an invalid setup must not clobber prior valid selectors") }
+
+        let movedPackage = root.appendingPathComponent("RuntimeMoved.takeform")
+        try FileManager.default.moveItem(at: package, to: movedPackage)
+        let movedAuthority = try ProjectAuthority(packageURL: movedPackage)
+        _ = try movedAuthority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
+        guard case .renderRuntimeReadiness(.unavailable) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(movedPackage, Data(credential.utf8)), from: .app) else { return XCTFail("a rebinding must force fresh runtime readiness") }
     }
 
     func testCancelledWorkerIsReapedAndCannotPublishItsLateReceipt() throws {

@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 @testable import TakeformAuthorityAppServiceCore
 import TakeformCore
 @testable import TakeformApp
+@_spi(Testing) import TakeformRenderedPreview
 
 private actor DelayedOpenWorkspaceClient: WorkspaceClient {
     private var openContinuations: [CheckedContinuation<WorkspaceSnapshot, Error>] = []
@@ -46,7 +47,326 @@ private actor DelayedOpenWorkspaceClient: WorkspaceClient {
     func revokeCLI(packageURL: URL, grantID: UUID) async throws { throw WorkspaceFailure.authorityUnavailable }
 }
 
+private actor RecordingRenderWorkspaceClient: WorkspaceClient, RenderWorkspaceClient {
+    private let snapshot: WorkspaceSnapshot
+    private var recordedRenderRequests: [CommandEnvelope] = []
+    private var statusContinuations: [CheckedContinuation<EpisodeRenderRequestStatus, Error>] = []
+    private var playbackContinuations: [CheckedContinuation<EpisodeRenderPlaybackSource, Error>] = []
+
+    init(snapshot: WorkspaceSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot { snapshot }
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] { [] }
+    func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { snapshot }
+    func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { throw WorkspaceFailure.authorityUnavailable }
+    func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws {}
+    func listCLIGrants(packageURL: URL) async throws -> [CLIPairingSummary] { [] }
+    func revokeCLI(packageURL: URL, grantID: UUID) async throws {}
+
+    func requestEpisodeRender(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult {
+        recordedRenderRequests.append(envelope)
+        guard case let .requestEpisodeRender(episodeID, digest, format) = envelope.command else {
+            throw WorkspaceFailure.rejected("expected a render request")
+        }
+        let status = EpisodeRenderRequestStatus(
+            jobID: UUID(),
+            episodeID: episodeID,
+            requestedRevision: envelope.expectedRevision,
+            compositionDigest: digest,
+            format: format,
+            logicalState: .requested,
+            progress: .indeterminate,
+            availability: .queued
+        )
+        return CommandResult(id: envelope.id, outcome: .renderRequested(status))
+    }
+
+    func renderStatus(packageURL: URL, jobID: UUID) async throws -> EpisodeRenderRequestStatus {
+        try await withCheckedThrowingContinuation { statusContinuations.append($0) }
+    }
+    func cancelEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID) async throws -> EpisodeRenderRequestStatus { throw WorkspaceFailure.authorityUnavailable }
+    func playbackSource(packageURL: URL, jobID: UUID, operationID: CommandID) async throws -> EpisodeRenderPlaybackSource {
+        try await withCheckedThrowingContinuation { playbackContinuations.append($0) }
+    }
+    func exportEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision) async throws -> EpisodeRenderExportResult { throw WorkspaceFailure.authorityUnavailable }
+    func configureRenderRuntime(packageURL: URL, selectors: RenderRuntimeSelectors, operationID: CommandID) async throws -> RenderRuntimeReadiness { throw WorkspaceFailure.authorityUnavailable }
+    func renderRuntimeReadiness(packageURL: URL) async throws -> RenderRuntimeReadiness {
+        .ready(nodeVersion: "22", browserVersion: "123", ffmpegVersion: "8", ffprobeVersion: "8")
+    }
+
+    func waitForRenderRequest() async {
+        while recordedRenderRequests.isEmpty { await Task.yield() }
+    }
+
+    func renderRequest() -> CommandEnvelope? { recordedRenderRequests.first }
+
+    func waitForStatusRequests(_ count: Int) async {
+        while statusContinuations.count < count { await Task.yield() }
+    }
+
+    func finishStatus(_ index: Int, with status: EpisodeRenderRequestStatus) {
+        statusContinuations[index].resume(returning: status)
+    }
+
+    func failStatus(_ index: Int, with error: Error) {
+        statusContinuations[index].resume(throwing: error)
+    }
+
+    func waitForPlaybackRequests(_ count: Int) async {
+        while playbackContinuations.count < count { await Task.yield() }
+    }
+
+    func finishPlayback(_ index: Int, with source: EpisodeRenderPlaybackSource) {
+        playbackContinuations[index].resume(returning: source)
+    }
+
+    func failPlayback(_ index: Int, with error: Error) {
+        playbackContinuations[index].resume(throwing: error)
+    }
+}
+
 final class WorkspaceClientTests: XCTestCase {
+    func testRenderRequestUsesCurrentSavedCompositionIdentity() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/render-request.takeform", isDirectory: true)
+        let episode = Episode(name: "Assembly", recipeVersion: 1)
+        let output = CompositionOutput(
+            width: 1920,
+            height: 1080,
+            frameRate: try XCTUnwrap(CompositionTime(value: 30, timescale: 1)),
+            duration: try XCTUnwrap(CompositionTime(value: 10, timescale: 1))
+        )
+        let composition = EpisodeComposition(episodeID: episode.id, output: output, occurrences: [], captions: [])
+        let document = ProjectDocument(
+            channel: Channel(name: "Harbor"),
+            recipes: [RecipeVersion(id: 1, values: ["title": "Creator cut"])],
+            episodes: [episode],
+            episodeCompositions: [composition],
+            revision: Revision(7)
+        )
+        let client = RecordingRenderWorkspaceClient(
+            snapshot: WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: package)
+        )
+        let model = await MainActor.run { WorkspaceModel(client: client, renderClient: client) }
+
+        await MainActor.run { model.open(package, rebind: false) }
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil || model.renderRuntimeReadiness == nil }) {
+            await Task.yield()
+        }
+        await MainActor.run { model.requestRender(for: episode) }
+        await client.waitForRenderRequest()
+
+        let recordedEnvelope = await client.renderRequest()
+        let envelope = try XCTUnwrap(recordedEnvelope)
+        XCTAssertEqual(envelope.expectedRevision, Revision(7))
+        guard case let .requestEpisodeRender(episodeID, digest, format) = envelope.command else {
+            return XCTFail("render control sent a non-render command")
+        }
+        XCTAssertEqual(episodeID, episode.id)
+        XCTAssertEqual(format, .mp4)
+        let expectedDigest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, expectedDigest)
+    }
+
+    func testEditingClearsAnActiveRenderBeforeTheEditResponseArrives() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/render-invalidation.takeform", isDirectory: true)
+        let episode = Episode(name: "Assembly", recipeVersion: 1)
+        let output = CompositionOutput(
+            width: 1920,
+            height: 1080,
+            frameRate: try XCTUnwrap(CompositionTime(value: 30, timescale: 1)),
+            duration: try XCTUnwrap(CompositionTime(value: 10, timescale: 1))
+        )
+        let composition = EpisodeComposition(episodeID: episode.id, output: output, occurrences: [], captions: [])
+        let document = ProjectDocument(
+            channel: Channel(name: "Harbor"),
+            recipes: [RecipeVersion(id: 1, values: ["title": "Creator cut"])],
+            episodes: [episode],
+            episodeCompositions: [composition],
+            revision: Revision(7)
+        )
+        let client = RecordingRenderWorkspaceClient(
+            snapshot: WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: package)
+        )
+        let model = await MainActor.run { WorkspaceModel(client: client, renderClient: client) }
+        await MainActor.run { model.open(package, rebind: false) }
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+
+        let active = ActiveRender(
+            packageURL: package,
+            episodeID: episode.id,
+            revision: Revision(7),
+            compositionDigest: SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined(),
+            jobID: UUID()
+        )
+        await MainActor.run {
+            model.activeRender = active
+            model.renderStatus = EpisodeRenderRequestStatus(
+                jobID: active.jobID,
+                episodeID: episode.id,
+                requestedRevision: Revision(7),
+                compositionDigest: active.compositionDigest,
+                format: .mp4,
+                logicalState: .completed,
+                progress: .indeterminate,
+                availability: .available
+            )
+            model.submit(.renameChannel(name: "New title"))
+            XCTAssertNil(model.activeRender)
+            XCTAssertNil(model.renderStatus)
+        }
+    }
+
+    func testLatestStatusAndPreviewLoadWinSameJobRaces() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/render-races.takeform", isDirectory: true)
+        let episode = Episode(name: "Assembly", recipeVersion: 1)
+        let output = CompositionOutput(
+            width: 1920,
+            height: 1080,
+            frameRate: try XCTUnwrap(CompositionTime(value: 30, timescale: 1)),
+            duration: try XCTUnwrap(CompositionTime(value: 10, timescale: 1))
+        )
+        let composition = EpisodeComposition(episodeID: episode.id, output: output, occurrences: [], captions: [])
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let document = ProjectDocument(
+            channel: Channel(name: "Harbor"),
+            recipes: [RecipeVersion(id: 1, values: ["title": "Creator cut"])],
+            episodes: [episode],
+            episodeCompositions: [composition],
+            revision: Revision(7)
+        )
+        let client = RecordingRenderWorkspaceClient(
+            snapshot: WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: package)
+        )
+        let player = await MainActor.run {
+            RenderedPreviewPlayer(assetVerifier: { _ in })
+        }
+        let model = await MainActor.run {
+            WorkspaceModel(client: client, renderClient: client, renderedPreviewPlayer: player)
+        }
+        await MainActor.run { model.open(package, rebind: false) }
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+
+        let active = ActiveRender(packageURL: package, episodeID: episode.id, revision: Revision(7), compositionDigest: digest, jobID: UUID())
+        let running = EpisodeRenderRequestStatus(
+            jobID: active.jobID,
+            episodeID: episode.id,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            format: .mp4,
+            logicalState: .requested,
+            progress: .indeterminate,
+            availability: .running
+        )
+        let completed = EpisodeRenderRequestStatus(
+            jobID: active.jobID,
+            episodeID: episode.id,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            format: .mp4,
+            logicalState: .completed,
+            progress: .indeterminate,
+            availability: .available
+        )
+        let source = EpisodeRenderPlaybackSource(
+            jobID: active.jobID,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            output: output,
+            descriptor: EpisodeRenderDescriptor(jobID: active.jobID, format: .mp4, byteLength: 1, sha256: String(repeating: "a", count: 64)),
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: URL(fileURLWithPath: "/private/tmp/verified-render.mp4")
+        )
+        await MainActor.run {
+            model.activeRender = active
+            model.renderStatus = running
+            model.refreshRenderStatus()
+            model.refreshRenderStatus()
+        }
+        await client.waitForStatusRequests(2)
+        await client.finishStatus(1, with: completed)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != completed }) { await Task.yield() }
+        await client.finishStatus(0, with: running)
+        for _ in 0..<100 { await Task.yield() }
+        let retainedStatus = await MainActor.run { model.renderStatus }
+        XCTAssertEqual(retainedStatus, completed)
+
+        // A current nonavailable status supersedes an in-flight authority
+        // playback fetch for this same job.
+        await MainActor.run {
+            model.loadRenderedPreview()
+            model.refreshRenderStatus()
+        }
+        await client.waitForPlaybackRequests(1)
+        await client.waitForStatusRequests(3)
+        await client.finishStatus(2, with: running)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != running }) { await Task.yield() }
+        await client.finishPlayback(0, with: source)
+        for _ in 0..<100 { await Task.yield() }
+        let unavailableIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let unavailableMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(unavailableIdentity)
+        XCTAssertEqual(unavailableMessage, "Render is running.")
+
+        await MainActor.run { model.renderStatus = completed }
+        await MainActor.run {
+            model.loadRenderedPreview()
+            model.loadRenderedPreview()
+        }
+        await client.waitForPlaybackRequests(3)
+        await client.finishPlayback(2, with: source)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity == nil }) { await Task.yield() }
+        await client.failPlayback(1, with: WorkspaceFailure.authorityUnavailable)
+        for _ in 0..<100 { await Task.yield() }
+
+        let identity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let message = await MainActor.run { model.renderMessage }
+        XCTAssertEqual(identity?.jobID, active.jobID)
+        XCTAssertEqual(identity?.requestedRevision, active.revision)
+        XCTAssertEqual(identity?.compositionDigest, digest)
+        XCTAssertEqual(message, "Ready to preview the verified render.")
+
+        // A fresh status failure must not keep an old available state in the
+        // UI while its preview item has already been invalidated.
+        await MainActor.run { model.refreshRenderStatus() }
+        await client.waitForStatusRequests(4)
+        await client.failStatus(3, with: WorkspaceFailure.authorityUnavailable)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != nil }) { await Task.yield() }
+        let failedStatus = await MainActor.run { model.renderStatus }
+        let failedIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let failedMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(failedStatus)
+        XCTAssertNil(failedIdentity)
+        XCTAssertEqual(failedMessage, WorkspaceFailure.authorityUnavailable.errorDescription)
+
+        // A current request that receives an authority source for different
+        // render identity must clear the previously loaded item.
+        let mismatchedJobID = UUID()
+        let mismatchedSource = EpisodeRenderPlaybackSource(
+            jobID: mismatchedJobID,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            output: output,
+            descriptor: EpisodeRenderDescriptor(jobID: mismatchedJobID, format: .mp4, byteLength: 1, sha256: String(repeating: "b", count: 64)),
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: URL(fileURLWithPath: "/private/tmp/mismatched-render.mp4")
+        )
+        await MainActor.run {
+            model.renderStatus = completed
+            model.loadRenderedPreview()
+        }
+        await client.waitForPlaybackRequests(4)
+        await client.finishPlayback(3, with: mismatchedSource)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity != nil }) { await Task.yield() }
+        let mismatchedIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let mismatchMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(mismatchedIdentity)
+        XCTAssertEqual(mismatchMessage, "The render status did not match the saved composition.")
+    }
+
     func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {
         let asset = ManagedAsset(digest: String(repeating: "a", count: 64), byteLength: 1, filename: "still.png", mediaType: "image")
         let document = ProjectDocument(assets: [asset])
@@ -381,6 +701,13 @@ final class WorkspaceClientTests: XCTestCase {
         )
         guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: withEpisode.revision, command: .replaceEpisodeComposition(episodeID: renderEpisode.id, composition: composition)), credential: credential).outcome else { return XCTFail("render composition setup failed") }
         let compositionDigest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let contextInvocation = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, grant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(contextInvocation.status, 0, String(decoding: contextInvocation.error, as: UTF8.self))
+        let context = try JSONDecoder().decode(EpisodeRenderContext.self, from: contextInvocation.output)
+        XCTAssertEqual(context.episodeID, renderEpisode.id)
+        XCTAssertEqual(context.revision, composed.revision)
+        XCTAssertEqual(context.compositionDigest, compositionDigest)
+        XCTAssertEqual(context.output, composition.output)
         let renderEnvelope = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: renderEpisode.id, compositionDigest: compositionDigest, format: .mp4))
         let pairedRender = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-request", package.path, grant.id.uuidString, String(decoding: try JSONEncoder().encode(renderEnvelope), as: UTF8.self)], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(pairedRender.status, 0, String(decoding: pairedRender.error, as: UTF8.self))
@@ -404,11 +731,15 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(scopedImport.status, 0, String(decoding: scopedImport.error, as: UTF8.self))
         let scopedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: scopedImport.output)
         guard case .failed = scopedOutcomes.first else { return XCTFail("read-only paired grant imported media") }
+        let scopedContext = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, readOnlyGrant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(scopedContext.status, 3, "a grant without editProject must not read render request inputs")
         try authority.revokePairedCLIGrant(credential: credential, grantID: grant.id)
         let revokedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, grant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(revokedImport.status, 0, String(decoding: revokedImport.error, as: UTF8.self))
         let revokedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: revokedImport.output)
         guard case .failed = revokedOutcomes.first else { return XCTFail("revoked paired grant imported media") }
+        let revokedContext = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, grant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(revokedContext.status, 3, "a revoked grant must not read render request inputs")
         XCTAssertEqual(try authority.open().document.assets, [asset])
     }
 }

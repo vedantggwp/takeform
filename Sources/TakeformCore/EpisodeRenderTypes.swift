@@ -107,6 +107,22 @@ public struct EpisodeRenderDescriptor: Codable, Equatable, Sendable {
     }
 }
 
+/// Current portable context for a paired render request. It intentionally has
+/// no object, artifact, worker, or machine-local path information.
+public struct EpisodeRenderContext: Codable, Equatable, Sendable {
+    public let episodeID: UUID
+    public let revision: Revision
+    public let compositionDigest: String
+    public let output: CompositionOutput
+
+    public init(episodeID: UUID, revision: Revision, compositionDigest: String, output: CompositionOutput) {
+        self.episodeID = episodeID
+        self.revision = revision
+        self.compositionDigest = compositionDigest
+        self.output = output
+    }
+}
+
 public enum EpisodeRenderMaterialization: Codable, Equatable, Sendable {
     case unavailable(EpisodeRenderRequestStatus)
     case descriptor(EpisodeRenderDescriptor)

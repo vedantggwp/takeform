@@ -8,6 +8,7 @@ import TakeformSupport
 import TakeformWorkspace
 import TakeformAppAuthorityWire
 import TakeformAppServiceClient
+import TakeformRenderedPreview
 
 private let authorityClient = AppAuthorityServiceClient()
 
@@ -112,15 +113,33 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedAssetID: UUID?
     @Published private(set) var verifiedAssetSelection: VerifiedAssetSelection?
     @Published var isDropTargeted = false
+    @Published var renderRuntimeReadiness: RenderRuntimeReadiness?
+    @Published var renderStatus: EpisodeRenderRequestStatus?
+    @Published var renderMessage: String?
+    @Published var renderRuntimeSelectionNames: RenderRuntimeSelectionNames?
+    let renderedPreviewPlayer: RenderedPreviewPlayer
 
-    private let client: any WorkspaceClient
+    let client: any WorkspaceClient
+    let renderClient: any RenderWorkspaceClient
     private var importTask: Task<Void, Never>?
     private var selectionTask: Task<Void, Never>?
     private var workspaceGeneration = 0
     private var selectionGeneration = 0
+    var renderStatusGeneration = 0
+    var renderPreviewLoadGeneration = 0
     private var requestedPackageURL: URL?
+    var activeRender: ActiveRender?
+    var selectedRenderRuntimeURLs: [RenderRuntimeTool: URL] = [:]
 
-    init(client: any WorkspaceClient) { self.client = client }
+    init(
+        client: any WorkspaceClient,
+        renderClient: (any RenderWorkspaceClient)? = nil,
+        renderedPreviewPlayer: RenderedPreviewPlayer = RenderedPreviewPlayer()
+    ) {
+        self.client = client
+        self.renderClient = renderClient ?? (client as? any RenderWorkspaceClient) ?? UnavailableRenderWorkspaceClient()
+        self.renderedPreviewPlayer = renderedPreviewPlayer
+    }
 
     var document: ProjectDocument? { snapshot?.document }
     var packageURL: URL? { snapshot?.packageURL }
@@ -130,6 +149,7 @@ final class WorkspaceModel: ObservableObject {
         workspaceGeneration &+= 1
         requestedPackageURL = packageURL
         invalidateSelection()
+        invalidateRender()
         return workspaceGeneration
     }
 
@@ -146,6 +166,7 @@ final class WorkspaceModel: ObservableObject {
         // snapshot. Drop any selection that was verified while it was in
         // flight, rather than combining an old object verification with it.
         invalidateSelection()
+        invalidateRender()
         snapshot = value
     }
 
@@ -183,6 +204,7 @@ final class WorkspaceModel: ObservableObject {
                 selectedEpisodeID = result.document.episodes.first?.id
                 requestedPackageURL = nil
                 status = rebind ? "Rebound project at revision \(result.document.revision.value). Previous CLI grants were invalidated; pair again." : "Opened revision \(result.document.revision.value)."
+                refreshRenderRuntimeReadiness()
             } catch let failure as WorkspaceFailure {
                 guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
                 pendingRebindURL = failure == .copyDecisionRequired ? url : nil
@@ -566,7 +588,7 @@ private struct WorkspaceView: View {
                 }
             }
         } else {
-            ContentUnavailableView("Choose a project", systemImage: "folder.badge.plus", description: Text("Takeform opens projects through its authority. It does not infer an empty project from an error."))
+            ContentUnavailableView("Start a project", systemImage: "folder.badge.plus", description: Text("Create a channel or open an existing project to start editing."))
         }
     }
 
@@ -595,6 +617,7 @@ private struct WorkspaceView: View {
                         .accessibilityIdentifier("workspace-reset-override")
                 }
                 EpisodeCompositionEditor(model: model, episode: episode)
+                EpisodeRenderControls(model: model, episode: episode)
                 cliAccess
             }.padding()
         } else {

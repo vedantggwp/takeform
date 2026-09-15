@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import TakeformAppAuthorityWire
 import TakeformCore
 
 /// All paths and process ownership below are machine-local. Nothing in this
@@ -86,10 +87,35 @@ private struct RenderAttemptMarker: Codable {
     let machineBindingDigest: String
 }
 
+/// Canonical executable locations are machine-only configuration. A binding
+/// digest prevents a copied/rebound package from inheriting this selection.
+private struct PersistedRenderRuntimeSelectors: Codable {
+    let browser: String
+    let ffmpeg: String
+    let ffprobe: String
+    let machineBindingDigest: String
+    let runtimeIdentity: RenderRuntimeIdentity
+}
+
+private struct RenderRuntimeIdentity: Codable, Equatable {
+    let nodeVersion: String
+    let workerSHA256: String
+}
+
+/// Operation responses are retained separately from the configuration itself:
+/// they contain no executable paths and replay a completed request without
+/// launching tools or rewriting selectors.
+private struct RenderRuntimeOperation: Codable {
+    let fingerprint: String
+    let readiness: RenderRuntimeReadiness
+}
+
 /// This is deliberately a single-purpose process owner, not a scheduler. A
 /// process is signalled only while this running service retains its `Process`.
 final class RenderExecutionCoordinator: @unchecked Sendable {
-    static let shared = RenderExecutionCoordinator(runtime: RenderExecutionCoordinator.productionRuntime)
+    /// Production selection is loaded only after the current machine binding
+    /// has been checked in `selectedRuntime` below.
+    static let shared = RenderExecutionCoordinator(runtime: { _ in nil })
 
     private struct Key: Hashable { let projectID: UUID; let jobID: UUID }
     private struct Active { let process: Process; let attemptID: UUID; let snapshotSHA256: String; let stage: URL; let runtime: RenderWorkerRuntime }
@@ -112,7 +138,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         lock.lock()
         if active[key] != nil { lock.unlock(); return .running }
         lock.unlock()
-        guard input.status.logicalState == .requested, let runtime = selectedRuntime(for: input.snapshot.projectID), preflight(runtime) else { return .unavailable }
+        guard input.status.logicalState == .requested, let runtime = selectedRuntime(for: input.snapshot.projectID, machineBindingDigest: input.machineBindingDigest), preflight(runtime) else { return .unavailable }
         var ownedStage: URL?
         do {
             let stage = try makeStage(projectID: input.snapshot.projectID, jobID: input.status.jobID)
@@ -206,7 +232,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
             var accepted = false
             for attempt in attempts {
                 guard FileManager.default.fileExists(atPath: attempt.stage.appendingPathComponent("attempt-receipt.json").path),
-                      let runtime = selectedRuntime(for: input.snapshot.projectID), preflight(runtime) else {
+                      let runtime = selectedRuntime(for: input.snapshot.projectID, machineBindingDigest: input.machineBindingDigest), preflight(runtime) else {
                     cleanup(stage: attempt.stage)
                     continue
                 }
@@ -245,6 +271,69 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         return reapedPID[Key(projectID: input.snapshot.projectID, jobID: input.status.jobID)]
     }
 
+    /// Validates a complete app-selected runtime before it replaces existing
+    /// machine configuration. A repeated operation returns its stored typed
+    /// response without spawning a process or changing selectors.
+    func configureRuntime(projectID: UUID, machineBindingDigest: String, selectors: RenderRuntimeSelectors, operationID: CommandID) throws -> RenderRuntimeReadiness {
+        let root = Self.machineRoot(projectID: projectID)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let operationsURL = root.appendingPathComponent("runtime-operations.json")
+        var operations = try loadRuntimeOperations(at: operationsURL)
+        // An operation identifies the canonical machine selection, not the
+        // spelling the panel used to reach it.  In particular, two absolute
+        // paths that normalize to the same non-symlink executable must replay
+        // the same configuration operation.
+        let canonical = canonicalSelectors(selectors)
+        let fingerprint = canonical.map {
+            configurationFingerprint(selectors: $0, machineBindingDigest: machineBindingDigest)
+        } ?? rejectedConfigurationFingerprint(selectors: selectors, machineBindingDigest: machineBindingDigest)
+        if let previous = operations[operationID.value.uuidString] {
+            guard previous.fingerprint == fingerprint else { throw AuthorityFailure.unauthorized }
+            return previous.readiness
+        }
+
+        let readiness: RenderRuntimeReadiness
+        if let canonical, let runtime = candidateRuntime(projectID: projectID, selectors: canonical) {
+            readiness = self.readiness(for: runtime)
+            if case .ready = readiness {
+                let record = PersistedRenderRuntimeSelectors(
+                    browser: canonical.browser,
+                    ffmpeg: canonical.ffmpeg,
+                    ffprobe: canonical.ffprobe,
+                    machineBindingDigest: machineBindingDigest,
+                    runtimeIdentity: try runtimeIdentity(for: runtime)
+                )
+                try JSONEncoder.sorted.encode(record).write(to: root.appendingPathComponent("renderer-selectors.json"), options: .atomic)
+            }
+        } else {
+            readiness = .unavailable(reason: "Choose regular executable browser, FFmpeg, and FFprobe files.")
+        }
+
+        operations[operationID.value.uuidString] = RenderRuntimeOperation(fingerprint: fingerprint, readiness: readiness)
+        try JSONEncoder.sorted.encode(operations).write(to: operationsURL, options: .atomic)
+        return readiness
+    }
+
+    /// A later rebind or bundled-runtime change invalidates the old selection
+    /// by returning fresh readiness rather than trusting a stored success.
+    func runtimeReadiness(projectID: UUID, machineBindingDigest: String) -> RenderRuntimeReadiness {
+        let root = Self.machineRoot(projectID: projectID)
+        let configurationURL = root.appendingPathComponent("renderer-selectors.json")
+        guard let configuration = try? safeDecode(PersistedRenderRuntimeSelectors.self, at: configurationURL) else {
+            return .unavailable(reason: "Choose a browser, FFmpeg, and FFprobe in Takeform before rendering.")
+        }
+        guard configuration.machineBindingDigest == machineBindingDigest,
+              let runtime = candidateRuntime(projectID: projectID, selectors: configuration) else {
+            return .unavailable(reason: "Renderer setup belongs to a different project location. Choose the runtime again.")
+        }
+        let readiness = readiness(for: runtime)
+        guard case .ready = readiness,
+              (try? runtimeIdentity(for: runtime)) == configuration.runtimeIdentity else {
+            return .unavailable(reason: "The bundled renderer changed. Recheck runtime setup in Takeform.")
+        }
+        return readiness
+    }
+
 #if DEBUG
     /// Test targets can supply a disposable, explicit runtime without adding a
     /// user-configurable renderer path to the production service surface.
@@ -280,6 +369,23 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
     func materialization(for input: RenderAttemptInput) -> EpisodeRenderMaterialization {
         guard input.status.logicalState == .completed, let artifact = artifact(for: input) else { return .unavailable(input.status) }
         return .descriptor(artifact.descriptor)
+    }
+
+    /// This is only called after app-role authentication. The URL is derived
+    /// from the current verified artifact and is not retained by the logical
+    /// request or any portable response.
+    func playbackSource(for input: RenderAttemptInput) -> EpisodeRenderPlaybackSource? {
+        guard input.status.logicalState == .completed, let artifact = artifact(for: input) else { return nil }
+        return EpisodeRenderPlaybackSource(
+            jobID: input.status.jobID,
+            requestedRevision: input.status.requestedRevision,
+            compositionDigest: input.status.compositionDigest,
+            output: input.snapshot.composition.output,
+            descriptor: artifact.descriptor,
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: artifact.url
+        )
     }
 
     func export(input: RenderAttemptInput, destination: URL) throws -> EpisodeRenderExportResult {
@@ -367,12 +473,19 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         lock.lock(); reapedPID[key] = pid; lock.unlock()
     }
 
-    private func selectedRuntime(for projectID: UUID) -> RenderWorkerRuntime? {
+    private func selectedRuntime(for projectID: UUID, machineBindingDigest: String) -> RenderWorkerRuntime? {
 #if DEBUG
         lock.lock(); let provider = testRuntime; lock.unlock()
         if let provider { return provider(projectID) }
 #endif
-        return runtime(projectID)
+        if let injected = runtime(projectID) { return injected }
+        let configurationURL = Self.machineRoot(projectID: projectID).appendingPathComponent("renderer-selectors.json")
+        guard let configuration = try? safeDecode(PersistedRenderRuntimeSelectors.self, at: configurationURL),
+              configuration.machineBindingDigest == machineBindingDigest,
+              let configured = Self.bundledRuntime(selectors: configuration),
+              case .ready = readiness(for: configured),
+              (try? runtimeIdentity(for: configured)) == configuration.runtimeIdentity else { return nil }
+        return configured
     }
 
     private func recoveryAttempts(for input: RenderAttemptInput) -> [Active] {
@@ -419,24 +532,86 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         }
     }
 
-    private static func productionRuntime(projectID: UUID) -> RenderWorkerRuntime? {
+    private static func bundledRuntime(selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
         let service = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let resources = service.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/RendererRuntime", isDirectory: true)
-        let selectors = machineRoot(projectID: projectID).appendingPathComponent("renderer-selectors.json")
-        guard let data = try? Data(contentsOf: selectors),
-              let configuration = try? JSONDecoder().decode(RenderSelectors.self, from: data) else { return nil }
-        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), worker: resources.appendingPathComponent("episode-render-worker.mjs"), runtimeRoot: resources, browser: URL(fileURLWithPath: configuration.browser), ffmpeg: URL(fileURLWithPath: configuration.ffmpeg), ffprobe: URL(fileURLWithPath: configuration.ffprobe))
+        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), worker: resources.appendingPathComponent("episode-render-worker.mjs"), runtimeRoot: resources, browser: URL(fileURLWithPath: selectors.browser), ffmpeg: URL(fileURLWithPath: selectors.ffmpeg), ffprobe: URL(fileURLWithPath: selectors.ffprobe))
     }
 
-    private struct RenderSelectors: Codable { let browser: String; let ffmpeg: String; let ffprobe: String }
+    private func candidateRuntime(projectID: UUID, selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
+#if DEBUG
+        lock.lock(); let provider = testRuntime; lock.unlock()
+        if let provider { return provider(projectID) }
+#endif
+        if let injected = runtime(projectID) { return injected }
+        return Self.bundledRuntime(selectors: selectors)
+    }
+
+    private func canonicalSelectors(_ selectors: RenderRuntimeSelectors) -> PersistedRenderRuntimeSelectors? {
+        guard let browser = canonicalExecutable(selectors.browser),
+              let ffmpeg = canonicalExecutable(selectors.ffmpeg),
+              let ffprobe = canonicalExecutable(selectors.ffprobe) else { return nil }
+        // Configuration has not been preflighted yet; identity is filled only
+        // immediately before the atomically written validated record.
+        return PersistedRenderRuntimeSelectors(browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe, machineBindingDigest: "", runtimeIdentity: RenderRuntimeIdentity(nodeVersion: "", workerSHA256: ""))
+    }
+
+    private func canonicalExecutable(_ url: URL) -> String? {
+        guard url.isFileURL else { return nil }
+        let standardized = url.standardizedFileURL
+        guard standardized.path.hasPrefix("/") else { return nil }
+        let canonical = standardized.resolvingSymlinksInPath().standardizedFileURL
+        // Selector values are explicit user choices, not indirections through
+        // a symlink or PATH entry that can later point at another executable.
+        guard canonical.path == standardized.path else { return nil }
+        var info = stat()
+        guard lstat(standardized.path, &info) == 0,
+              (info.st_mode & S_IFMT) == S_IFREG,
+              FileManager.default.isExecutableFile(atPath: standardized.path) else { return nil }
+        return standardized.path
+    }
+
+    private func configurationFingerprint(selectors: PersistedRenderRuntimeSelectors, machineBindingDigest: String) -> String {
+        let data = (try? JSONEncoder.sorted.encode(selectors)) ?? Data()
+        return digest(Data(machineBindingDigest.utf8) + data)
+    }
+
+    /// Invalid input has no canonical selector set.  Retaining a deterministic
+    /// rejected-input fingerprint still makes an exact retry observable while
+    /// preventing it from aliasing a later valid canonical selection.
+    private func rejectedConfigurationFingerprint(selectors: RenderRuntimeSelectors, machineBindingDigest: String) -> String {
+        let data = (try? JSONEncoder.sorted.encode(selectors)) ?? Data()
+        return digest(Data("invalid-runtime-selectors:".utf8) + Data(machineBindingDigest.utf8) + data)
+    }
+
+    private func loadRuntimeOperations(at url: URL) throws -> [String: RenderRuntimeOperation] {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        return try safeDecode([String: RenderRuntimeOperation].self, at: url)
+    }
+
+    private func runtimeIdentity(for runtime: RenderWorkerRuntime) throws -> RenderRuntimeIdentity {
+        RenderRuntimeIdentity(nodeVersion: try version(runtime.node, arguments: ["--version"]), workerSHA256: digest(try safeRegularData(at: runtime.worker)))
+    }
 
     private func preflight(_ runtime: RenderWorkerRuntime) -> Bool {
+        if case .ready = readiness(for: runtime) { return true }
+        return false
+    }
+
+    private func readiness(for runtime: RenderWorkerRuntime) -> RenderRuntimeReadiness {
         guard [runtime.node, runtime.browser, runtime.ffmpeg, runtime.ffprobe].allSatisfy({ FileManager.default.isExecutableFile(atPath: $0.path) }),
-              (try? safeRegularData(at: runtime.worker)) != nil else { return false }
-        guard let nodeVersion = try? version(runtime.node, arguments: ["--version"]), nodeVersion == "v22.22.1" else { return false }
-        return (try? version(runtime.browser, arguments: ["--version"])) != nil &&
-            (try? version(runtime.ffmpeg, arguments: ["-version"])) != nil &&
-            (try? version(runtime.ffprobe, arguments: ["-version"])) != nil
+              (try? safeRegularData(at: runtime.worker)) != nil else {
+            return .unavailable(reason: "The bundled renderer or selected executable is unavailable.")
+        }
+        guard let nodeVersion = try? version(runtime.node, arguments: ["--version"]), nodeVersion == "v22.22.1" else {
+            return .unavailable(reason: "Takeform requires its bundled Node 22.22.1 runtime.")
+        }
+        guard let browserVersion = try? version(runtime.browser, arguments: ["--version"]),
+              let ffmpegVersion = try? version(runtime.ffmpeg, arguments: ["-version"]),
+              let ffprobeVersion = try? version(runtime.ffprobe, arguments: ["-version"]) else {
+            return .unavailable(reason: "Takeform could not run every selected renderer executable.")
+        }
+        return .ready(nodeVersion: nodeVersion, browserVersion: browserVersion, ffmpegVersion: ffmpegVersion, ffprobeVersion: ffprobeVersion)
     }
 }
 
