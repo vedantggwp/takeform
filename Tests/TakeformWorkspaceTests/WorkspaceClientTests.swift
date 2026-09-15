@@ -156,7 +156,11 @@ final class WorkspaceClientTests: XCTestCase {
     }
 
     func testCopiedPairedCLIExecutesThroughVerifiedPersistentService() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-paired-positive-\(UUID().uuidString)")
+        // Keep this on the same /private/tmp spelling used by the independent
+        // copied-release runner. A package binding must survive the actual UDS
+        // process boundary without treating an equivalent selected path as a
+        // moved copy.
+        let root = URL(fileURLWithPath: "/private/tmp/takeform-paired-positive-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let sourceRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let artifacts = root.appendingPathComponent("artifacts")
@@ -168,11 +172,22 @@ final class WorkspaceClientTests: XCTestCase {
         AppAuthoritySocket.setTestingPath(socket.path)
         defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
         let package = root.appendingPathComponent("Paired.takeform")
+        XCTAssertEqual(package.path, package.resolvingSymlinksInPath().standardizedFileURL.path)
         let authority = try ProjectAuthority(packageURL: package)
         let credential = "creator-\(UUID().uuidString)"
         let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
         let rawToken = "paired-\(UUID().uuidString)"
         let grant = try authority.issuePairedCLIGrant(credential: credential, label: "process test", scopes: [.editProject], expiresAt: .distantFuture, rawToken: rawToken)
+        let probe = CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Wire probe", initialRecipe: [:]))
+        let encodedRequest = try JSONEncoder().encode(AppAuthorityRequest.pairedExecute(package, probe, grant.id, rawToken))
+        guard case let .pairedExecute(decodedPackage, _, decodedGrant, decodedToken) = try JSONDecoder().decode(AppAuthorityRequest.self, from: encodedRequest) else {
+            return XCTFail("paired request did not round-trip")
+        }
+        XCTAssertEqual(decodedPackage.path, package.path)
+        XCTAssertEqual(decodedPackage.resolvingSymlinksInPath().standardizedFileURL.path, package.resolvingSymlinksInPath().standardizedFileURL.path)
+        XCTAssertEqual(decodedGrant, grant.id)
+        XCTAssertEqual(decodedToken, rawToken)
+        XCTAssertEqual(try ProjectAuthority(packageURL: decodedPackage).open().document, initial)
         defer {
             _ = try? runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["forget-paired-credential", grant.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
             try? FileManager.default.removeItem(at: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Takeform/Authority/\(initial.projectID.uuidString)"))

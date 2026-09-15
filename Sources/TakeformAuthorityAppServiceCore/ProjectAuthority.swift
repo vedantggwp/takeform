@@ -52,14 +52,23 @@ public final class ProjectAuthority {
     }
 
     private init(packageURL: URL, initialProjectID: UUID?, afterInitialBind: (() throws -> Void)?) throws {
-        // The same selected package crosses an executable/UDS boundary. Persist
-        // one filesystem-canonical path so /tmp and /private/tmp do not look
-        // like an unapproved copied project to the service.
-        self.packageURL = packageURL.resolvingSymlinksInPath().standardizedFileURL
+        // A newly selected package does not exist when its initial binding is
+        // written. Resolving the whole URL at that point is path-stateful: the
+        // same spelling can resolve differently once the package directory is
+        // created. Resolve the existing parent instead, then retain the leaf,
+        // so /tmp and /private/tmp agree across the UDS boundary without
+        // silently adopting a package symlink as the selected project.
+        self.packageURL = Self.canonicalPackageURL(packageURL)
         self.initialProjectID = initialProjectID
         self.afterInitialBind = afterInitialBind
         guard !self.packageURL.path.contains("/.takeform/") else { throw AuthorityFailure.unauthorized }
         encoder.outputFormatting = [.sortedKeys]
+    }
+
+    private static func canonicalPackageURL(_ input: URL) -> URL {
+        let standardized = input.standardizedFileURL
+        let parent = standardized.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
+        return parent.appendingPathComponent(standardized.lastPathComponent, isDirectory: true).standardizedFileURL
     }
 
     public func open(rebindMovedPackage: Bool = false) throws -> ProjectOpenState {
