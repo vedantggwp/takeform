@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import TakeformAppAuthorityWire
 import TakeformCore
 
 /// All paths and process ownership below are machine-local. Nothing in this
@@ -280,6 +281,23 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
     func materialization(for input: RenderAttemptInput) -> EpisodeRenderMaterialization {
         guard input.status.logicalState == .completed, let artifact = artifact(for: input) else { return .unavailable(input.status) }
         return .descriptor(artifact.descriptor)
+    }
+
+    /// This is only called after app-role authentication. The URL is derived
+    /// from the current verified artifact and is not retained by the logical
+    /// request or any portable response.
+    func playbackSource(for input: RenderAttemptInput) -> EpisodeRenderPlaybackSource? {
+        guard input.status.logicalState == .completed, let artifact = artifact(for: input) else { return nil }
+        return EpisodeRenderPlaybackSource(
+            jobID: input.status.jobID,
+            requestedRevision: input.status.requestedRevision,
+            compositionDigest: input.status.compositionDigest,
+            output: input.snapshot.composition.output,
+            descriptor: artifact.descriptor,
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: artifact.url
+        )
     }
 
     func export(input: RenderAttemptInput, destination: URL) throws -> EpisodeRenderExportResult {

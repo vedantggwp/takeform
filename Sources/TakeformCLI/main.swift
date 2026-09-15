@@ -19,6 +19,7 @@ Paired project commands:
   import <package> <grant-id> <source>...
 
 Paired render commands (require an app-issued editProject grant):
+  render-context <package> <grant-id> <episode-id>
   render-request <package> <grant-id> <request-json>
   render-status <package> <grant-id> <job-id>
   render-cancel <package> <grant-id> <job-id> <operation-id>
@@ -27,6 +28,9 @@ Paired render commands (require an app-issued editProject grant):
 
 render-request request-json:
   {"id":{"value":"<command-uuid>"},"expectedRevision":{"value":<revision>},"command":{"requestEpisodeRender":{"episodeID":"<episode-uuid>","compositionDigest":"<lowercase-sha256>","format":"mp4"}}}
+
+render-context returns the current episode ID, revision, canonical composition
+digest, and output. Use it to form a matching render-request envelope.
 
 Takeform must be open with its bundled authority service available. The CLI cannot
 start that service, pair itself, or issue a grant.
@@ -259,6 +263,17 @@ case "render-request":
         let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: Data(arguments[3].utf8))
         guard case let .result(result) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedRequestRender(URL(fileURLWithPath: arguments[1]), envelope, grantID, $0) }) else { throw ExecuteFailurePhase.response }
         FileHandle.standardOutput.write(try JSONEncoder().encode(result)); FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3)
+    }
+case "render-context":
+    guard arguments.count == 4, let service = bundledAppService(), let grantID = UUID(uuidString: arguments[2]), let episodeID = UUID(uuidString: arguments[3]) else {
+        fputs("usage: takeform render-context <package> <grant-id> <episode-id>\n", stderr)
+        exit(1)
+    }
+    do {
+        guard case let .renderContext(context) = try pairedResponse(service: service, grantID: grantID, makeRequest: { .pairedRenderContext(URL(fileURLWithPath: arguments[1]), episodeID, grantID, $0) }) else { throw ExecuteFailurePhase.response }
+        FileHandle.standardOutput.write(try JSONEncoder().encode(context)); FileHandle.standardOutput.write(Data("\n".utf8))
     } catch {
         fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3)
     }
