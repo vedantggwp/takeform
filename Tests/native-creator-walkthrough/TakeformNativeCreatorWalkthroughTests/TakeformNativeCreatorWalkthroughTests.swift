@@ -8,8 +8,12 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     private let appPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_APP"
     private let rootPathKey = "TAKEFORM_CREATOR_WALKTHROUGH_ROOT"
 
-    func testCreateImportInspectComposeSaveAndReopen() throws {
-        let fixture = try makePNG(named: "source.png")
+    func testCreateImportInspectComposeSaveAndReopen() async throws {
+        let fixtures = try SyntheticMediaFixtures()
+        defer { fixtures.cleanup() }
+        let fixture = try fixtures.png(named: "source.png")
+        let video = try await fixtures.video(named: "source.mov")
+        let audio = try fixtures.monoAIFF(named: "source.aiff")
         let projectURL = try runnerRoot().appendingPathComponent("happy.takeform", isDirectory: true)
         let app = try launchApp()
         defer { finish(app, named: "creator-happy-final") }
@@ -26,6 +30,11 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         asset.click()
         XCTAssertTrue(app.otherElements["managed-asset-inspector"].waitForExistence(timeout: 10))
         record(app, named: "creator-managed-inspector")
+
+        try importMedia(video, in: app)
+        try inspectManagedAsset(named: "source.mov", expectedPlaybackLabel: "Managed video playback", in: app)
+        try importMedia(audio, in: app)
+        try inspectManagedAsset(named: "source.aiff", expectedPlaybackLabel: "Managed audio playback", in: app)
 
         let episodeName = app.textFields["workspace-episode-name"]
         XCTAssertTrue(episodeName.waitForExistence(timeout: 5))
@@ -162,6 +171,15 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         try acceptSystemPanel(path: source, confirmation: "Import footage", app: app, named: "creator-import-panel")
     }
 
+    private func inspectManagedAsset(named name: String, expectedPlaybackLabel: String, in app: XCUIApplication) throws {
+        let asset = app.buttons[name]
+        XCTAssertTrue(asset.waitForExistence(timeout: 10), "Imported \(name) did not appear as a selectable managed asset")
+        asset.click()
+        XCTAssertTrue(app.otherElements["managed-asset-inspector"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.otherElements[expectedPlaybackLabel].waitForExistence(timeout: 10), "Selected \(name) did not expose its native playback control")
+        record(app, named: "creator-inspector-\(name)")
+    }
+
     private func openProject(_ projectURL: URL, in app: XCUIApplication) throws {
         app.buttons["workspace-open-project"].click()
         try acceptSystemPanel(path: projectURL, confirmation: "Open Project", app: app, named: "creator-open-panel")
@@ -187,25 +205,6 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         confirmationButton.click()
     }
 
-    private func makePNG(named name: String) throws -> URL {
-        let url = try runnerRoot().appendingPathComponent(name)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 4, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
-        guard let rep else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 1) }
-        guard let pixels = rep.bitmapData else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 2) }
-        for row in 0..<rep.pixelsHigh {
-            for column in 0..<rep.pixelsWide {
-                let offset = row * rep.bytesPerRow + column * 4
-                pixels[offset] = 0x9B // B
-                pixels[offset + 1] = 0xB8 // G
-                pixels[offset + 2] = 0x0F // R
-                pixels[offset + 3] = 0xFF // A
-            }
-        }
-        guard let data = rep.representation(using: .png, properties: [:]) else { throw NSError(domain: "TakeformCreatorWalkthrough", code: 2) }
-        try data.write(to: url, options: .atomic)
-        return url
-    }
-
     private func commandJSON(expectedRevision: Int, name: String) -> String {
         let id = UUID().uuidString
         return #"{"id":{"value":"\#(id)"},"expectedRevision":{"value":\#(expectedRevision)},"command":{"renameChannel":{"name":"\#(name)"}}}"#
@@ -221,7 +220,12 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         process.standardOutput = stdout
         process.standardError = stderr
         try process.run()
+        let timeout = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 10, execute: timeout)
         process.waitUntilExit()
+        timeout.cancel()
         return (process.terminationStatus, String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
     }
 

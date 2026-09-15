@@ -36,6 +36,34 @@ if [ "$MODE" = run ] && [ -z "$TEST_ROOT" ]; then
   exit 2
 fi
 
+RUNNER_TEMP_PHYSICAL=""
+require_runner_descendant() {
+  local candidate="$1"
+  local label="$2"
+  local existing="$candidate"
+  local resolved
+
+  [ -n "${RUNNER_TEMP:-}" ] || { echo "RUNNER_TEMP is required for run mode" >&2; exit 2; }
+  RUNNER_TEMP_PHYSICAL="$(cd -P "$RUNNER_TEMP" && pwd)"
+  case "$candidate" in
+    "$RUNNER_TEMP_PHYSICAL"/*) ;;
+    *) echo "$label must be an absolute descendant of RUNNER_TEMP" >&2; exit 2 ;;
+  esac
+  while [ ! -e "$existing" ]; do
+    existing="$(dirname "$existing")"
+  done
+  resolved="$(cd -P "$existing" && pwd)"
+  case "$resolved" in
+    "$RUNNER_TEMP_PHYSICAL"|"$RUNNER_TEMP_PHYSICAL"/*) ;;
+    *) echo "$label traverses a symlink outside RUNNER_TEMP" >&2; exit 2 ;;
+  esac
+}
+
+if [ "$MODE" = run ]; then
+  require_runner_descendant "$OUTPUT_DIR" "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT"
+  require_runner_descendant "$TEST_ROOT" "TAKEFORM_CREATOR_WALKTHROUGH_ROOT"
+fi
+
 mkdir -p "$OUTPUT_DIR"
 RESULT_BUNDLE="$OUTPUT_DIR/native-creator-walkthrough.xcresult"
 DERIVED_DATA="$OUTPUT_DIR/DerivedData"
@@ -49,6 +77,11 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
   echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
   echo "mode: $MODE"
   echo "test_root: ${TEST_ROOT:-not_applicable}"
+  if [ "$MODE" = run ]; then
+    echo "runner_temp: $RUNNER_TEMP_PHYSICAL"
+    echo "safe_output: $OUTPUT_DIR"
+    echo "safe_test_root: $TEST_ROOT"
+  fi
   xcodebuild -version
   sw_vers
   uname -m

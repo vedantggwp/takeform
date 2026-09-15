@@ -25,12 +25,23 @@
 			path = TakeformNativeCreatorWalkthroughTests.xctest;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		A10000000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			name = SyntheticMediaFixtures.swift;
+			path = ../../TakeformMediaTests/SyntheticMediaFixtures.swift;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000010 = {
 			fileRef = A10000000000000000000001;
 			isa = PBXBuildFile;
 		};
 		A10000000000000000000011 = {
 			fileRef = A10000000000000000000002;
+			isa = PBXBuildFile;
+		};
+		A10000000000000000000012 = {
+			fileRef = A10000000000000000000004;
 			isa = PBXBuildFile;
 		};
 		A10000000000000000000020 = {
@@ -45,6 +56,7 @@
 		A10000000000000000000021 = {
 			children = (
 				A10000000000000000000002,
+				A10000000000000000000004,
 			);
 			isa = PBXGroup;
 			path = TakeformNativeCreatorWalkthroughTests;
@@ -78,6 +90,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000011,
+				A10000000000000000000012,
 			);
 			isa = PBXSourcesBuildPhase;
 			runOnlyForDeploymentPostprocessing = 0;
