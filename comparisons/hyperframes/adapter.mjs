@@ -78,7 +78,7 @@ function hash(value) {
 
 export function mediaPreparationReceipt(manifestBytes, manifest, entries) {
   return {
-    derivativeHashes: entries.map((entry) => ({sha256: entry.prepared.sha256, sourceId: entry.sourceId})),
+    derivativeHashes: entries.map((entry) => ({sha256: entry.sha256, sourceId: entry.sourceId})),
     rawManifestSha256: hash(manifestBytes),
     semanticManifestDigest: manifest.manifestDigest
   };
