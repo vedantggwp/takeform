@@ -139,11 +139,13 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "exact command replay must return stored request")
         let malformedReplay = CommandEnvelope(id: request.id, expectedRevision: request.expectedRevision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4))
         XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(malformedReplay, credential: credential).outcome, .rejected(reason: "command-id-reused-with-different-request"), "a changed caller-supplied digest must not replay an accepted request")
-
-        let stale = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: Revision(committed.revision.value - 1), command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)), credential: credential)
-        XCTAssertEqual(stale.outcome, .conflict(currentRevision: committed.revision))
         let mismatch = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: committed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4)), credential: credential)
         XCTAssertEqual(mismatch.outcome, .rejected(reason: "render-composition-digest-mismatch"))
+        let replacement = EpisodeComposition(episodeID: episode.id, output: composition.output, clipAudioPolicy: composition.clipAudioPolicy, occurrences: composition.occurrences, captions: [CompositionCaption(text: "Changed after render request", outputRange: try range(0, 3), layer: 2, order: 0)])
+        guard case let .applied(replaced) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: committed.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: replacement)), credential: credential).outcome else { return XCTFail("composition replacement failed") }
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "an exact request must replay after its episode composition later changes")
+        let stale = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: Revision(committed.revision.value - 1), command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)), credential: credential)
+        XCTAssertEqual(stale.outcome, .conflict(currentRevision: replaced.revision))
 
         XCTAssertEqual(try authority.renderStatusForAuthenticatedCreator(jobID: status.jobID, credential: credential), status)
         let cancelID = CommandID()
