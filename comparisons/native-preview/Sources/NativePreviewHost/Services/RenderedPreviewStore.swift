@@ -25,7 +25,7 @@ final class RenderedPreviewStore {
 
     @discardableResult
     func publish(jobID: UUID, stagedURL: URL, cache: RenderArtifactCache) throws -> VerifiedRenderArtifact {
-        guard let job = state.job, job.id == jobID, job.key.revision == state.currentRevision else {
+        guard let job = state.job, job.id == jobID, job.key.revision == state.currentRevision, job.status.acceptsResult else {
             try? cache.removeStaged(stagedURL)
             throw RenderedPreviewFailure.staleJob
         }

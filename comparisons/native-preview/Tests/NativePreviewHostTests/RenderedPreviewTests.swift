@@ -111,6 +111,25 @@ struct RenderedPreviewTests {
             try state.progress(jobID: job, value: .units(completed: 1, total: 1))
         }
     }
+
+    @Test @MainActor func cancelledStoreCannotPublishAStagedArtifact() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "rendered-preview-cancel-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data("rendered-preview".utf8)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appending(path: "source.mp4")
+        try bytes.write(to: source)
+        let cache = try RenderArtifactCache(root: root)
+        let store = RenderedPreviewStore(currentRevision: "rev-a")
+        let job = try store.begin(key: try key(bytes: bytes))
+        let staged = try cache.stageCopy(from: source)
+        store.cancel(jobID: job, stagedURL: staged, cache: cache)
+        #expect(throws: RenderedPreviewFailure.staleJob) {
+            try store.publish(jobID: job, stagedURL: staged, cache: cache)
+        }
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "artifacts", directoryHint: .isDirectory).appending(path: try! key(bytes: bytes).artifactFilename).path))
+    }
 }
 
 @Suite @MainActor

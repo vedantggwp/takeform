@@ -87,6 +87,13 @@ enum RenderPreviewJobStatus: Equatable, Sendable {
     case cancelled
     case superseded
     case failed(String)
+
+    var acceptsResult: Bool {
+        switch self {
+        case .queued, .running: true
+        default: false
+        }
+    }
 }
 
 struct RenderPreviewJob: Equatable, Sendable {
