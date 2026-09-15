@@ -7,13 +7,18 @@ import TakeformWorkspace
 
 func bundledPeer(_ name: String) -> String? {
     let service = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-    return AppAuthorityPeer.requirement(for: service.deletingLastPathComponent().appendingPathComponent(name))
+    let binary = service.deletingLastPathComponent().appendingPathComponent(name)
+    return AppAuthorityPeer.requirement(for: binary)
 }
 
-let appRequirement = bundledPeer("Takeform")
+let appRequirement = bundledPeer("TakeformApp")
 let cliRequirement = bundledPeer("takeform")
 let listener = try AppAuthoritySocket.makeListener()
 signal(SIGTERM, SIG_IGN)
+// Availability probes intentionally connect, verify the peer, and close before
+// sending a request. A best-effort error reply to that closed socket must not
+// terminate the app-session authority service.
+signal(SIGPIPE, SIG_IGN)
 let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 termination.setEventHandler { listener.close(); exit(0) }
 termination.resume()

@@ -17,9 +17,11 @@ private final class DroppedURLs: @unchecked Sendable {
     func snapshot() -> [URL] { lock.lock(); defer { lock.unlock() }; return values }
 }
 
+@MainActor
 final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        AppAppearance.applyStoredPreference()
         NSApp.activate(ignoringOtherApps: true)
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -28,6 +30,21 @@ final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+}
+
+private enum AppAppearance: String, CaseIterable, Identifiable {
+    static let defaultsKey = "takeform.appAppearance"
+    case system, light, dark
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+    @MainActor static func applyStoredPreference() { apply(rawValue: UserDefaults.standard.string(forKey: defaultsKey)) }
+    @MainActor static func apply(rawValue: String?) {
+        switch rawValue.flatMap(Self.init(rawValue:)) ?? .system {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 }
 
@@ -257,7 +274,9 @@ private struct WorkspaceView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Workspace").font(.headline)
+                Label(ProductIdentity.declared.displayName, systemImage: "rectangle.3.group")
+                    .font(.headline)
+                    .accessibilityIdentifier("takeform-title")
                 if let document = model.document {
                     Label(document.channel?.name ?? "Untitled channel", systemImage: "rectangle.stack")
                     Text("Revision \(document.revision.value)").font(.caption.monospaced()).foregroundStyle(.secondary)
@@ -453,8 +472,16 @@ private struct WorkspaceView: View {
 }
 
 private struct SettingsView: View {
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     var body: some View {
-        TabView { Form { Text("Project authority and CLI access are managed per project.").foregroundStyle(.secondary) }.padding().tabItem { Label("General", systemImage: "gearshape") } }
+        TabView { Form {
+            Picker("Appearance", selection: $appearance) {
+                ForEach(AppAppearance.allCases) { preference in Text(preference.title).tag(preference.rawValue) }
+            }
+            .accessibilityIdentifier("appearance-preference")
+            .onChange(of: appearance) { _, value in AppAppearance.apply(rawValue: value) }
+            Text("Project authority and CLI access are managed per project.").foregroundStyle(.secondary)
+        }.padding().tabItem { Label("General", systemImage: "gearshape") } }
             .frame(width: 460, height: 240)
     }
 }
