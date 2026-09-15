@@ -53,7 +53,6 @@ private struct ContentView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Native app menus and About information", systemImage: "menubar.rectangle")
                     Label("A dedicated Settings window", systemImage: "gearshape")
-                    Label("Build and tool diagnostics from the checkout", systemImage: "stethoscope")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -77,14 +76,10 @@ private struct ContentView: View {
 }
 
 private struct SettingsView: View {
-    @AppStorage("showDevelopmentDetails") private var showDevelopmentDetails = true
-
     var body: some View {
         TabView {
             Form {
-                Toggle("Show development details", isOn: $showDevelopmentDetails)
-                    .accessibilityIdentifier("show-development-details")
-                Text("This setting only changes the amount of status detail shown by future development features.")
+                Text("No application preferences are available in this development foundation.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
