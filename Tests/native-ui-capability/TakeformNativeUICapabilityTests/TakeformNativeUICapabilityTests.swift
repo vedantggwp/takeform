@@ -31,10 +31,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         XCTAssertTrue(about.waitForExistence(timeout: 5))
         about.click()
 
-        let aboutDialog = app.dialogs
-            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Takeform"))
-            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Version 0.1.0 (1)"))
-            .firstMatch
+        let aboutDialog = aboutDialog(in: app)
         XCTAssertTrue(aboutDialog.waitForExistence(timeout: 5), "Native About dialog did not appear")
         XCTAssertTrue(
             aboutDialog.staticTexts.matching(NSPredicate(format: "value == %@", "Takeform")).firstMatch.exists
@@ -46,6 +43,33 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         capture(app, named: "f1-04-about")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitForDisappearance(of: aboutDialog, timeout: 5), "Native About dialog did not dismiss")
+        XCTAssertTrue(app.windows.firstMatch.isHittable)
+    }
+
+    func testKeyboardMenuTraversalOpensNativeAbout() throws {
+        let app = try launchReady()
+        defer { finishCase(app, named: "f1-09-keyboard-menu-final") }
+
+        app.typeKey(.F2, modifierFlags: .control)
+        app.typeKey(.rightArrow, modifierFlags: [])
+        let appMenu = app.menuBars.menuBarItems["Takeform"]
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 5))
+        attach(app.debugDescription, named: "f1-09-menu-bar-focus-ax")
+
+        app.typeKey(.return, modifierFlags: [])
+        let about = app.menuItems["About Takeform"]
+        XCTAssertTrue(about.waitForExistence(timeout: 5), "Keyboard activation did not open the Takeform menu")
+        app.typeKey(.downArrow, modifierFlags: [])
+        XCTAssertTrue(about.isHittable, "Down Arrow did not leave About Takeform available for keyboard activation")
+        attach(app.debugDescription, named: "f1-09-about-menu-open-ax")
+        capture(app, named: "f1-09-keyboard-menu")
+
+        app.typeKey(.return, modifierFlags: [])
+        let aboutDialog = aboutDialog(in: app)
+        XCTAssertTrue(aboutDialog.waitForExistence(timeout: 5), "Keyboard menu activation did not open the native About dialog")
+        capture(app, named: "f1-09-keyboard-about")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitForDisappearance(of: aboutDialog, timeout: 5))
         XCTAssertTrue(app.windows.firstMatch.isHittable)
     }
 
@@ -79,6 +103,10 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let before = window.frame
         attachWindowGeometry(before, named: "f1-06-window-before")
         XCTAssertGreaterThanOrEqual(before.width, 1024)
+
+        let outerBefore = try copiedAppOuterWindowBounds(for: try copiedAppURL())
+        XCTAssertEqual(outerBefore.width, 1024, "The copied app outer window width must be 1024 points before resize")
+        XCTAssertEqual(outerBefore.height, 700, "The copied app outer window height must be 700 points before resize")
 
         let leftEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.001, dy: 0.5))
         let narrower = leftEdge.withOffset(CGVector(dx: 180, dy: 0))
@@ -182,6 +210,13 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         )
     }
 
+    private func aboutDialog(in app: XCUIApplication) -> XCUIElement {
+        app.dialogs
+            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Takeform"))
+            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Version 0.1.0 (1)"))
+            .firstMatch
+    }
+
     private func finishCase(_ app: XCUIApplication, named name: String) {
         recordCaseEvidence(app, named: name)
         app.terminate()
@@ -217,6 +252,50 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 
     private func attachWindowGeometry(_ frame: CGRect, named name: String) {
         attach("xcuiWindowFrame: \(frame)", named: name)
+    }
+
+    private func copiedAppOuterWindowBounds(for copiedBundleURL: URL) throws -> CGRect {
+        let normalizedBundleURL = copiedBundleURL.standardizedFileURL
+        guard let runningApp = NSRunningApplication.runningApplications(withBundleIdentifier: "com.takeform.app")
+            .first(where: { $0.bundleURL?.standardizedFileURL == normalizedBundleURL }) else {
+            throw ProbeConfigurationError.copiedAppNotRunning(normalizedBundleURL.path)
+        }
+
+        let pid = runningApp.processIdentifier
+        let normalLayer = Int(CGWindowLevelForKey(.normalWindow))
+        let candidates = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [])
+            .compactMap { entry -> WindowServerCandidate? in
+                guard
+                    let ownerPID = entry[kCGWindowOwnerPID as String] as? Int,
+                    ownerPID == pid,
+                    let layer = entry[kCGWindowLayer as String] as? Int,
+                    layer == normalLayer,
+                    let boundsDictionary = entry[kCGWindowBounds as String] as? NSDictionary,
+                    let bounds = CGRect(dictionaryRepresentation: boundsDictionary)
+                else {
+                    return nil
+                }
+
+                let number = entry[kCGWindowNumber as String] as? Int ?? -1
+                let alpha = entry[kCGWindowAlpha as String] as? Double ?? 0
+                return WindowServerCandidate(number: number, layer: layer, alpha: alpha, bounds: bounds)
+            }
+
+        attach(
+            """
+            copiedBundleURL: \(normalizedBundleURL.path)
+            copiedAppPID: \(pid)
+            normalWindowLayer: \(normalLayer)
+            candidates:
+            \(candidates.map(\.description).joined(separator: "\n"))
+            """,
+            named: "f1-06-outer-window-candidates"
+        )
+
+        guard let largest = candidates.max(by: { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }) else {
+            throw ProbeConfigurationError.copiedAppWindowNotFound(pid)
+        }
+        return largest.bounds
     }
 
     private func attachWarmReadyTiming(
@@ -322,6 +401,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
 private enum ProbeConfigurationError: LocalizedError {
     case missingCopiedAppPath
     case copiedAppMissing(String)
+    case copiedAppNotRunning(String)
+    case copiedAppWindowNotFound(pid_t)
 
     var errorDescription: String? {
         switch self {
@@ -329,6 +410,21 @@ private enum ProbeConfigurationError: LocalizedError {
             return "TAKEFORM_UI_PROBE_APP must name the copied F1 app bundle"
         case .copiedAppMissing(let path):
             return "Copied F1 app bundle is missing at \(path)"
+        case .copiedAppNotRunning(let path):
+            return "Copied F1 app is not running from \(path)"
+        case .copiedAppWindowNotFound(let pid):
+            return "Copied F1 app has no onscreen normal-layer window for PID \(pid)"
         }
+    }
+}
+
+private struct WindowServerCandidate {
+    let number: Int
+    let layer: Int
+    let alpha: Double
+    let bounds: CGRect
+
+    var description: String {
+        "number=\(number) layer=\(layer) alpha=\(alpha) bounds=\(bounds)"
     }
 }

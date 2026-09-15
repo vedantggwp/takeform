@@ -10,8 +10,9 @@ The original capability-probe commits contain CI tooling atop F1
 merges separately reviewed F1 product commits
 `6b1cebdbc026a1a93d6e9fe23c356dc2050da042` (the title accessible name) and
 `4449b9689c140def77f85643f706e44f1c60133c` (the visible app-owned Appearance
-preference). The combined probe head therefore contains product and tooling
-work. Compared with F1 `63fc`, those reviewed changes are in
+preference), followed by `bcfa88a465bae2ebc6d168fdd91b9384b443c8dd` (adaptive
+normal-text foreground contrast). The combined probe head therefore contains
+product and tooling work. Compared with F1 `63fc`, those reviewed changes are in
 `Sources/TakeformApp/TakeformApp.swift`; `Package.swift`, design assets and the
 dev-bundle script are unchanged. The probe input SHA identifies the reviewed
 combined product-and-tooling head. A successful probe can inform the F1 native
@@ -42,7 +43,11 @@ identifier, and the visible `Native development foundation` text. It stores an
 The full F1 probe keeps those ready sentinels and checks native menu About,
 Settings through its button and Command-Comma shortcut, coordinate-driven
 window resizing, the visible app-owned System/Light/Dark Appearance preference,
-native menu and control reachability, and terminate/relaunch behavior. Each case attaches
+native menu and control reachability, and terminate/relaunch behavior. It uses
+the documented Control-F2 menu-bar focus shortcut followed by Right Arrow,
+Return, Down Arrow and Return to activate About through the keyboard, retaining
+AX and screenshot evidence of the focused/open-menu stages and the native
+About dialog. Each case attaches
 an app screenshot and the actual title element's type, identifier, label,
 value and debug hierarchy before teardown, including on an assertion failure.
 The title contract is limited to an exact static-text role and its exact
@@ -53,7 +58,20 @@ query requiring both title and foundation descendants under the unchanged
 three-second budget. It retains query-enter/query-return timestamps and the
 post-gate title/foundation checks, so serial XCTest waits cannot be mistaken
 for product readiness. Appearance selection uses the native Settings picker
-and never changes the runner's System Settings.
+and never changes the runner's System Settings. The contrast check measures
+the Settings Appearance label against its panel background in the retained
+Light and Dark screenshots; the F1 app uses a semantic primary foreground at
+72 percent opacity for all prior normal secondary text, rather than retaining
+the observed Light 3.95:1 body colour.
+
+For the initial-size proof, the harness observes, but does not capture,
+window-server data through public `CGWindowListCopyWindowInfo`. It resolves the
+running application by the exact copied bundle URL and bundle identifier,
+filters onscreen normal-layer entries by its PID, retains every candidate's
+number/layer/alpha/bounds, and selects the largest candidate. The test requires
+the selected outer bounds to be exactly 1024 by 700 points before the resize.
+This complements the existing AX content geometry; it does not treat the AX
+frame as an outer-window measurement.
 
 The launcher passes the copied-app path only to the XCTest runner as
 `TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test
