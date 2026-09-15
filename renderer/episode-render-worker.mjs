@@ -1,10 +1,13 @@
 import {createHash} from 'node:crypto';
+import {execFile as execFileCallback} from 'node:child_process';
 import {readFileSync} from 'node:fs';
-import {access, mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
+import {lstat, mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {promisify} from 'node:util';
+import {pathToFileURL} from 'node:url';
 
 const schemaVersion = 1;
+const execFile = promisify(execFileCallback);
 export const runtimeProfile = JSON.parse(readFileSync(new URL('./runtime-profile.json', import.meta.url), 'utf8'));
 
 function fail(code, message) {
@@ -125,38 +128,132 @@ async function atomicJson(path, value) {
   await rename(temporary, path);
 }
 
+function profileRelativePath(path, label) {
+  if (typeof path !== 'string' || !path || path.startsWith('/') || path.split('/').some((part) => !part || part === '.' || part === '..')) {
+    fail('INVALID_RUNTIME_PROFILE', `${label} must be a contained relative path`);
+  }
+  return path;
+}
+
+async function requireContainedProfileFile(root, relativePath, label, executable = false) {
+  const parts = profileRelativePath(relativePath, label).split('/');
+  let directory = root;
+  for (const part of parts.slice(0, -1)) {
+    directory = join(directory, part);
+    let entry;
+    try {
+      entry = await lstat(directory);
+    } catch {
+      fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} parent is unavailable`);
+    }
+    if (!entry.isDirectory() || entry.isSymbolicLink()) fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} parent is not a real directory`);
+  }
+  const candidate = join(directory, parts[parts.length - 1]);
+  let entry;
+  try {
+    entry = await lstat(candidate);
+  } catch {
+    fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} is unavailable`);
+  }
+  if (!entry.isFile() || entry.isSymbolicLink() || executable && (entry.mode & 0o111) === 0) {
+    fail('RUNTIME_PROFILE_PATH_UNSAFE', `${label} is not a regular${executable ? ' executable' : ''} file`);
+  }
+  return candidate;
+}
+
 async function requireExecutable(path, label) {
   if (typeof path !== 'string' || !path.startsWith('/')) fail('INVALID_RUNTIME', `${label} must be an absolute executable path`);
+  const lexical = resolve(path);
+  if (lexical !== path) fail('INVALID_RUNTIME', `${label} must be a canonical executable path`);
   try {
-    await access(path, 1);
+    const entry = await lstat(lexical);
+    if (!entry.isFile() || entry.isSymbolicLink() || (entry.mode & 0o111) === 0) fail('RUNTIME_EXECUTABLE_UNAVAILABLE', `${label} is not a regular executable`);
   } catch {
     fail('RUNTIME_EXECUTABLE_UNAVAILABLE', `${label} is not executable`);
   }
-  return resolve(path);
+  return lexical;
+}
+
+async function requireProfileLauncher(root, kind) {
+  const candidates = runtimeProfile.launchers?.filter((entry) => entry?.kind === kind) ?? [];
+  if (candidates.length !== 1) fail('INVALID_RUNTIME_PROFILE', `Runtime profile has an ambiguous ${kind} launcher`);
+  const [launcher] = candidates;
+  if (!launcher || !/^[a-f0-9]{64}$/.test(launcher.sha256 ?? '')) fail('INVALID_RUNTIME_PROFILE', `Runtime profile has no valid ${kind} launcher`);
+  const path = await requireContainedProfileFile(root, launcher.path, `${kind} launcher`, true);
+  if (hash(await readFile(path)) !== launcher.sha256) fail('RUNTIME_LAUNCHER_MISMATCH', `${kind} launcher does not match the runtime profile`);
+  return {kind, path, relativePath: launcher.path, sha256: launcher.sha256};
+}
+
+async function requireProfileWorker(root) {
+  const worker = runtimeProfile.worker;
+  if (!worker || !/^[a-f0-9]{64}$/.test(worker.sha256 ?? '')) fail('INVALID_RUNTIME_PROFILE', 'Runtime profile has no valid worker hash');
+  const path = await requireContainedProfileFile(root, worker.path, 'worker');
+  if (hash(await readFile(path)) !== worker.sha256) fail('RUNTIME_WORKER_MISMATCH', 'Worker does not match the runtime profile');
+  return {path: worker.path, sha256: worker.sha256};
+}
+
+async function executableFacts(path, label, arguments_) {
+  let stdout;
+  try {
+    ({stdout} = await execFile(path, arguments_, {
+      env: {HOME: process.env.HOME ?? '', PATH: ''},
+      maxBuffer: 64 * 1024,
+      timeout: 5_000,
+    }));
+  } catch {
+    fail('RUNTIME_VERSION_UNAVAILABLE', `${label} did not return bounded version facts`);
+  }
+  const lines = String(stdout).split(/\r?\n/).filter(Boolean);
+  return {
+    sha256: hash(await readFile(path)),
+    version: lines[0] ?? '',
+    buildConfiguration: lines.find((line) => line.startsWith('configuration:')) ?? undefined,
+  };
 }
 
 export async function validateRuntime(runtime) {
   if (!runtime || typeof runtime.runtimeRoot !== 'string' || !runtime.runtimeRoot.startsWith('/')) fail('INVALID_RUNTIME', 'Runtime root must be an absolute path');
   if (runtime.nodeVersion !== runtimeProfile.nodeVersion || process.version !== runtimeProfile.nodeVersion) fail('NODE_VERSION_MISMATCH', 'Worker Node version does not match the pinned runtime profile');
   const root = resolve(runtime.runtimeRoot);
+  if (root !== runtime.runtimeRoot) fail('INVALID_RUNTIME', 'Runtime root must be canonical');
+  try {
+    const rootEntry = await lstat(root);
+    if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) fail('INVALID_RUNTIME', 'Runtime root must be a real directory');
+  } catch (error) {
+    if (error?.code === 'INVALID_RUNTIME') throw error;
+    fail('INVALID_RUNTIME', 'Runtime root is unavailable');
+  }
   const packages = [];
   for (const {path, name, version} of runtimeProfile.packages) {
     let metadata;
     try {
-      metadata = JSON.parse(await readFile(join(root, 'node_modules', path, 'package.json'), 'utf8'));
+      metadata = JSON.parse(await readFile(join(root, 'node_modules', profileRelativePath(path, `${name} package`), 'package.json'), 'utf8'));
     } catch {
       fail('RUNTIME_PACKAGE_UNAVAILABLE', `${name} package metadata is unavailable`);
     }
     if (metadata.name !== name || metadata.version !== version) fail('RUNTIME_PACKAGE_MISMATCH', `${name} package identity does not match the pinned runtime`);
     packages.push({path, name, version});
   }
+  const browserWrapper = await requireProfileLauncher(root, 'browser');
+  const worker = await requireProfileWorker(root);
+  const browserTargetExecutable = await requireExecutable(runtime.browserTargetExecutable, 'Browser target');
+  const ffmpegExecutable = await requireExecutable(runtime.ffmpegExecutable, 'FFmpeg');
+  const ffprobeExecutable = await requireExecutable(runtime.ffprobeExecutable, 'FFprobe');
   return {
-    browserExecutable: await requireExecutable(runtime.browserExecutable, 'Browser'),
-    ffmpegExecutable: await requireExecutable(runtime.ffmpegExecutable, 'FFmpeg'),
-    ffprobeExecutable: await requireExecutable(runtime.ffprobeExecutable, 'FFprobe'),
+    browserWrapperExecutable: browserWrapper.path,
+    browserTargetExecutable,
+    ffmpegExecutable,
+    ffprobeExecutable,
     nodeVersion: process.version,
     packages,
     runtimeRoot: root,
+    receiptFacts: {
+      browserWrapper: {kind: browserWrapper.kind, sha256: browserWrapper.sha256},
+      worker: {sha256: worker.sha256},
+      browserTarget: await executableFacts(browserTargetExecutable, 'Browser target', ['--version']),
+      ffmpeg: await executableFacts(ffmpegExecutable, 'FFmpeg', ['-version']),
+      ffprobe: await executableFacts(ffprobeExecutable, 'FFprobe', ['-version']),
+    },
   };
 }
 
@@ -193,12 +290,14 @@ export async function runAttempt(request, {signal} = {}) {
     // HyperFrames reads these documented executable overrides while its modules initialize.
     process.env.HYPERFRAMES_FFMPEG_PATH = runtime.ffmpegExecutable;
     process.env.HYPERFRAMES_FFPROBE_PATH = runtime.ffprobeExecutable;
+    process.env.TAKEFORM_BROWSER_EXECUTABLE = runtime.browserTargetExecutable;
     const producer = await import(pathToFileURL(join(runtime.runtimeRoot, 'node_modules/@hyperframes/producer/dist/index.js')).href);
-    const producerConfig = {...producer.DEFAULT_CONFIG, browserGpuMode: 'software', chromePath: runtime.browserExecutable, enableBrowserPool: false};
+    const producerConfig = {...producer.DEFAULT_CONFIG, browserGpuMode: 'software', chromePath: runtime.browserWrapperExecutable, enableBrowserPool: false};
     const job = producer.createRenderJob({entryFile: 'index.html', format: request.snapshot.format, fps: {num: request.snapshot.composition.output.frameRate.value, den: request.snapshot.composition.output.frameRate.timescale}, producerConfig, quality: 'standard', strictness: 'strict', workers: 1});
     await producer.executeRenderJob(job, project, output, (_job, message) => progress.push({message: String(message).slice(0, 240)}), signal);
     const outputStat = await stat(output);
-    const receipt = {schemaVersion, jobID: request.jobID, attemptID: request.attemptID, outcome: 'succeeded', input: receiptInput(request), runtime, progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress}, artifact: {fileName: basename(output), byteLength: outputStat.size, sha256: hash(await readFile(output))}};
+    const receiptRuntime = {nodeVersion: runtime.nodeVersion, packages: runtime.packages, ...runtime.receiptFacts};
+    const receipt = {schemaVersion, jobID: request.jobID, attemptID: request.attemptID, outcome: 'succeeded', input: receiptInput(request), runtime: receiptRuntime, progress: {kind: progress.length ? 'callback' : 'indeterminate', events: progress}, artifact: {fileName: basename(output), byteLength: outputStat.size, sha256: hash(await readFile(output))}};
     await atomicJson(receiptPath, receipt);
     return receipt;
   } catch (error) {

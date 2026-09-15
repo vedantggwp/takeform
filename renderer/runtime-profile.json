@@ -2,7 +2,10 @@
   "schemaVersion": 1,
   "kind": "takeform-hyperframes-episode-renderer",
   "nodeVersion": "v22.22.1",
-  "worker": "episode-render-worker.mjs",
+  "worker": {"path": "episode-render-worker.mjs", "sha256": "ad70361fcb02ca7c9504405ba70d6a615594fd0229674aadbda97b60ee1981fb"},
+  "launchers": [
+    {"kind": "browser", "path": "tools/secure-browser-launcher.sh", "sha256": "7612713a99add990a54f2a467d78c712f7ef10c729936e39eb38b98a18b2b700"}
+  ],
   "packages": [
     {"path": "@hyperframes/producer", "name": "@hyperframes/producer", "version": "0.8.39"},
     {"path": "@hyperframes/engine", "name": "@hyperframes/engine", "version": "0.8.39"},
