@@ -2,10 +2,51 @@ import AppKit
 import SwiftUI
 import TakeformSupport
 
+@MainActor
 final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        AppAppearance.applyStoredPreference()
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private enum AppAppearance: String, CaseIterable, Identifiable {
+    static let defaultsKey = "takeform.appAppearance"
+
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            "System"
+        case .light:
+            "Light"
+        case .dark:
+            "Dark"
+        }
+    }
+
+    @MainActor
+    static func applyStoredPreference() {
+        apply(rawValue: UserDefaults.standard.string(forKey: defaultsKey))
+    }
+
+    @MainActor
+    static func apply(rawValue: String?) {
+        let preference = rawValue.flatMap(Self.init(rawValue:)) ?? .system
+        switch preference {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 }
 
@@ -77,10 +118,22 @@ private struct ContentView: View {
 }
 
 private struct SettingsView: View {
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
+
     var body: some View {
         TabView {
             Form {
-                Text("No application preferences are available in this development foundation.")
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(AppAppearance.allCases) { preference in
+                        Text(preference.title).tag(preference.rawValue)
+                    }
+                }
+                .accessibilityIdentifier("appearance-preference")
+                .onChange(of: appearance) { _, value in
+                    AppAppearance.apply(rawValue: value)
+                }
+
+                Text("Appearance is the only application preference available in this development foundation.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
