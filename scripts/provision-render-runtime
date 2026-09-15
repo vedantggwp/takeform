@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# Prepares only the pinned renderer inputs used by an isolated macOS CI bundle.
+# It does not build the app, configure authority, launch a browser, or render.
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NODE_VERSION="v22.22.1"
+NODE_ARCHIVE="node-v22.22.1-darwin-arm64.tar.gz"
+NODE_SHA256="679ad4966339e4ef4900f57996714864e4211b898825bb840c3086c419fbcef2"
+NODE_URL="https://nodejs.org/download/release/${NODE_VERSION}/${NODE_ARCHIVE}"
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+OUTPUT_ROOT=""
+GITHUB_OUTPUT_FILE=""
+NODE_ARCHIVE_OVERRIDE=""
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: provision-render-runtime --output-root ABSOLUTE_DIRECTORY [--github-output ABSOLUTE_FILE] [--node-archive ABSOLUTE_FILE]
+
+Downloads (or checksum-verifies) the official Node 22.22.1 darwin-arm64 archive,
+performs a locked dependency install into the supplied output root, and emits
+explicit Chrome, FFmpeg, and FFprobe selectors. --node-archive is for a
+checksum-matched local copy of that exact official archive, such as a CI cache.
+USAGE
+  exit 64
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-root)
+      [ "$#" -ge 2 ] || usage
+      OUTPUT_ROOT="$2"
+      shift 2
+      ;;
+    --github-output)
+      [ "$#" -ge 2 ] || usage
+      GITHUB_OUTPUT_FILE="$2"
+      shift 2
+      ;;
+    --node-archive)
+      [ "$#" -ge 2 ] || usage
+      NODE_ARCHIVE_OVERRIDE="$2"
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
+case "$OUTPUT_ROOT" in /*) ;; *) usage ;; esac
+if [ -n "$GITHUB_OUTPUT_FILE" ]; then
+  case "$GITHUB_OUTPUT_FILE" in /*) ;; *) usage ;; esac
+fi
+if [ -n "$NODE_ARCHIVE_OVERRIDE" ]; then
+  case "$NODE_ARCHIVE_OVERRIDE" in /*) ;; *) usage ;; esac
+fi
+
+canonical_path() {
+  /usr/bin/python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+}
+
+require_regular_executable() {
+  local label="$1" candidate="$2" canonical
+  [ -n "$candidate" ] && [ "${candidate#/}" != "$candidate" ] || { echo "$label must be an absolute path." >&2; exit 65; }
+  [ ! -L "$candidate" ] || { echo "$label must not be a symlink." >&2; exit 65; }
+  canonical="$(canonical_path "$candidate")"
+  [ "$canonical" = "$candidate" ] || { echo "$label must not contain symlinked parents." >&2; exit 65; }
+  [ -f "$candidate" ] && [ -x "$candidate" ] || { echo "$label must be an executable regular file." >&2; exit 65; }
+}
+
+require_regular_file() {
+  local label="$1" candidate="$2" canonical
+  [ -n "$candidate" ] && [ "${candidate#/}" != "$candidate" ] || { echo "$label must be an absolute path." >&2; exit 65; }
+  [ ! -L "$candidate" ] || { echo "$label must not be a symlink." >&2; exit 65; }
+  canonical="$(canonical_path "$candidate")"
+  [ "$canonical" = "$candidate" ] || { echo "$label must not contain symlinked parents." >&2; exit 65; }
+  [ -f "$candidate" ] || { echo "$label must be a regular file." >&2; exit 65; }
+}
+
+sha256() {
+  /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}'
+}
+
+mkdir -p "$OUTPUT_ROOT"
+OUTPUT_ROOT="$(canonical_path "$OUTPUT_ROOT")"
+[ "$OUTPUT_ROOT" != "/" ] || { echo "--output-root must not be the filesystem root." >&2; exit 64; }
+DOWNLOADS="$OUTPUT_ROOT/downloads"
+NODE_ROOT="$OUTPUT_ROOT/node-${NODE_VERSION}"
+RUNTIME_SOURCE="$OUTPUT_ROOT/runtime-source"
+FACTS="$OUTPUT_ROOT/runtime-provision.json"
+NPM_CACHE="$OUTPUT_ROOT/npm-cache"
+TOOLS="$OUTPUT_ROOT/tools"
+mkdir -p "$DOWNLOADS"
+
+ARCHIVE="$DOWNLOADS/$NODE_ARCHIVE"
+if [ -n "$NODE_ARCHIVE_OVERRIDE" ]; then
+  require_regular_file "--node-archive" "$NODE_ARCHIVE_OVERRIDE"
+  [ ! -e "$ARCHIVE" ] || { echo "Output root already contains a Node archive; use a fresh output root." >&2; exit 65; }
+  /bin/cp "$NODE_ARCHIVE_OVERRIDE" "$ARCHIVE"
+elif [ ! -f "$ARCHIVE" ]; then
+  /usr/bin/curl --fail --location --proto '=https' --tlsv1.2 "$NODE_URL" --output "$ARCHIVE"
+fi
+
+[ "$(sha256 "$ARCHIVE")" = "$NODE_SHA256" ] || { echo "Pinned Node archive SHA-256 mismatch." >&2; exit 65; }
+[ ! -e "$NODE_ROOT" ] && [ ! -e "$RUNTIME_SOURCE" ] || { echo "Output root already contains provisioned runtime state; use a fresh output root." >&2; exit 65; }
+/usr/bin/tar -xzf "$ARCHIVE" -C "$OUTPUT_ROOT"
+EXTRACTED_NODE_ROOT="$OUTPUT_ROOT/node-v22.22.1-darwin-arm64"
+[ -d "$EXTRACTED_NODE_ROOT" ] || { echo "Pinned Node archive did not contain its expected root." >&2; exit 65; }
+/bin/mv "$EXTRACTED_NODE_ROOT" "$NODE_ROOT"
+require_regular_executable "Pinned Node" "$NODE_ROOT/bin/node"
+[ "$("$NODE_ROOT/bin/node" --version)" = "$NODE_VERSION" ] || { echo "Pinned Node executable version mismatch." >&2; exit 65; }
+
+mkdir -p "$RUNTIME_SOURCE"
+/bin/cp "$ROOT_DIR/comparisons/runtime/package.json" "$ROOT_DIR/comparisons/runtime/package-lock.json" "$RUNTIME_SOURCE/"
+# npm's launcher resolves `node` from PATH. Put only the verified pinned Node
+# first so package scripts cannot accidentally execute the runner's Node.
+PATH="$NODE_ROOT/bin:$PATH" NPM_CONFIG_CACHE="$NPM_CACHE" "$NODE_ROOT/bin/npm" ci --ignore-scripts --no-audit --fund=false --prefix "$RUNTIME_SOURCE"
+"$NODE_ROOT/bin/node" "$ROOT_DIR/comparisons/runtime/doctor.mjs" --runtime "$RUNTIME_SOURCE" --package-only >/dev/null
+
+COMPOSITOR="$RUNTIME_SOURCE/node_modules/@remotion/compositor-darwin-arm64"
+FFMPEG="$COMPOSITOR/ffmpeg"
+FFPROBE="$COMPOSITOR/ffprobe"
+require_regular_executable "Chrome" "$CHROME"
+require_regular_executable "Lock-derived FFmpeg" "$FFMPEG"
+require_regular_executable "Lock-derived FFprobe" "$FFPROBE"
+
+CHROME_VERSION="$("$CHROME" --version | /usr/bin/head -n 1)"
+# These compositor executables use sibling dylibs. Build explicit, regular
+# launchers that reproduce the required working-directory contract. The
+# launchers are the CI test selectors; raw binaries are never selected.
+mkdir -p "$TOOLS"
+FFMPEG_LAUNCHER="$TOOLS/takeform-ffmpeg"
+FFPROBE_LAUNCHER="$TOOLS/takeform-ffprobe"
+cat >"$FFMPEG_LAUNCHER" <<'LAUNCHER'
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+compositor="$root/runtime-source/node_modules/@remotion/compositor-darwin-arm64"
+cd "$compositor"
+exec ./ffmpeg "$@"
+LAUNCHER
+cat >"$FFPROBE_LAUNCHER" <<'LAUNCHER'
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+compositor="$root/runtime-source/node_modules/@remotion/compositor-darwin-arm64"
+cd "$compositor"
+exec ./ffprobe "$@"
+LAUNCHER
+/bin/chmod 755 "$FFMPEG_LAUNCHER" "$FFPROBE_LAUNCHER"
+require_regular_executable "Lock-derived FFmpeg launcher" "$FFMPEG_LAUNCHER"
+require_regular_executable "Lock-derived FFprobe launcher" "$FFPROBE_LAUNCHER"
+FFMPEG_VERSION="$("$FFMPEG_LAUNCHER" -version | /usr/bin/head -n 1)"
+FFPROBE_VERSION="$("$FFPROBE_LAUNCHER" -version | /usr/bin/head -n 1)"
+FFMPEG_BUILD_CONFIGURATION="$("$FFMPEG_LAUNCHER" -version | /usr/bin/sed -n '3p')"
+LOCK_SHA256="$(sha256 "$RUNTIME_SOURCE/package-lock.json")"
+"$NODE_ROOT/bin/node" - "$RUNTIME_SOURCE/package-lock.json" "$COMPOSITOR/package.json" "$FACTS" "$NODE_SHA256" "$LOCK_SHA256" "$CHROME_VERSION" "$FFMPEG_VERSION" "$FFPROBE_VERSION" "$FFMPEG_BUILD_CONFIGURATION" "$FFMPEG" "$FFPROBE" "$FFMPEG_LAUNCHER" "$FFPROBE_LAUNCHER" <<'NODE'
+const fs = require('node:fs');
+const [lockPath, compositorPath, factsPath, nodeArchiveSHA256, lockSHA256, browserVersion, ffmpegVersion, ffprobeVersion, ffmpegBuildConfiguration, ffmpegPath, ffprobePath, ffmpegLauncherPath, ffprobeLauncherPath] = process.argv.slice(2);
+const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+const compositor = JSON.parse(fs.readFileSync(compositorPath, 'utf8'));
+const locked = lock.packages?.['node_modules/@remotion/compositor-darwin-arm64'];
+if (!locked?.resolved || !locked?.integrity || compositor.name !== '@remotion/compositor-darwin-arm64' || compositor.version !== '4.0.524') process.exit(65);
+const hash = (path) => require('node:crypto').createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+fs.writeFileSync(factsPath, `${JSON.stringify({
+  schemaVersion: 1,
+  purpose: 'test-only CI renderer runtime provisioning; not distribution approval',
+  node: {version: process.version, archiveSHA256: nodeArchiveSHA256},
+  runtime: {lockSHA256, compositor: {name: compositor.name, version: compositor.version, resolved: locked.resolved, integrity: locked.integrity, packageLicense: compositor.license ?? null}},
+  tools: {browser: {version: browserVersion}, ffmpeg: {sha256: hash(ffmpegPath), launcherSHA256: hash(ffmpegLauncherPath), version: ffmpegVersion, buildConfiguration: ffmpegBuildConfiguration}, ffprobe: {sha256: hash(ffprobePath), launcherSHA256: hash(ffprobeLauncherPath), version: ffprobeVersion, buildConfiguration: ffmpegBuildConfiguration}},
+  licenseBoundary: 'The compositor package metadata has no license field. The lock and upstream Remotion license reference remain provenance only; this receipt does not grant redistribution rights.'
+}, null, 2)}\n`);
+NODE
+
+emit() {
+  local key="$1" value="$2"
+  if [ -n "$GITHUB_OUTPUT_FILE" ]; then
+    mkdir -p "$(dirname "$GITHUB_OUTPUT_FILE")"
+    printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value"
+  fi
+}
+
+emit renderer_node_root "$NODE_ROOT"
+emit renderer_runtime_source "$RUNTIME_SOURCE"
+emit renderer_browser "$CHROME"
+emit renderer_ffmpeg "$FFMPEG_LAUNCHER"
+emit renderer_ffprobe "$FFPROBE_LAUNCHER"
+emit renderer_runtime_facts "$FACTS"
