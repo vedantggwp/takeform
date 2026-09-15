@@ -38,9 +38,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         try inspectManagedAsset(named: "source.aiff", expectedPlaybackLabel: "Managed audio playback", in: app)
 
         let episodeName = app.textFields["workspace-episode-name"]
-        XCTAssertTrue(episodeName.waitForExistence(timeout: 5))
-        episodeName.click()
-        episodeName.typeText("Assembly")
+        replaceText(episodeName, with: "Assembly", named: "episode name")
         app.buttons["workspace-create-episode"].click()
         XCTAssertTrue(app.staticTexts["Assembly"].waitForExistence(timeout: 10))
 
@@ -53,8 +51,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         app.buttons["composition-add-caption"].click()
         let caption = app.textFields.matching(NSPredicate(format: "identifier CONTAINS %@", "-text")).firstMatch
         XCTAssertTrue(caption.waitForExistence(timeout: 5))
-        caption.click()
-        caption.typeText("Harbor cut")
+        replaceText(caption, with: "Harbor cut", named: "caption")
         app.buttons["composition-save"].click()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Composition saved at revision ")).firstMatch.waitForExistence(timeout: 15))
         record(app, named: "creator-composition-saved")
@@ -91,7 +88,8 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["CLI committed"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["stale"].exists)
 
-        let selection = app.buttons["workspace-cli-grant-select-\(grantID.uuidString)"]
+        // The paired-grant selector itself has the observed grant identifier.
+        let selection = app.buttons["workspace-cli-grant-\(grantID.uuidString)"]
         XCTAssertTrue(selection.waitForExistence(timeout: 5))
         selection.click()
         app.buttons["workspace-revoke-cli"].click()
@@ -169,15 +167,11 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     private func createChannel(in app: XCUIApplication, named name: String, projectURL: URL) throws {
         app.buttons["workspace-new-channel"].click()
         let nameField = app.textFields["new-channel-name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.click()
-        nameField.typeText(name)
+        replaceText(nameField, with: name, named: "channel name")
         let recipeKey = app.textFields["new-channel-recipe-key"]
-        recipeKey.click()
-        recipeKey.typeText("title")
+        replaceText(recipeKey, with: "title", named: "recipe key")
         let recipeValue = app.textFields["new-channel-recipe-value"]
-        recipeValue.click()
-        recipeValue.typeText("Creator cut")
+        replaceText(recipeValue, with: "Creator cut", named: "recipe value")
         record(app, named: "creator-new-channel")
         app.buttons["new-channel-create"].click()
         try acceptSystemPanel(
@@ -208,6 +202,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     }
 
     private func importMedia(_ source: URL, in app: XCUIApplication) throws {
+        try requireRegularFixture(source)
         app.buttons["workspace-import-footage"].click()
         try acceptSystemPanel(path: source, confirmation: "Import footage", app: app, named: "creator-import-panel")
     }
@@ -245,12 +240,10 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let folderField = panel.textFields["PathTextField"]
         XCTAssertTrue(folderField.waitForExistence(timeout: 5), "System panel did not expose its Go to Folder field")
         XCTAssertTrue(waitForHittable(folderField, timeout: 5), "System panel did not make its Go to Folder field ready")
-        folderField.click()
         // The retained failing panel captured an existing current-path value;
         // typeText appended the fixture path and left Go to Folder open. Clear
         // the focused field before entering the observed absolute file URL.
-        folderField.typeKey("a", modifierFlags: .command)
-        folderField.typeText(path.path)
+        replaceText(folderField, with: path.path, named: "Go to Folder path")
         folderField.typeKey(.return, modifierFlags: [])
         let goToFolder = app.sheets["GoToWindow"]
         XCTAssertTrue(
@@ -262,11 +255,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let confirmationPanel = try presentedSystemPanel(in: app, confirmation: confirmation, named: "\(named)-confirmation")
         if let filename {
             let saveNameField = confirmationPanel.textFields["saveAsNameTextField"]
-            XCTAssertTrue(saveNameField.waitForExistence(timeout: 5), "Save panel did not expose its filename field")
-            XCTAssertTrue(waitForHittable(saveNameField, timeout: 5), "Save panel did not make its filename field ready")
-            saveNameField.click()
-            saveNameField.typeKey("a", modifierFlags: .command)
-            saveNameField.typeText(filename)
+            replaceText(saveNameField, with: filename, named: "Save As name")
         }
         let confirmationButton = confirmationPanel.buttons[confirmation]
         XCTAssertTrue(confirmationButton.waitForExistence(timeout: 5), "System panel did not expose \(confirmation)")
@@ -280,6 +269,29 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
             object: element
         )
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func replaceText(_ element: XCUIElement, with value: String, named name: String) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), "\(name) field did not appear")
+        XCTAssertTrue(waitForHittable(element, timeout: 5), "\(name) field was not ready")
+        element.click()
+        element.typeKey("a", modifierFlags: .command)
+        element.typeText(value)
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", value),
+            object: element
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed, "\(name) did not retain the intended value \(value)")
+    }
+
+    private func requireRegularFixture(_ url: URL) throws {
+        guard url.isFileURL else {
+            throw NSError(domain: "TakeformCreatorWalkthrough", code: 6, userInfo: [NSLocalizedDescriptionKey: "Fixture must be a file URL"])
+        }
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else {
+            throw NSError(domain: "TakeformCreatorWalkthrough", code: 7, userInfo: [NSLocalizedDescriptionKey: "Fixture is not a regular file: \(url.path)"])
+        }
     }
 
     private func waitForNonexistence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {

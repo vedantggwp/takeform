@@ -74,8 +74,15 @@ grep -Eq 'filename: projectURL\.lastPathComponent' "$TEST_SOURCE"
 grep -Eq 'waitForPath\(projectURL' "$TEST_SOURCE"
 grep -Eq 'app\.buttons\.matching\(NSPredicate\(format: "identifier BEGINSWITH %@", "workspace-cli-grant-"\)\)' "$TEST_SOURCE"
 grep -Eq 'acceptSystemPanel\(path: source, confirmation: "Import footage"' "$TEST_SOURCE"
-grep -Eq 'folderField\.typeKey\("a", modifierFlags: \.command\)' "$TEST_SOURCE"
+grep -Eq 'try requireRegularFixture\(source\)' "$TEST_SOURCE"
+grep -Eq 'replaceText\(folderField, with: path\.path, named: "Go to Folder path"\)' "$TEST_SOURCE"
+grep -Eq 'predicate: NSPredicate\(format: "value == %@", value\)' "$TEST_SOURCE"
 grep -Eq 'value BEGINSWITH %@", "Revision "' "$TEST_SOURCE"
+grep -Eq 'let values = try url\.resourceValues\(forKeys: \[\.isRegularFileKey\]\)' "$TEST_SOURCE"
+if [ "$(grep -Ec '\.typeText\(' "$TEST_SOURCE")" -ne 1 ]; then
+  echo "creator walkthrough fields must use replaceText so prefilled values are never appended" >&2
+  exit 1
+fi
 grep -Eq 'TAKEFORM_CREATOR_WALKTHROUGH_TEST_CASE is required for run and validation modes' "$LAUNCHER"
 grep -Eq 'testCreateImportInspectComposeSaveAndReopen\|testPairCLIRejectsStaleRevisionAndRevocation\|testCopiedProjectRequiresNativeRebindAndCorruptionDoesNotOpen' "$LAUNCHER"
 grep -Eq 'only-testing:\$TEST_IDENTIFIER' "$LAUNCHER"
