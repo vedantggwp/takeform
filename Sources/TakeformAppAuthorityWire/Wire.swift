@@ -12,10 +12,20 @@ public enum AppAuthorityRequest: Codable, Sendable {
     case pair(URL, String, Date, Data)
     case revoke(URL, UUID, Data)
     case listGrants(URL, Data)
+    case requestRender(URL, CommandEnvelope, Data)
+    case renderStatus(URL, UUID, Data)
+    case cancelRender(URL, UUID, CommandID, Data)
+    case materializeRender(URL, UUID, CommandID, Data)
+    case exportRender(URL, UUID, CommandID, URL, EpisodeRenderExportDecision, Data)
     case pairedExecute(URL, CommandEnvelope, UUID, String)
     case pairedImport(URL, [URL], UUID, String)
+    case pairedRequestRender(URL, CommandEnvelope, UUID, String)
+    case pairedRenderStatus(URL, UUID, UUID, String)
+    case pairedCancelRender(URL, UUID, CommandID, UUID, String)
+    case pairedMaterializeRender(URL, UUID, CommandID, UUID, String)
+    case pairedExportRender(URL, UUID, CommandID, URL, EpisodeRenderExportDecision, UUID, String)
 }
-public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case importOutcomes([ManagedImportOutcome]); case pairing(UUID, String); case grants([CLIPairingSummary]); case success; case failure(WorkspaceFailure) }
+public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case importOutcomes([ManagedImportOutcome]); case pairing(UUID, String); case grants([CLIPairingSummary]); case renderStatus(EpisodeRenderRequestStatus); case renderMaterialization(EpisodeRenderMaterialization); case renderExport(EpisodeRenderExportResult); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocketFailure: Error { case unverifiedPeer }
 public final class AppAuthoritySocketListener: @unchecked Sendable {
     public let fileDescriptor: Int32

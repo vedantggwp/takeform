@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import CryptoKit
 import Darwin
 import Foundation
 import ImageIO
@@ -356,6 +357,34 @@ final class WorkspaceClientTests: XCTestCase {
         let importOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: pairedImport.output)
         guard case let .imported(asset) = importOutcomes.first else { return XCTFail("paired CLI did not import its source") }
         XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(".takeform/objects/\(asset.digest)")), bytes)
+
+        let afterImport = try authority.open().document
+        guard case let .applied(withEpisode) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: afterImport.revision, command: .createEpisode(name: "Render", recipeVersion: 1)), credential: credential).outcome,
+              let renderEpisode = withEpisode.episodes.first else { return XCTFail("render episode setup failed") }
+        let one = CompositionTime(value: 1, timescale: 1)!
+        let composition = EpisodeComposition(
+            episodeID: renderEpisode.id,
+            output: CompositionOutput(width: 2, height: 2, frameRate: one, duration: one),
+            occurrences: [CompositionOccurrence(assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: CompositionRange(start: .init(value: 0, timescale: 1)!, duration: one), layer: 0, order: 0, crop: CompositionCrop(x: .init(value: 0, timescale: 1)!, y: .init(value: 0, timescale: 1)!, width: one, height: one))],
+            captions: []
+        )
+        guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: withEpisode.revision, command: .replaceEpisodeComposition(episodeID: renderEpisode.id, composition: composition)), credential: credential).outcome else { return XCTFail("render composition setup failed") }
+        let compositionDigest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let renderEnvelope = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: renderEpisode.id, compositionDigest: compositionDigest, format: .mp4))
+        let pairedRender = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-request", package.path, grant.id.uuidString, String(decoding: try JSONEncoder().encode(renderEnvelope), as: UTF8.self)], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(pairedRender.status, 0, String(decoding: pairedRender.error, as: UTF8.self))
+        let renderResult = try JSONDecoder().decode(CommandResult.self, from: pairedRender.output)
+        guard case let .renderRequested(renderStatus) = renderResult.outcome else { return XCTFail("paired CLI did not receive a render request") }
+        XCTAssertEqual(renderStatus.availability, .unavailable, "CLI must not pretend an adapter published an artifact")
+        let pairedStatus = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-status", package.path, grant.id.uuidString, renderStatus.jobID.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(pairedStatus.status, 0, String(decoding: pairedStatus.error, as: UTF8.self))
+        XCTAssertEqual(try JSONDecoder().decode(EpisodeRenderRequestStatus.self, from: pairedStatus.output), renderStatus)
+        let destination = root.appendingPathComponent("existing-export.mp4")
+        try Data("do not clobber".utf8).write(to: destination)
+        let pairedExport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-export", package.path, grant.id.uuidString, renderStatus.jobID.uuidString, UUID().uuidString, destination.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(pairedExport.status, 0, String(decoding: pairedExport.error, as: UTF8.self))
+        guard case .unavailable = try JSONDecoder().decode(EpisodeRenderExportResult.self, from: pairedExport.output) else { return XCTFail("unavailable renderer claimed paired export") }
+        XCTAssertEqual(try Data(contentsOf: destination), Data("do not clobber".utf8))
 
         let scopedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, readOnlyGrant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(scopedImport.status, 0, String(decoding: scopedImport.error, as: UTF8.self))

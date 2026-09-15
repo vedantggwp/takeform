@@ -1,9 +1,11 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import XCTest
 @testable import TakeformAuthorityAppServiceCore
+import TakeformAppAuthorityWire
 import TakeformCore
 
 final class EpisodeCompositionTests: XCTestCase {
@@ -58,6 +60,14 @@ final class EpisodeCompositionTests: XCTestCase {
         let second = ManagedAsset(digest: String(repeating: "b", count: 64), byteLength: 11, filename: "second.png", mediaType: "image", probe: imageProbe)
         let composition = try makeComposition(episodeID: episode.id, asset: image, second: second, secondLayer: 1)
         XCTAssertNoThrow(try composition.validate(episodes: [episode], assets: [image, second]))
+        XCTAssertEqual(composition.occurrences[0].outputRect, try outputRect(0, 1, 0, 1, width: 1, 2, height: 1, 1))
+        XCTAssertEqual(composition.occurrences[1].outputRect, try outputRect(1, 2, 0, 1, width: 1, 2, height: 1, 1))
+
+        let lowerPanel = CompositionOccurrence(id: UUID(), assetID: image.id, assetDigest: image.digest, source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop(), outputRect: try outputRect(2, 8, 2, 8, width: 4, 8, height: 4, 8))
+        let nonzeroY = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1920, height: 1080, frameRate: try time(30), duration: try time(1)), occurrences: [lowerPanel], captions: [])
+        XCTAssertNoThrow(try nonzeroY.validate(episodes: [episode], assets: [image]))
+        let canonicalNonzeroY = try JSONDecoder().decode(EpisodeComposition.self, from: nonzeroY.canonicalData())
+        XCTAssertEqual(canonicalNonzeroY.occurrences[0].outputRect, try outputRect(1, 4, 1, 4, width: 1, 2, height: 1, 2))
 
         let ambiguous = try makeComposition(episodeID: episode.id, asset: image, second: second, secondLayer: 0)
         XCTAssertThrowsError(try ambiguous.validate(episodes: [episode], assets: [image, second])) { XCTAssertEqual($0 as? CompositionValidationFailure, .sameLayerOverlap) }
@@ -88,6 +98,10 @@ final class EpisodeCompositionTests: XCTestCase {
         let overflow = CompositionOccurrence(assetID: image.id, assetDigest: image.digest, source: .still, outputRange: try range(.max, 1), layer: 0, order: 0, crop: try crop())
         let overflowComposition = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1, height: 1, frameRate: try time(1), duration: try time(.max)), occurrences: [overflow], captions: [])
         XCTAssertThrowsError(try overflowComposition.validate(episodes: [episode], assets: [image])) { XCTAssertEqual($0 as? CompositionValidationFailure, .rationalOverflow) }
+
+        let invalidRect = CompositionOccurrence(assetID: image.id, assetDigest: image.digest, source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop(), outputRect: try outputRect(3, 4, 0, 1, width: 1, 2, height: 1, 1))
+        let invalidPlacement = EpisodeComposition(episodeID: episode.id, output: CompositionOutput(width: 1, height: 1, frameRate: try time(1), duration: try time(1)), occurrences: [invalidRect], captions: [])
+        XCTAssertThrowsError(try invalidPlacement.validate(episodes: [episode], assets: [image])) { XCTAssertEqual($0 as? CompositionValidationFailure, .invalidOutputRect) }
     }
 
     func testLegacyProjectDocumentDecodesWithoutCompositions() throws {
@@ -98,23 +112,88 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertTrue(try JSONDecoder().decode(ProjectDocument.self, from: legacy).episodeCompositions.isEmpty)
     }
 
+    func testRenderRequestIsAtomicIdempotentAndNeverClaimsMachineArtifact() throws {
+        let package = root.appendingPathComponent("Render.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        guard case let .applied(channel) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Harbor", initialRecipe: [:])), credential: credential).outcome else { return XCTFail("channel setup failed") }
+        guard case let .applied(episodes) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: channel.revision, command: .createEpisode(name: "Recap", recipeVersion: 1)), credential: credential).outcome,
+              let episode = episodes.episodes.first else { return XCTFail("episode setup failed") }
+        let source = root.appendingPathComponent("still.png")
+        try png().write(to: source)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: credential).first else { return XCTFail("asset setup failed") }
+        let beforeComposition = try authority.open().document
+        let composition = try makeComposition(episodeID: episode.id, asset: asset)
+        guard case let .applied(committed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: beforeComposition.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: composition)), credential: credential).outcome else { return XCTFail("composition setup failed") }
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let request = CommandEnvelope(expectedRevision: committed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4))
+
+        let first = try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential)
+        guard case let .renderRequested(status) = first.outcome else { return XCTFail("render request was not recorded") }
+        XCTAssertEqual(status.logicalState, .requested)
+        XCTAssertEqual(status.progress, .indeterminate)
+        XCTAssertEqual(status.availability, .unavailable)
+        XCTAssertEqual(status.requestedRevision, committed.revision)
+        XCTAssertEqual(try authority.open().document.revision, committed.revision, "logical render request must not revise portable document")
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "exact command replay must return stored request")
+        let malformedReplay = CommandEnvelope(id: request.id, expectedRevision: request.expectedRevision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4))
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(malformedReplay, credential: credential).outcome, .rejected(reason: "command-id-reused-with-different-request"), "a changed caller-supplied digest must not replay an accepted request")
+        let mismatch = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: committed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4)), credential: credential)
+        XCTAssertEqual(mismatch.outcome, .rejected(reason: "render-composition-digest-mismatch"))
+        let replacement = EpisodeComposition(episodeID: episode.id, output: composition.output, clipAudioPolicy: composition.clipAudioPolicy, occurrences: composition.occurrences, captions: [CompositionCaption(text: "Changed after render request", outputRange: try range(0, 3), layer: 2, order: 0)])
+        guard case let .applied(replaced) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: committed.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: replacement)), credential: credential).outcome else { return XCTFail("composition replacement failed") }
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "an exact request must replay after its episode composition later changes")
+        let stale = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: Revision(committed.revision.value - 1), command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)), credential: credential)
+        XCTAssertEqual(stale.outcome, .conflict(currentRevision: replaced.revision))
+
+        XCTAssertEqual(try authority.renderStatusForAuthenticatedCreator(jobID: status.jobID, credential: credential), status)
+        let cancelID = CommandID()
+        let cancelled = try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: cancelID, credential: credential)
+        XCTAssertEqual(cancelled.logicalState, .cancelled)
+        XCTAssertEqual(try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: cancelID, credential: credential), cancelled, "cancel operation replay must be idempotent")
+        let pairedToken = "paired-render-token"
+        let pairedGrant = try authority.issuePairedCLIGrant(credential: credential, label: "render", scopes: [.editProject], expiresAt: .distantFuture, rawToken: pairedToken)
+        guard case let .renderStatus(pairedStatus) = CreatorAuthorityService.respond(to: .pairedRenderStatus(package, status.jobID, pairedGrant.id, pairedToken), from: .cli) else { return XCTFail("paired status route failed") }
+        XCTAssertEqual(pairedStatus, cancelled)
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .requestRender(package, request, Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not use app creator render route") }
+        let materialized = try authority.materializeEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: CommandID(), credential: credential)
+        XCTAssertEqual(materialized, .unavailable(cancelled))
+        let destination = root.appendingPathComponent("export.mp4")
+        try Data("existing creator output".utf8).write(to: destination)
+        let exportID = CommandID()
+        let exported = try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: destination, decision: .refuseExisting, credential: credential)
+        XCTAssertEqual(exported, .unavailable(cancelled))
+        XCTAssertEqual(try Data(contentsOf: destination), Data("existing creator output".utf8), "unavailable renderer must not clobber an explicit destination")
+        XCTAssertEqual(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: destination, decision: .refuseExisting, credential: credential), exported, "an exact export retry must replay its result")
+        XCTAssertThrowsError(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: root.appendingPathComponent("other-export.mp4"), decision: .refuseExisting, credential: credential), "one export operation ID must not be reused for another destination")
+    }
+
+    func testLegacyOccurrenceDefaultsToFullCanvasOutputRect() throws {
+        let occurrence = CompositionOccurrence(assetID: UUID(), assetDigest: String(repeating: "a", count: 64), source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop())
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(occurrence)) as? [String: Any])
+        object.removeValue(forKey: "outputRect")
+        let legacy = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        XCTAssertEqual(try JSONDecoder().decode(CompositionOccurrence.self, from: legacy).outputRect, .fullCanvas)
+    }
+
     private var imageProbe: ManagedAssetProbe {
         ManagedAssetProbe(imageEncodedWidth: 1920, imageEncodedHeight: 1080, imageDisplayedWidth: 1920, imageDisplayedHeight: 1080, imageOrientation: 1)
     }
 
     private func makeComposition(episodeID: UUID, asset: ManagedAsset, second: ManagedAsset? = nil, secondLayer: Int = 1) throws -> EpisodeComposition {
         let output = CompositionOutput(width: 1920, height: 1080, frameRate: try time(30), duration: try time(12))
-        let first = CompositionOccurrence(assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: try range(0, 12), layer: 0, order: 0, crop: try crop())
+        let first = CompositionOccurrence(assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: try range(0, 12), layer: 0, order: 0, crop: try crop(), outputRect: try outputRect(0, 1, 0, 1, width: 1, 2, height: 1, 1))
         var occurrences = [first]
         if let second {
-            occurrences.append(CompositionOccurrence(assetID: second.id, assetDigest: second.digest, source: .still, outputRange: try range(6, 6), layer: secondLayer, order: 1, crop: try crop()))
+            occurrences.append(CompositionOccurrence(assetID: second.id, assetDigest: second.digest, source: .still, outputRange: try range(6, 6), layer: secondLayer, order: 1, crop: try crop(), outputRect: try outputRect(1, 2, 0, 1, width: 1, 2, height: 1, 1)))
         }
         return EpisodeComposition(episodeID: episodeID, output: output, occurrences: occurrences, captions: [CompositionCaption(text: "Harbor recap", outputRange: try range(0, 3), layer: 2, order: 0)])
     }
 
     private func equivalentComposition(_ original: EpisodeComposition, asset: ManagedAsset) throws -> EpisodeComposition {
         let output = CompositionOutput(width: 1920, height: 1080, frameRate: try time(60, 2), duration: try time(24, 2))
-        let occurrence = CompositionOccurrence(id: original.occurrences[0].id, assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: try range(0, 24, scale: 2), layer: 0, order: 0, crop: try crop())
+        let occurrence = CompositionOccurrence(id: original.occurrences[0].id, assetID: asset.id, assetDigest: asset.digest, source: .still, outputRange: try range(0, 24, scale: 2), layer: 0, order: 0, crop: try crop(), outputRect: original.occurrences[0].outputRect)
         return EpisodeComposition(episodeID: original.episodeID, output: output, occurrences: [occurrence], captions: [CompositionCaption(id: original.captions[0].id, text: "Harbor recap", outputRange: try range(0, 6, scale: 2), layer: 2, order: 0)])
     }
 
@@ -125,6 +204,7 @@ final class EpisodeCompositionTests: XCTestCase {
 
     private func range(_ start: Int64, _ duration: Int64, scale: Int32 = 1) throws -> CompositionRange { CompositionRange(start: try time(start, scale), duration: try time(duration, scale)) }
     private func crop() throws -> CompositionCrop { CompositionCrop(x: try time(0), y: try time(0), width: try time(1), height: try time(1)) }
+    private func outputRect(_ x: Int64, _ xScale: Int32, _ y: Int64, _ yScale: Int32, width: Int64, _ widthScale: Int32, height: Int64, _ heightScale: Int32) throws -> CompositionOutputRect { CompositionOutputRect(x: try time(x, xScale), y: try time(y, yScale), width: try time(width, widthScale), height: try time(height, heightScale)) }
 
     private func png() throws -> Data {
         let data = NSMutableData()
