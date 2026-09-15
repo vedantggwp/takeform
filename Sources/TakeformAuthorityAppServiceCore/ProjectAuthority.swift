@@ -11,6 +11,7 @@ public enum AuthorityFailure: Error, Equatable, LocalizedError {
     case newerSchema(Int)
     case copyDecisionRequired
     case unauthorized
+    case creationCleanupFailed
     public var errorDescription: String? { String(describing: self) }
 }
 
@@ -38,12 +39,20 @@ private struct PortableManifest: Codable {
 
 public final class ProjectAuthority {
     private let packageURL: URL
+    private let initialProjectID: UUID?
+    private let afterInitialBind: (() throws -> Void)?
     private var database: SQLiteDatabase!
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(packageURL: URL) throws {
+    public convenience init(packageURL: URL) throws {
+        try self.init(packageURL: packageURL, initialProjectID: nil, afterInitialBind: nil)
+    }
+
+    private init(packageURL: URL, initialProjectID: UUID?, afterInitialBind: (() throws -> Void)?) throws {
         self.packageURL = packageURL.standardizedFileURL
+        self.initialProjectID = initialProjectID
+        self.afterInitialBind = afterInitialBind
         guard !self.packageURL.path.contains("/.takeform/") else { throw AuthorityFailure.unauthorized }
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -65,8 +74,9 @@ public final class ProjectAuthority {
             try validateManifest(document, manifest: manifest)
         } else {
             guard !FileManager.default.fileExists(atPath: stateURL.appendingPathComponent("project.sqlite").path) else { throw AuthorityFailure.corruptDatabase }
-            document = ProjectDocument()
+            document = ProjectDocument(projectID: initialProjectID ?? UUID())
             _ = try bind(projectID: document.projectID, rebindMovedPackage: rebindMovedPackage)
+            try afterInitialBind?()
             try openDatabase()
             try initialize(document)
             manifest = PortableManifest(projectID: document.projectID, schema: 1, objects: [])
@@ -240,34 +250,42 @@ public final class ProjectAuthority {
 }
 
 extension ProjectAuthority {
-    static func createChannelPackage(at destination: URL, name: String, initialRecipe: [String: String], credential: String, afterInitialize: (() throws -> Void)? = nil) throws -> WorkspaceSnapshot {
+    static func createChannelPackage(at destination: URL, name: String, initialRecipe: [String: String], credential: String, afterInitialBind: (() throws -> Void)? = nil, afterInitialize: (() throws -> Void)? = nil) throws -> WorkspaceSnapshot {
         let destination = destination.standardizedFileURL
         guard !FileManager.default.fileExists(atPath: destination.path), !name.isEmpty else { throw AuthorityFailure.unauthorized }
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(destination.lastPathComponent).creating-\(UUID().uuidString)")
-        var temporaryProjectID: UUID?
+        let temporaryProjectID = UUID()
         var movedToDestination = false
-        var completed = false
-        defer {
-            if !completed {
-                try? FileManager.default.removeItem(at: temporary)
-                if movedToDestination { try? FileManager.default.removeItem(at: destination) }
-                if let temporaryProjectID, let machineStateURL = try? Self.machineStateURL(for: temporaryProjectID) {
-                    try? FileManager.default.removeItem(at: machineStateURL)
-                }
+        func removeOwnedArtifacts() -> Bool {
+            let ownedURLs = [temporary] + (movedToDestination ? [destination] : [])
+            var cleanupFailed = false
+            for url in ownedURLs where FileManager.default.fileExists(atPath: url.path) {
+                do { try FileManager.default.removeItem(at: url) }
+                catch { cleanupFailed = true }
             }
+            do {
+                let machineStateURL = try Self.machineStateURL(for: temporaryProjectID)
+                if FileManager.default.fileExists(atPath: machineStateURL.path) { try FileManager.default.removeItem(at: machineStateURL) }
+            } catch {
+                cleanupFailed = true
+            }
+            return cleanupFailed
         }
-        let authority = try ProjectAuthority(packageURL: temporary)
-        let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
-        temporaryProjectID = opened.document.projectID
-        try afterInitialize?()
-        let result = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: name, initialRecipe: initialRecipe)), credential: credential)
-        guard case let .applied(document) = result.outcome else { throw AuthorityFailure.unauthorized }
-        try FileManager.default.moveItem(at: temporary, to: destination)
-        movedToDestination = true
-        let moved = try ProjectAuthority(packageURL: destination)
-        _ = try moved.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
-        completed = true
-        return WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: destination.standardizedFileURL)
+        do {
+            let authority = try ProjectAuthority(packageURL: temporary, initialProjectID: temporaryProjectID, afterInitialBind: afterInitialBind)
+            let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+            try afterInitialize?()
+            let result = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: name, initialRecipe: initialRecipe)), credential: credential)
+            guard case let .applied(document) = result.outcome else { throw AuthorityFailure.unauthorized }
+            try FileManager.default.moveItem(at: temporary, to: destination)
+            movedToDestination = true
+            let moved = try ProjectAuthority(packageURL: destination)
+            _ = try moved.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
+            return WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: destination.standardizedFileURL)
+        } catch {
+            if removeOwnedArtifacts() { throw AuthorityFailure.creationCleanupFailed }
+            throw error
+        }
     }
 }
 

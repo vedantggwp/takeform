@@ -213,6 +213,10 @@ final class ProjectAuthorityTests: XCTestCase {
         let destination = root.appendingPathComponent("Atomic.takeform")
         let authorityRoot = try machineURL(for: UUID()).deletingLastPathComponent()
         let machineStateBefore = (try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? []
+        XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator", afterInitialBind: { throw NSError(domain: "test", code: 0) }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
+
         XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator") { throw NSError(domain: "test", code: 1) })
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
