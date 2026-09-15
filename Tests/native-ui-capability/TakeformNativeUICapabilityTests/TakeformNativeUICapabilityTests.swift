@@ -31,16 +31,21 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         XCTAssertTrue(about.waitForExistence(timeout: 5))
         about.click()
 
-        let aboutWindow = app.windows.matching(NSPredicate(format: "title == %@", "About Takeform")).firstMatch
-        XCTAssertTrue(aboutWindow.waitForExistence(timeout: 5), "Native About window did not appear")
-        XCTAssertTrue(aboutWindow.staticTexts["Takeform"].exists)
+        let aboutDialog = app.dialogs
+            .containing(.staticText, identifier: "Takeform")
+            .containing(.staticText, identifier: "Version 0.1.0 (1)")
+            .firstMatch
+        XCTAssertTrue(aboutDialog.waitForExistence(timeout: 5), "Native About dialog did not appear")
         XCTAssertTrue(
-            aboutWindow.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "0.1.0")).firstMatch.exists,
-            "Native About window did not expose its version"
+            aboutDialog.staticTexts.matching(NSPredicate(format: "value == %@", "Takeform")).firstMatch.exists
+        )
+        XCTAssertTrue(
+            aboutDialog.staticTexts.matching(NSPredicate(format: "value == %@", "Version 0.1.0 (1)")).firstMatch.exists,
+            "Native About dialog did not expose its version"
         )
         capture(app, named: "f1-04-about")
         app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(waitForDisappearance(of: aboutWindow, timeout: 5), "Native About window did not dismiss")
+        XCTAssertTrue(waitForDisappearance(of: aboutDialog, timeout: 5), "Native About dialog did not dismiss")
         XCTAssertTrue(app.windows.firstMatch.isHittable)
     }
 
@@ -120,31 +125,35 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         let startedAt = ProcessInfo.processInfo.systemUptime
         app.launch()
         let launchReturnedAt = ProcessInfo.processInfo.systemUptime
-        let window = app.windows.firstMatch
-        let windowExists = window.waitForExistence(timeout: 15)
-        let windowObservedAt = ProcessInfo.processInfo.systemUptime
+
+        let readyWindow = app.windows
+            .containing(.staticText, identifier: titleIdentifier)
+            .containing(.staticText, identifier: foundationText)
+            .firstMatch
+        let readinessQueryStartedAt = ProcessInfo.processInfo.systemUptime
+        let remainingReadyBudget = max(0, 3 - (readinessQueryStartedAt - startedAt))
+        let readyWindowExists = readyWindow.waitForExistence(timeout: remainingReadyBudget)
+        let readinessQueryReturnedAt = ProcessInfo.processInfo.systemUptime
+
         let title = app.staticTexts[titleIdentifier]
-        let titleExists = title.waitForExistence(timeout: 10)
-        let titleObservedAt = ProcessInfo.processInfo.systemUptime
+        let titleExistsAfterGate = title.exists
         let foundation = app.staticTexts[foundationText]
-        let foundationExists = foundation.waitForExistence(timeout: 5)
-        let foundationObservedAt = ProcessInfo.processInfo.systemUptime
-        let elapsed = foundationObservedAt - startedAt
+        let foundationExistsAfterGate = foundation.exists
         attachWarmReadyTiming(
             startedAt: startedAt,
             launchReturnedAt: launchReturnedAt,
-            windowObservedAt: windowObservedAt,
-            titleObservedAt: titleObservedAt,
-            foundationObservedAt: foundationObservedAt,
-            windowExists: windowExists,
-            titleExists: titleExists,
-            foundationExists: foundationExists
+            readinessQueryStartedAt: readinessQueryStartedAt,
+            readinessQueryReturnedAt: readinessQueryReturnedAt,
+            remainingReadyBudget: remainingReadyBudget,
+            readyWindowExists: readyWindowExists,
+            titleExistsAfterGate: titleExistsAfterGate,
+            foundationExistsAfterGate: foundationExistsAfterGate
         )
-        XCTAssertTrue(windowExists, "The copied F1 main window did not appear after relaunch")
-        XCTAssertTrue(titleExists, "F1 title accessibility identifier was not exposed after relaunch")
+        XCTAssertTrue(readyWindowExists, "The copied F1 main window did not expose both required accessibility sentinels within three seconds")
+        XCTAssertTrue(titleExistsAfterGate, "F1 title accessibility identifier was not exposed after relaunch")
         assertAccessibleTitle(title)
-        XCTAssertTrue(foundationExists, "Known F1 foundation text was not exposed after relaunch")
-        XCTAssertLessThanOrEqual(elapsed, 3, "Warm copied-app visible-ready latency exceeded three seconds")
+        XCTAssertTrue(foundationExistsAfterGate, "Known F1 foundation text was not exposed after relaunch")
+        XCTAssertLessThanOrEqual(readinessQueryReturnedAt - startedAt, 3, "Warm copied-app visible-ready latency exceeded three seconds")
         capture(app, named: "f1-10-relaunch")
         recordCaseEvidence(app, named: "f1-10-relaunch-final")
         app.terminate()
@@ -213,23 +222,24 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     private func attachWarmReadyTiming(
         startedAt: TimeInterval,
         launchReturnedAt: TimeInterval,
-        windowObservedAt: TimeInterval,
-        titleObservedAt: TimeInterval,
-        foundationObservedAt: TimeInterval,
-        windowExists: Bool,
-        titleExists: Bool,
-        foundationExists: Bool
+        readinessQueryStartedAt: TimeInterval,
+        readinessQueryReturnedAt: TimeInterval,
+        remainingReadyBudget: TimeInterval,
+        readyWindowExists: Bool,
+        titleExistsAfterGate: Bool,
+        foundationExistsAfterGate: Bool
     ) {
         let evidence = """
         warmLaunchStartedAt: \(startedAt)
         launchReturnedAt: \(launchReturnedAt)
-        windowObservedAt: \(windowObservedAt)
-        titleObservedAt: \(titleObservedAt)
-        foundationObservedAt: \(foundationObservedAt)
-        driverInclusiveVisibleReadySeconds: \(foundationObservedAt - startedAt)
-        windowExists: \(windowExists)
-        titleExists: \(titleExists)
-        foundationExists: \(foundationExists)
+        readinessQueryStartedAt: \(readinessQueryStartedAt)
+        readinessQueryReturnedAt: \(readinessQueryReturnedAt)
+        remainingReadyBudgetSeconds: \(remainingReadyBudget)
+        singleQueryVisibleReadySeconds: \(readinessQueryReturnedAt - startedAt)
+        singleQueryRoundTripSeconds: \(readinessQueryReturnedAt - readinessQueryStartedAt)
+        readyWindowContainsBothSentinels: \(readyWindowExists)
+        titleExistsAfterGate: \(titleExistsAfterGate)
+        foundationExistsAfterGate: \(foundationExistsAfterGate)
         """
         attach(evidence, named: "f1-10-warm-ready")
     }

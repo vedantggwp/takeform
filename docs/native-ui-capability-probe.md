@@ -47,12 +47,13 @@ an app screenshot and the actual title element's type, identifier, label,
 value and debug hierarchy before teardown, including on an assertion failure.
 The title contract is limited to an exact static-text role and its exact
 displayed Accessibility value, as documented for `NSAccessibilityStaticText`;
-it does not treat arbitrary control values as labels. The warm-ready record
-separates monotonic launch-return, window, title and foundation timestamps.
-Its driver-inclusive visible-ready value remains subject to the three-second
-F1 bound; the individual timestamps avoid treating sequential XCTest waits as
-an unexamined product-only measurement. Appearance selection uses the native
-Settings picker and never changes the runner's System Settings.
+it does not treat arbitrary control values as labels. Warm readiness starts
+before `launch()`, records launch return, then uses one public main-window AX
+query requiring both title and foundation descendants under the unchanged
+three-second budget. It retains query-enter/query-return timestamps and the
+post-gate title/foundation checks, so serial XCTest waits cannot be mistaken
+for product readiness. Appearance selection uses the native Settings picker
+and never changes the runner's System Settings.
 
 The launcher passes the copied-app path only to the XCTest runner as
 `TEST_RUNNER_TAKEFORM_UI_PROBE_APP`. Xcode strips the prefix before the test
