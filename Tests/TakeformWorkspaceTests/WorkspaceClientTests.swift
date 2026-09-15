@@ -2,6 +2,7 @@ import XCTest
 @testable import TakeformWorkspace
 @_spi(Testing) import TakeformAppServiceClient
 @_spi(Testing) @testable import TakeformAppAuthorityWire
+@testable import TakeformAuthorityAppServiceCore
 import TakeformCore
 
 final class WorkspaceClientTests: XCTestCase {
@@ -82,6 +83,7 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertNil(ownedPID)
         let reapedPID = await client.lastReapedPID()
         XCTAssertEqual(reapedPID, livePID)
+        if let livePID { XCTAssertEqual(Darwin.kill(livePID, 0), -1) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
     }
 
@@ -101,11 +103,20 @@ final class WorkspaceClientTests: XCTestCase {
         await owner.shutdown()
         let reapedPID = await owner.lastReapedPID()
         XCTAssertEqual(reapedPID, ownedPID)
+        if let ownedPID { XCTAssertEqual(Darwin.kill(ownedPID, 0), -1) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
         try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/takeform"), to: root.appendingPathComponent("takeform"))
         try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/TakeformAuthorityAppService"), to: root.appendingPathComponent("TakeformAuthorityAppService"))
-        let package = root.appendingPathComponent("Unchanged.takeform")
-        let command = CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "Denied", initialRecipe: [:]))
+        let package = root.appendingPathComponent("Committed.takeform")
+        let authority = try ProjectAuthority(packageURL: package)
+        let opened = try authority.openForAuthenticatedCreator(credential: "creator", rebindMovedPackage: false)
+        let created = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: "Kept", initialRecipe: [:])), credential: "creator")
+        guard case let .applied(document) = created.outcome else { return XCTFail("fixture project was not committed") }
+        let database = package.appendingPathComponent(".takeform/project.sqlite")
+        let manifest = package.appendingPathComponent(".takeform/manifest.json")
+        let binding = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Takeform/Authority/\(document.projectID.uuidString)/binding.json")
+        let before = [try Data(contentsOf: database), try Data(contentsOf: manifest), try Data(contentsOf: binding)]
+        let command = CommandEnvelope(expectedRevision: document.revision, command: .renameChannel(name: "Denied"))
         let process = Process(); let stderr = Pipe(); process.executableURL = root.appendingPathComponent("takeform")
         process.arguments = ["execute", package.path, UUID().uuidString, String(decoding: try JSONEncoder().encode(command), as: UTF8.self)]
         process.environment = ["TAKEFORM_AUTHORITY_SOCKET": socket.path]
@@ -113,6 +124,8 @@ final class WorkspaceClientTests: XCTestCase {
         let message = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         XCTAssertNotEqual(process.terminationStatus, 0)
         XCTAssertTrue(message.contains("open Takeform"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: package.path))
+        XCTAssertEqual(try Data(contentsOf: database), before[0])
+        XCTAssertEqual(try Data(contentsOf: manifest), before[1])
+        XCTAssertEqual(try Data(contentsOf: binding), before[2])
     }
 }
