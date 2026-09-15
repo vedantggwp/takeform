@@ -141,6 +141,14 @@ final class WorkspaceModel: ObservableObject {
         verifiedAssetSelection = nil
     }
 
+    private func publishWorkspaceSnapshot(_ value: WorkspaceSnapshot) {
+        // A result from another workspace operation is a newer authority
+        // snapshot. Drop any selection that was verified while it was in
+        // flight, rather than combining an old object verification with it.
+        invalidateSelection()
+        snapshot = value
+    }
+
     private static func samePackage(_ lhs: URL?, _ rhs: URL) -> Bool {
         lhs?.standardizedFileURL == rhs.standardizedFileURL
     }
@@ -168,7 +176,7 @@ final class WorkspaceModel: ObservableObject {
                 guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
                 let grants = (try? await client.listCLIGrants(packageURL: url)) ?? []
                 guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, url) else { return }
-                snapshot = result
+                publishWorkspaceSnapshot(result)
                 cliGrants = grants
                 selectedGrantID = cliGrants.contains(where: { $0.id == selectedGrantID }) ? selectedGrantID : nil
                 pendingRebindURL = nil
@@ -272,7 +280,7 @@ final class WorkspaceModel: ObservableObject {
                 self.status = outcomes.map(Self.importMessage).joined(separator: "\n")
                 let opened = try await self.client.open(packageURL: packageURL, rebindMovedPackage: false)
                 guard !Task.isCancelled, self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, packageURL) else { return }
-                self.snapshot = opened
+                self.publishWorkspaceSnapshot(opened)
                 self.requestedPackageURL = nil
             } catch let failure as WorkspaceFailure {
                 guard !Task.isCancelled, self.workspaceGeneration == generation else { return }
@@ -313,7 +321,7 @@ final class WorkspaceModel: ObservableObject {
                     let document = created.document
                     let grants = (try? await self.client.listCLIGrants(packageURL: url)) ?? []
                     guard self.workspaceGeneration == generation, Self.samePackage(self.requestedPackageURL, url) else { return }
-                    self.snapshot = created
+                    self.publishWorkspaceSnapshot(created)
                     self.cliGrants = grants
                     self.requestedPackageURL = nil
                     self.status = "Created \(name) at revision \(document.revision.value)."
@@ -344,7 +352,7 @@ final class WorkspaceModel: ObservableObject {
                 guard workspaceGeneration == generation, Self.samePackage(requestedPackageURL, packageURL) else { return }
                 status = WorkspacePresentation.commandMessage(result)
                 if case .applied(let next) = result.outcome {
-                    snapshot = WorkspaceSnapshot(document: next, projectionMatches: true, packageURL: packageURL)
+                    publishWorkspaceSnapshot(WorkspaceSnapshot(document: next, projectionMatches: true, packageURL: packageURL))
                     selectedEpisodeID = selectedEpisodeID ?? next.episodes.first?.id
                 }
                 requestedPackageURL = nil

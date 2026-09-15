@@ -13,6 +13,7 @@ import TakeformCore
 
 private actor DelayedOpenWorkspaceClient: WorkspaceClient {
     private var openContinuations: [CheckedContinuation<WorkspaceSnapshot, Error>] = []
+    private var importContinuations: [CheckedContinuation<[ManagedImportOutcome], Error>] = []
 
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot {
         try await withCheckedThrowingContinuation { openContinuations.append($0) }
@@ -26,7 +27,17 @@ private actor DelayedOpenWorkspaceClient: WorkspaceClient {
         openContinuations[index].resume(returning: snapshot)
     }
 
-    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] { throw WorkspaceFailure.authorityUnavailable }
+    func importMedia(packageURL: URL, sources: [URL]) async throws -> [ManagedImportOutcome] {
+        try await withCheckedThrowingContinuation { importContinuations.append($0) }
+    }
+
+    func waitForImportCount(_ count: Int) async {
+        while importContinuations.count < count { await Task.yield() }
+    }
+
+    func finishImport(_ index: Int, with outcomes: [ManagedImportOutcome]) {
+        importContinuations[index].resume(returning: outcomes)
+    }
     func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { throw WorkspaceFailure.authorityUnavailable }
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { throw WorkspaceFailure.authorityUnavailable }
     func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws { throw WorkspaceFailure.authorityUnavailable }
@@ -76,6 +87,39 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(verified?.asset, second)
         XCTAssertEqual(verified?.packageURL, package)
         XCTAssertEqual(verified?.revision, Revision(7))
+    }
+
+    func testImportSnapshotInvalidatesSelectionVerifiedWhileImportWasPending() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/import-selection-race.takeform", isDirectory: true)
+        let asset = ManagedAsset(digest: String(repeating: "c", count: 64), byteLength: 3, filename: "source.png", mediaType: "image")
+        let initial = WorkspaceSnapshot(document: ProjectDocument(assets: [asset], revision: Revision(7)), projectionMatches: true, packageURL: package)
+        let refreshed = WorkspaceSnapshot(document: ProjectDocument(assets: [asset], revision: Revision(8)), projectionMatches: true, packageURL: package)
+        let client = DelayedOpenWorkspaceClient()
+        let model = await MainActor.run { WorkspaceModel(client: client) }
+
+        await MainActor.run { model.open(package, rebind: false) }
+        await client.waitForOpenCount(1)
+        await client.finishOpen(0, with: initial)
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+
+        await MainActor.run { model.importDroppedMedia([URL(fileURLWithPath: "/private/tmp/source.png")]) }
+        await client.waitForImportCount(1)
+        await MainActor.run { model.selectAsset(asset) }
+        await client.waitForOpenCount(2)
+        await client.finishOpen(1, with: initial)
+        for _ in 0..<100 where await MainActor.run(body: { model.verifiedAssetSelection == nil }) { await Task.yield() }
+        let selectionBeforeImportRefresh = await MainActor.run { model.verifiedAssetSelection }
+        XCTAssertEqual(selectionBeforeImportRefresh?.revision, Revision(7))
+
+        await client.finishImport(0, with: [])
+        await client.waitForOpenCount(3)
+        await client.finishOpen(2, with: refreshed)
+        for _ in 0..<100 where await MainActor.run(body: { model.document?.revision != Revision(8) }) { await Task.yield() }
+
+        let selection = await MainActor.run { model.verifiedAssetSelection }
+        let refreshedRevision = await MainActor.run { model.document?.revision }
+        XCTAssertNil(selection)
+        XCTAssertEqual(refreshedRevision, Revision(8))
     }
     private func validPNG() -> Data {
         let data = NSMutableData()
