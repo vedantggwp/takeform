@@ -178,6 +178,8 @@ final class WorkspaceClientTests: XCTestCase {
         let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
         let rawToken = "paired-\(UUID().uuidString)"
         let grant = try authority.issuePairedCLIGrant(credential: credential, label: "process test", scopes: [.editProject], expiresAt: .distantFuture, rawToken: rawToken)
+        let readOnlyToken = "paired-read-\(UUID().uuidString)"
+        let readOnlyGrant = try authority.issuePairedCLIGrant(credential: credential, label: "read only", scopes: [.readProject], expiresAt: .distantFuture, rawToken: readOnlyToken)
         let probe = CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Wire probe", initialRecipe: [:]))
         let encodedRequest = try JSONEncoder().encode(AppAuthorityRequest.pairedExecute(package, probe, grant.id, rawToken))
         guard case let .pairedExecute(decodedPackage, _, decodedGrant, decodedToken) = try JSONDecoder().decode(AppAuthorityRequest.self, from: encodedRequest) else {
@@ -190,12 +192,15 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(try ProjectAuthority(packageURL: decodedPackage).open().document, initial)
         defer {
             _ = try? runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["forget-paired-credential", grant.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+            _ = try? runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["forget-paired-credential", readOnlyGrant.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
             try? FileManager.default.removeItem(at: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Takeform/Authority/\(initial.projectID.uuidString)"))
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: socket)
         }
         let imported = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", grant.id.uuidString], input: rawToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(imported.status, 0, String(decoding: imported.error, as: UTF8.self))
+        let importedReadOnly = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", readOnlyGrant.id.uuidString], input: readOnlyToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(importedReadOnly.status, 0, String(decoding: importedReadOnly.error, as: UTF8.self))
 
         let service = Process(); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }
         try service.run()
@@ -211,5 +216,25 @@ final class WorkspaceClientTests: XCTestCase {
         guard case let .applied(document) = result.outcome else { return XCTFail("paired CLI did not receive applied result") }
         XCTAssertEqual(document.channel?.name, "Paired")
         XCTAssertEqual(document.revision, Revision(1))
+
+        let source = root.appendingPathComponent("paired-import.mov")
+        let bytes = Data(repeating: 0x44, count: 90_000)
+        try bytes.write(to: source)
+        let pairedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, grant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(pairedImport.status, 0, String(decoding: pairedImport.error, as: UTF8.self))
+        let importOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: pairedImport.output)
+        guard case let .imported(asset) = importOutcomes.first else { return XCTFail("paired CLI did not import its source") }
+        XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(".takeform/objects/\(asset.digest)")), bytes)
+
+        let scopedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, readOnlyGrant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(scopedImport.status, 0, String(decoding: scopedImport.error, as: UTF8.self))
+        let scopedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: scopedImport.output)
+        guard case .failed = scopedOutcomes.first else { return XCTFail("read-only paired grant imported media") }
+        try authority.revokePairedCLIGrant(credential: credential, grantID: grant.id)
+        let revokedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, grant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(revokedImport.status, 0, String(decoding: revokedImport.error, as: UTF8.self))
+        let revokedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: revokedImport.output)
+        guard case .failed = revokedOutcomes.first else { return XCTFail("revoked paired grant imported media") }
+        XCTAssertEqual(try authority.open().document.assets, [asset])
     }
 }
