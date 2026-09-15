@@ -381,6 +381,13 @@ final class WorkspaceClientTests: XCTestCase {
         )
         guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: withEpisode.revision, command: .replaceEpisodeComposition(episodeID: renderEpisode.id, composition: composition)), credential: credential).outcome else { return XCTFail("render composition setup failed") }
         let compositionDigest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let contextInvocation = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, grant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(contextInvocation.status, 0, String(decoding: contextInvocation.error, as: UTF8.self))
+        let context = try JSONDecoder().decode(EpisodeRenderContext.self, from: contextInvocation.output)
+        XCTAssertEqual(context.episodeID, renderEpisode.id)
+        XCTAssertEqual(context.revision, composed.revision)
+        XCTAssertEqual(context.compositionDigest, compositionDigest)
+        XCTAssertEqual(context.output, composition.output)
         let renderEnvelope = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: renderEpisode.id, compositionDigest: compositionDigest, format: .mp4))
         let pairedRender = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-request", package.path, grant.id.uuidString, String(decoding: try JSONEncoder().encode(renderEnvelope), as: UTF8.self)], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(pairedRender.status, 0, String(decoding: pairedRender.error, as: UTF8.self))
@@ -404,11 +411,15 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(scopedImport.status, 0, String(decoding: scopedImport.error, as: UTF8.self))
         let scopedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: scopedImport.output)
         guard case .failed = scopedOutcomes.first else { return XCTFail("read-only paired grant imported media") }
+        let scopedContext = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, readOnlyGrant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(scopedContext.status, 3, "a grant without editProject must not read render request inputs")
         try authority.revokePairedCLIGrant(credential: credential, grantID: grant.id)
         let revokedImport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import", package.path, grant.id.uuidString, source.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(revokedImport.status, 0, String(decoding: revokedImport.error, as: UTF8.self))
         let revokedOutcomes = try JSONDecoder().decode([ManagedImportOutcome].self, from: revokedImport.output)
         guard case .failed = revokedOutcomes.first else { return XCTFail("revoked paired grant imported media") }
+        let revokedContext = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-context", package.path, grant.id.uuidString, renderEpisode.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(revokedContext.status, 3, "a revoked grant must not read render request inputs")
         XCTAssertEqual(try authority.open().document.assets, [asset])
     }
 }

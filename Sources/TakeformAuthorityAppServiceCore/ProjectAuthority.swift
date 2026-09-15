@@ -409,6 +409,19 @@ public final class ProjectAuthority {
         try renderAttemptInput(jobID: jobID).status
     }
 
+    private func renderContext(episodeID: UUID, document: ProjectDocument) throws -> EpisodeRenderContext {
+        guard let composition = document.episodeCompositions.first(where: { $0.episodeID == episodeID }) else {
+            throw AuthorityFailure.invalidComposition(.episodeMismatch)
+        }
+        try composition.validate(episodes: document.episodes, assets: document.assets)
+        return EpisodeRenderContext(
+            episodeID: episodeID,
+            revision: document.revision,
+            compositionDigest: digest(of: try composition.canonicalData()),
+            output: composition.output
+        )
+    }
+
     /// Called only by the app-service-owned worker coordinator. A late receipt
     /// cannot change a cancelled or superseded logical request.
     func transitionRenderRequest(jobID: UUID, snapshotSHA256: String, to state: EpisodeRenderLogicalState) throws -> EpisodeRenderRequestStatus {
@@ -657,6 +670,23 @@ extension ProjectAuthority {
 
     func renderAttemptInputForPairedCLI(jobID: UUID, grantID: UUID, token: String) throws -> RenderAttemptInput {
         _ = try openForPairedImport(grantID: grantID, token: token)
+        return try renderAttemptInput(jobID: jobID)
+    }
+
+    /// A paired caller may obtain only the current portable render context it
+    /// needs to form a revision- and digest-bound request. It receives no
+    /// machine-local artifact or object path.
+    public func renderContextForPairedCLI(episodeID: UUID, grantID: UUID, token: String) throws -> EpisodeRenderContext {
+        let opened = try openForPairedImport(grantID: grantID, token: token)
+        return try renderContext(episodeID: episodeID, document: opened.document)
+    }
+
+    /// This app-only read operation is separately fingerprinted from
+    /// materialize and export. The returned input contains no persisted
+    /// machine path; the coordinator revalidates its artifact immediately.
+    func playbackAttemptInputForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> RenderAttemptInput {
+        _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        _ = try recordReadOperation(jobID: jobID, operationID: operationID, kind: "playback")
         return try renderAttemptInput(jobID: jobID)
     }
 
