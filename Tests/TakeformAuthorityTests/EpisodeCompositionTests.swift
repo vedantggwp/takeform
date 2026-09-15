@@ -266,6 +266,53 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertEqual(late.logicalState, .cancelled, "a retained worker receipt cannot revive a cancelled request")
     }
 
+    func testRecoveryInterruptsOrphanedRequestedRenderWithoutStartingAnotherWorker() throws {
+        let fixture = try requestedRender(named: "Interrupted")
+        guard case let .renderStatus(status) = CreatorAuthorityService.respond(to: .renderStatus(fixture.package, fixture.status.jobID, Data(fixture.credential.utf8)), from: .app) else { return XCTFail("service status route failed") }
+        XCTAssertEqual(status.logicalState, .interrupted)
+        XCTAssertEqual(status.availability, .unavailable)
+        XCTAssertEqual(try fixture.authority.renderAttemptInputForAuthenticatedCreator(jobID: fixture.status.jobID, credential: fixture.credential).status.logicalState, .interrupted)
+    }
+
+    func testRecoveryAcceptsOnlyMarkerBoundVerifiedCompletion() throws {
+        let fixture = try requestedRender(named: "Recovered")
+        let runtime = try fakeRenderRuntime()
+        let coordinator = RenderExecutionCoordinator { _ in runtime }
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Takeform/Authority/\(fixture.input.snapshot.projectID.uuidString)/renders/\(fixture.status.jobID.uuidString)")
+        let attemptID = UUID()
+        let stage = root.appendingPathComponent("\(attemptID.uuidString).stage")
+        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
+        let snapshotSHA = SHA256.hash(data: fixture.input.snapshotJSON).map { String(format: "%02x", $0) }.joined()
+        let marker: [String: Any] = ["schemaVersion": 1, "projectID": fixture.input.snapshot.projectID.uuidString, "jobID": fixture.status.jobID.uuidString, "attemptID": attemptID.uuidString, "snapshotSHA256": snapshotSHA, "machineBindingDigest": fixture.input.machineBindingDigest]
+        try JSONSerialization.data(withJSONObject: marker, options: [.sortedKeys]).write(to: stage.appendingPathComponent("attempt-owner.json"))
+        let bytes = Data("render".utf8)
+        try bytes.write(to: stage.appendingPathComponent("render.mp4"))
+        let sha = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let receipt: [String: Any] = ["schemaVersion": 1, "jobID": fixture.status.jobID.uuidString, "attemptID": attemptID.uuidString, "outcome": "succeeded", "input": ["compositionDigest": "ignored", "snapshotSHA256": snapshotSHA, "assets": []], "artifact": ["fileName": "render.mp4", "byteLength": bytes.count, "sha256": sha]]
+        try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys]).write(to: stage.appendingPathComponent("attempt-receipt.json"))
+        coordinator.reconcile(authority: fixture.authority)
+        let final = try fixture.authority.renderAttemptInputForAuthenticatedCreator(jobID: fixture.status.jobID, credential: fixture.credential)
+        XCTAssertEqual(final.status.logicalState, .completed)
+        XCTAssertEqual(coordinator.availability(for: final), .available)
+    }
+
+    func testWrongCanvasReceiptCannotPublishRenderArtifact() throws {
+        let fixture = try requestedRender(named: "WrongCanvas")
+        let wrongProbe = "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\",\\\"width\\\":1280,\\\"height\\\":720,\\\"avg_frame_rate\\\":\\\"30/1\\\",\\\"nb_frames\\\":\\\"360\\\"}],\\\"format\\\":{\\\"duration\\\":\\\"12.0\\\"}}\\n'; fi\n"
+        let runtime = try fakeRenderRuntime(ffprobeScript: wrongProbe)
+        let coordinator = RenderExecutionCoordinator { _ in runtime }
+        XCTAssertEqual(coordinator.start(authority: fixture.authority, input: fixture.input), .running)
+        for _ in 0..<100 {
+            let current = try fixture.authority.renderAttemptInputForAuthenticatedCreator(jobID: fixture.status.jobID, credential: fixture.credential)
+            if current.status.logicalState != .requested { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        let final = try fixture.authority.renderAttemptInputForAuthenticatedCreator(jobID: fixture.status.jobID, credential: fixture.credential)
+        XCTAssertEqual(final.status.logicalState, .failed)
+        XCTAssertEqual(coordinator.materialization(for: final), .unavailable(final.status))
+    }
+
     func testLegacyOccurrenceDefaultsToFullCanvasOutputRect() throws {
         let occurrence = CompositionOccurrence(assetID: UUID(), assetDigest: String(repeating: "a", count: 64), source: .still, outputRange: try range(0, 1), layer: 0, order: 0, crop: try crop())
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(occurrence)) as? [String: Any])
@@ -276,6 +323,26 @@ final class EpisodeCompositionTests: XCTestCase {
 
     private var imageProbe: ManagedAssetProbe {
         ManagedAssetProbe(imageEncodedWidth: 1920, imageEncodedHeight: 1080, imageDisplayedWidth: 1920, imageDisplayedHeight: 1080, imageOrientation: 1)
+    }
+
+    private func requestedRender(named name: String) throws -> (authority: ProjectAuthority, package: URL, credential: String, status: EpisodeRenderRequestStatus, input: RenderAttemptInput) {
+        let package = root.appendingPathComponent("\(name).takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        guard case let .applied(channel) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Harbor", initialRecipe: [:])), credential: credential).outcome,
+              case let .applied(episodes) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: channel.revision, command: .createEpisode(name: "Recap", recipeVersion: 1)), credential: credential).outcome,
+              let episode = episodes.episodes.first else { throw AuthorityFailure.corruptDatabase }
+        let source = root.appendingPathComponent("\(name).png")
+        try png().write(to: source)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: credential).first else { throw AuthorityFailure.corruptDatabase }
+        let imported = try authority.open().document
+        let composition = try makeComposition(episodeID: episode.id, asset: asset)
+        guard case let .applied(composed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: imported.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: composition)), credential: credential).outcome else { throw AuthorityFailure.corruptDatabase }
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let request = CommandEnvelope(expectedRevision: composed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4))
+        guard case let .renderRequested(status) = try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential).outcome else { throw AuthorityFailure.corruptDatabase }
+        return (authority, package, credential, status, try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: credential))
     }
 
     private func makeComposition(episodeID: UUID, asset: ManagedAsset, second: ManagedAsset? = nil, secondLayer: Int = 1) throws -> EpisodeComposition {
@@ -315,7 +382,7 @@ final class EpisodeCompositionTests: XCTestCase {
         return data as Data
     }
 
-    private func fakeRenderRuntime(workerScript: String? = nil) throws -> RenderWorkerRuntime {
+    private func fakeRenderRuntime(workerScript: String? = nil, ffprobeScript: String? = nil) throws -> RenderWorkerRuntime {
         let runtime = root.appendingPathComponent("fake-runtime")
         try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
         let node = runtime.appendingPathComponent("node")
@@ -328,7 +395,8 @@ final class EpisodeCompositionTests: XCTestCase {
         try (workerScript ?? defaultWorker).write(to: worker, atomically: true, encoding: .utf8)
         try "#!/bin/sh\necho FakeTool 1.0\n".write(to: browser, atomically: true, encoding: .utf8)
         try "#!/bin/sh\necho FakeTool 1.0\n".write(to: ffmpeg, atomically: true, encoding: .utf8)
-        try "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\"}]}\\n'; fi\n".write(to: ffprobe, atomically: true, encoding: .utf8)
+        let defaultProbe = "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\",\\\"width\\\":1920,\\\"height\\\":1080,\\\"avg_frame_rate\\\":\\\"30/1\\\",\\\"nb_frames\\\":\\\"360\\\"}],\\\"format\\\":{\\\"duration\\\":\\\"12.0\\\"}}\\n'; fi\n"
+        try (ffprobeScript ?? defaultProbe).write(to: ffprobe, atomically: true, encoding: .utf8)
         for url in [node, worker, browser, ffmpeg, ffprobe] { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path) }
         return RenderWorkerRuntime(node: node, worker: worker, runtimeRoot: runtime, browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe)
     }

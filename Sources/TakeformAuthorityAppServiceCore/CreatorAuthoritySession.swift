@@ -45,6 +45,7 @@ public enum CreatorAuthorityService {
         case let .open(url, rebind, credential):
             let authority = try ProjectAuthority(packageURL: url)
             let opened = try authority.openForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self), rebindMovedPackage: rebind)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
             return .snapshot(WorkspaceSnapshot(document: opened.document, projectionMatches: opened.projectionMatches, packageURL: url))
         case let .create(url, name, recipe, credential):
             return .snapshot(try ProjectAuthority.createChannelPackage(at: url, name: name, initialRecipe: recipe, credential: String(decoding: credential, as: UTF8.self)))
@@ -66,6 +67,8 @@ public enum CreatorAuthorityService {
         case let .requestRender(url, envelope, credential):
             let authority = try ProjectAuthority(packageURL: url)
             let creator = String(decoding: credential, as: UTF8.self)
+            _ = try authority.openForAuthenticatedCreator(credential: creator, rebindMovedPackage: false)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
             let result = try authority.requestEpisodeRenderForAuthenticatedCreator(envelope, credential: creator)
             if case let .renderRequested(status) = result.outcome {
                 let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: creator)
@@ -74,7 +77,10 @@ public enum CreatorAuthorityService {
             return .result(result)
         case let .renderStatus(url, jobID, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: String(decoding: credential, as: UTF8.self))
+            let creator = String(decoding: credential, as: UTF8.self)
+            _ = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: creator)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
+            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: creator)
             return .renderStatus(observedRenderStatus(input))
         case let .cancelRender(url, jobID, operationID, credential):
             let authority = try ProjectAuthority(packageURL: url)
@@ -101,6 +107,8 @@ public enum CreatorAuthorityService {
             return .importOutcomes(try authority.importManagedSources(sources, grantID: grantID, token: token))
         case let .pairedRequestRender(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
+            _ = try authority.openForPairedRender(grantID: grantID, token: token)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
             let result = try authority.requestEpisodeRenderForPairedCLI(envelope, grantID: grantID, token: token)
             if case let .renderRequested(status) = result.outcome {
                 let input = try authority.renderAttemptInputForPairedCLI(jobID: status.jobID, grantID: grantID, token: token)
@@ -109,6 +117,8 @@ public enum CreatorAuthorityService {
             return .result(result)
         case let .pairedRenderStatus(url, jobID, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
+            _ = try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
             return .renderStatus(observedRenderStatus(try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)))
         case let .pairedCancelRender(url, jobID, operationID, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)

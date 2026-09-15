@@ -206,6 +206,10 @@ public final class ProjectAuthority {
         return opened
     }
 
+    func openForPairedRender(grantID: UUID, token: String) throws -> ProjectOpenState {
+        try openForPairedImport(grantID: grantID, token: token)
+    }
+
     private func executeAuthorized(_ envelope: CommandEnvelope) throws -> CommandResult {
         let result = try database.transaction {
             let before = try loadDocument()
@@ -414,6 +418,15 @@ public final class ProjectAuthority {
             guard input.status.logicalState == .requested else { return input.status }
             try database.execute("UPDATE render_requests SET logical_state = ? WHERE job_id = ?", bindings: [state.rawValue, jobID.uuidString])
             return EpisodeRenderRequestStatus(jobID: input.status.jobID, episodeID: input.status.episodeID, requestedRevision: input.status.requestedRevision, compositionDigest: input.status.compositionDigest, format: input.status.format, logicalState: state, progress: .indeterminate, availability: .unavailable)
+        }
+    }
+
+    /// Used on app-service recovery. The coordinator supplies the only
+    /// machine-local evidence it accepts; this method exposes no PID or path.
+    func requestedRenderAttemptInputs() throws -> [RenderAttemptInput] {
+        try database.rows("SELECT job_id FROM render_requests WHERE logical_state = ?", bindings: [EpisodeRenderLogicalState.requested.rawValue]).compactMap { row in
+            guard let value = row.first, let jobID = UUID(uuidString: value) else { return nil }
+            return try renderAttemptInput(jobID: jobID)
         }
     }
 

@@ -75,6 +75,17 @@ private struct RenderMachineArtifact: Codable {
     let ffprobeExecutable: String
 }
 
+/// A stage-local ownership proof for recovery. It contains no PID, path
+/// outside its own directory, credential, or portable project state.
+private struct RenderAttemptMarker: Codable {
+    let schemaVersion: Int
+    let projectID: UUID
+    let jobID: UUID
+    let attemptID: UUID
+    let snapshotSHA256: String
+    let machineBindingDigest: String
+}
+
 /// This is deliberately a single-purpose process owner, not a scheduler. A
 /// process is signalled only while this running service retains its `Process`.
 final class RenderExecutionCoordinator: @unchecked Sendable {
@@ -115,6 +126,8 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
             let request = RenderWorkerRequest(jobID: input.status.jobID, attemptID: attemptID, snapshotSHA256: snapshotSHA256, snapshot: input.snapshot, resolvedObjects: objects, stageDirectory: stage.path, outputFileName: "render.mp4", runtime: .init(runtimeRoot: runtime.runtimeRoot.path, nodeVersion: try version(runtime.node, arguments: ["--version"]), browserExecutable: runtime.browser.path, ffmpegExecutable: runtime.ffmpeg.path, ffprobeExecutable: runtime.ffprobe.path))
             let requestURL = stage.appendingPathComponent("attempt-request.json")
             try JSONEncoder.sorted.encode(request).write(to: requestURL, options: .atomic)
+            let marker = RenderAttemptMarker(schemaVersion: 1, projectID: input.snapshot.projectID, jobID: input.status.jobID, attemptID: attemptID, snapshotSHA256: snapshotSHA256, machineBindingDigest: input.machineBindingDigest)
+            try JSONEncoder.sorted.encode(marker).write(to: stage.appendingPathComponent("attempt-owner.json"), options: .atomic)
             let process = Process()
             process.executableURL = runtime.node
             process.arguments = [runtime.worker.path, "--request", requestURL.path]
@@ -179,6 +192,42 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         }
     }
 
+    /// Service restart recovery intentionally has no PID to signal. It may
+    /// accept only an owned stage with a complete receipt that passes the same
+    /// hash/ffprobe promotion checks as a live child. Every other stranded
+    /// requested operation becomes interrupted and only its marker-proven
+    /// stage is removed.
+    func reconcile(authority: ProjectAuthority) {
+        guard let pending = try? authority.requestedRenderAttemptInputs() else { return }
+        for input in pending {
+            let key = Key(projectID: input.snapshot.projectID, jobID: input.status.jobID)
+            lock.lock(); let running = active[key] != nil; lock.unlock()
+            guard !running else { continue }
+            let attempts = recoveryAttempts(for: input)
+            var accepted = false
+            for attempt in attempts {
+                guard FileManager.default.fileExists(atPath: attempt.stage.appendingPathComponent("attempt-receipt.json").path),
+                      let runtime = selectedRuntime(for: input.snapshot.projectID), preflight(runtime) else {
+                    cleanup(stage: attempt.stage)
+                    continue
+                }
+                let recovered = Active(process: Process(), attemptID: attempt.attemptID, snapshotSHA256: attempt.snapshotSHA256, stage: attempt.stage, runtime: runtime)
+                finish(authority: authority, key: key, attempt: recovered)
+                if let refreshed = try? authority.renderAttemptInput(jobID: key.jobID),
+                   refreshed.status.logicalState == .completed,
+                   artifact(for: refreshed) != nil {
+                    accepted = true
+                    break
+                }
+            }
+            if !accepted,
+               let refreshed = try? authority.renderAttemptInput(jobID: key.jobID),
+               refreshed.status.logicalState == .requested {
+                _ = try? authority.transitionRenderRequest(jobID: key.jobID, snapshotSHA256: digest(refreshed.snapshotJSON), to: .interrupted)
+            }
+        }
+    }
+
     func availability(for input: RenderAttemptInput) -> EpisodeRenderAvailability {
         lock.lock(); let running = active[Key(projectID: input.snapshot.projectID, jobID: input.status.jobID)] != nil; lock.unlock()
         if running { return .running }
@@ -225,7 +274,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
               UInt64(data.count) == record.descriptor.byteLength,
               digest(data) == record.descriptor.sha256,
               FileManager.default.isExecutableFile(atPath: record.ffprobeExecutable),
-              validateMP4(artifact, ffprobe: URL(fileURLWithPath: record.ffprobeExecutable)) else { return nil }
+              validateMP4(artifact, ffprobe: URL(fileURLWithPath: record.ffprobeExecutable), output: input.snapshot.composition.output) else { return nil }
         return (record.descriptor, artifact)
     }
 
@@ -271,6 +320,11 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
             cleanup(stage: attempt.stage)
             return
         }
+        guard let currentInput = try? authority.renderAttemptInput(jobID: key.jobID),
+              currentInput.status.logicalState == .requested else {
+            cleanup(stage: attempt.stage)
+            return
+        }
         guard artifact.fileName == "render.mp4", isLowercaseDigest(artifact.sha256),
               let artifactURL = safeChild(artifact.fileName, of: attempt.stage),
               let data = try? safeRegularData(at: artifactURL),
@@ -281,7 +335,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
             cleanup(stage: attempt.stage)
             return
         }
-        guard validateMP4(artifactURL, ffprobe: attempt.runtime.ffprobe) else {
+        guard validateMP4(artifactURL, ffprobe: attempt.runtime.ffprobe, output: currentInput.snapshot.composition.output) else {
             recordFailure("invalid-artifact-streams", for: key)
             let state: EpisodeRenderLogicalState = receipt.outcome == "cancelled" ? .cancelled : .failed
             _ = try? authority.transitionRenderRequest(jobID: key.jobID, snapshotSHA256: attempt.snapshotSHA256, to: state)
@@ -290,11 +344,6 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         }
         let descriptor = EpisodeRenderDescriptor(jobID: key.jobID, format: .mp4, byteLength: artifact.byteLength, sha256: artifact.sha256)
         do {
-            let currentInput = try authority.renderAttemptInput(jobID: key.jobID)
-            guard currentInput.status.logicalState == .requested else {
-                cleanup(stage: attempt.stage)
-                return
-            }
             let artifactDirectory = try promote(stage: attempt.stage, projectID: key.projectID, jobID: key.jobID, attemptID: attempt.attemptID)
             let record = RenderMachineArtifact(attemptID: attempt.attemptID, snapshotSHA256: attempt.snapshotSHA256, machineBindingDigest: currentInput.machineBindingDigest, descriptor: descriptor, artifactDirectory: artifactDirectory.lastPathComponent, fileName: artifact.fileName, ffprobeExecutable: attempt.runtime.ffprobe.path)
             let recordURL = artifactDirectory.deletingLastPathComponent().appendingPathComponent("current.json")
@@ -321,6 +370,24 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         if let provider { return provider(projectID) }
 #endif
         return runtime(projectID)
+    }
+
+    private func recoveryAttempts(for input: RenderAttemptInput) -> [Active] {
+        let root = Self.machineRoot(projectID: input.snapshot.projectID).appendingPathComponent(input.status.jobID.uuidString, isDirectory: true)
+        guard isRegularDirectory(root), let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
+        return names.compactMap { name in
+            guard name.hasSuffix(".stage"),
+                  let stage = safeChild(name, of: root), isRegularDirectory(stage),
+                  let marker = try? safeDecode(RenderAttemptMarker.self, at: stage.appendingPathComponent("attempt-owner.json")),
+                  marker.schemaVersion == 1,
+                  marker.projectID == input.snapshot.projectID,
+                  marker.jobID == input.status.jobID,
+                  marker.snapshotSHA256 == digest(input.snapshotJSON),
+                  marker.machineBindingDigest == input.machineBindingDigest else { return nil }
+            // The process is deliberately unstarted: recovery never signals a
+            // process whose ownership did not survive this service instance.
+            return Active(process: Process(), attemptID: marker.attemptID, snapshotSHA256: marker.snapshotSHA256, stage: stage, runtime: RenderWorkerRuntime(node: URL(fileURLWithPath: "/dev/null"), worker: URL(fileURLWithPath: "/dev/null"), runtimeRoot: URL(fileURLWithPath: "/dev/null"), browser: URL(fileURLWithPath: "/dev/null"), ffmpeg: URL(fileURLWithPath: "/dev/null"), ffprobe: URL(fileURLWithPath: "/dev/null")))
+        }
     }
 
     /// The app-service owns this exact `Process`; it never persists or later
@@ -391,15 +458,56 @@ private extension RenderExecutionCoordinator {
         return destination
     }
 
-    func validateMP4(_ artifact: URL, ffprobe: URL) -> Bool {
-        guard let output = try? version(ffprobe, arguments: ["-v", "error", "-show_entries", "stream=codec_type", "-of", "json", artifact.path]),
+    func validateMP4(_ artifact: URL, ffprobe: URL, output expected: CompositionOutput) -> Bool {
+        guard let output = try? commandOutput(ffprobe, arguments: ["-v", "error", "-show_entries", "stream=codec_type,width,height,avg_frame_rate,nb_frames:format=duration", "-of", "json", artifact.path]),
               let data = output.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let streams = object["streams"] as? [[String: Any]] else { return false }
-        return streams.contains { $0["codec_type"] as? String == "video" } && !streams.contains { $0["codec_type"] as? String == "audio" }
+              let probe = try? JSONDecoder().decode(RenderProbe.self, from: data),
+              let video = probe.streams.first(where: { $0.codecType == "video" }),
+              !probe.streams.contains(where: { $0.codecType == "audio" }),
+              video.width == expected.width,
+              video.height == expected.height,
+              let frameRate = rational(video.averageFrameRate),
+              let duration = Double(probe.format.duration),
+              frameRate > 0,
+              abs(frameRate - rational(expected.frameRate)) < 0.000_001 else { return false }
+        // ISO BMFF duration may round to one encoded frame at its track
+        // timebase. Anything beyond that is truncated or the wrong render.
+        let expectedDuration = rational(expected.duration)
+        guard abs(duration - expectedDuration) <= 1 / frameRate else { return false }
+        if let count = video.frameCount, let frames = Int(count) {
+            guard abs(Double(frames) - expectedDuration * frameRate) <= 1 else { return false }
+        }
+        return true
+    }
+
+    struct RenderProbe: Decodable {
+        struct Stream: Decodable {
+            let codecType: String
+            let width: Int?
+            let height: Int?
+            let averageFrameRate: String?
+            let frameCount: String?
+            enum CodingKeys: String, CodingKey { case codecType = "codec_type", width, height, averageFrameRate = "avg_frame_rate", frameCount = "nb_frames" }
+        }
+        struct Format: Decodable { let duration: String }
+        let streams: [Stream]
+        let format: Format
+    }
+
+    func rational(_ value: CompositionTime) -> Double { Double(value.value) / Double(value.timescale) }
+    func rational(_ value: String?) -> Double? {
+        guard let value else { return nil }
+        let parts = value.split(separator: "/", maxSplits: 1)
+        guard parts.count == 2, let numerator = Double(parts[0]), let denominator = Double(parts[1]), denominator != 0 else { return nil }
+        return numerator / denominator
     }
 
     func version(_ executable: URL, arguments: [String]) throws -> String {
+        guard let line = try commandOutput(executable, arguments: arguments).split(separator: "\n").first else { throw AuthorityFailure.renderUnavailable }
+        return String(line)
+    }
+
+    func commandOutput(_ executable: URL, arguments: [String]) throws -> String {
         let process = Process(); let output = Pipe(); let errors = Pipe()
         process.executableURL = executable; process.arguments = arguments; process.standardOutput = output; process.standardError = errors
         try process.run()
@@ -408,8 +516,8 @@ private extension RenderExecutionCoordinator {
         if process.isRunning { process.terminate(); throw AuthorityFailure.renderUnavailable }
         guard process.terminationStatus == 0 else { throw AuthorityFailure.renderUnavailable }
         let data = output.fileHandleForReading.readDataToEndOfFile() + errors.fileHandleForReading.readDataToEndOfFile()
-        guard let line = String(data: data, encoding: .utf8)?.split(separator: "\n").first else { throw AuthorityFailure.renderUnavailable }
-        return String(line)
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { throw AuthorityFailure.renderUnavailable }
+        return text
     }
 
     func safeDecode<T: Decodable>(_ type: T.Type, at url: URL) throws -> T { try JSONDecoder().decode(T.self, from: safeRegularData(at: url)) }
