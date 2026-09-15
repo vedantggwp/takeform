@@ -341,8 +341,11 @@ final class WorkspaceModel: ObservableObject {
         open(pendingRebindURL, rebind: true)
     }
 
-    func submit(_ command: ProjectCommand) {
-        guard let document, let packageURL else { return }
+    func submit(_ command: ProjectCommand, completion: (@MainActor (WorkspaceCommandCompletion) -> Void)? = nil) {
+        guard let document, let packageURL else {
+            completion?(.failure(.rejected("Open a project before editing its composition")))
+            return
+        }
         let generation = beginWorkspaceUpdate(for: packageURL)
         Task {
             isWorking = true; error = nil
@@ -356,14 +359,22 @@ final class WorkspaceModel: ObservableObject {
                     selectedEpisodeID = selectedEpisodeID ?? next.episodes.first?.id
                 }
                 requestedPackageURL = nil
+                completion?(WorkspaceCommandCompletion(result.outcome))
             } catch let failure as WorkspaceFailure {
                 guard workspaceGeneration == generation else { return }
                 error = failure; status = failure.errorDescription ?? "No change was committed."
+                completion?(.failure(failure))
             } catch {
                 guard workspaceGeneration == generation else { return }
                 status = "No change was committed."
+                completion?(.failure(.rejected("The authority did not commit this composition change")))
             }
         }
+    }
+
+    func reloadCurrentProject() {
+        guard let packageURL else { return }
+        open(packageURL, rebind: false)
     }
 
     func pairCLI() {
@@ -564,6 +575,7 @@ private struct WorkspaceView: View {
                     Button("Reset override") { model.submit(.resetOverride(episodeID: episode.id, key: overrideKey)) }
                         .disabled(overrideKey.isEmpty)
                 }
+                EpisodeCompositionEditor(model: model, episode: episode)
                 cliAccess
             }.padding()
         } else {
