@@ -32,8 +32,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         about.click()
 
         let aboutDialog = app.dialogs
-            .containing(.staticText, identifier: "Takeform")
-            .containing(.staticText, identifier: "Version 0.1.0 (1)")
+            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Takeform"))
+            .containing(NSPredicate(format: "elementType == %ld AND value == %@", XCUIElement.ElementType.staticText.rawValue, "Version 0.1.0 (1)"))
             .firstMatch
         XCTAssertTrue(aboutDialog.waitForExistence(timeout: 5), "Native About dialog did not appear")
         XCTAssertTrue(
