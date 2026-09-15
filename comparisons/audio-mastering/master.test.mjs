@@ -12,11 +12,11 @@ const policy = { targetIntegratedLufs: -16, maxTruePeakDbtp: -1, loudnessRangeTa
 const run = (args) => new Promise((resolve, reject) => execFile(ffmpegPath, args, { maxBuffer: 1024 * 1024 }, error => error ? reject(error) : resolve()));
 const exists = async file => stat(file).then(() => true).catch(() => false);
 
-async function media(root, { audio = 'sine=frequency=440:sample_rate=48000' } = {}) {
+async function media(root, { audio = 'sine=frequency=440:sample_rate=48000', videoDuration = 3, audioDuration = 3, audioOffset = 0 } = {}) {
   const output = path.join(root, 'raw.mp4');
-  const args = ['-hide_banner', '-y', '-f', 'lavfi', '-i', 'color=c=navy:s=160x90:r=30:d=3'];
-  if (audio) args.push('-f', 'lavfi', '-i', audio);
-  args.push('-t', '3', '-map', '0:v:0'); if (audio) args.push('-map', '1:a:0');
+  const args = ['-hide_banner', '-y', '-f', 'lavfi', '-i', `color=c=navy:s=160x90:r=30:d=${videoDuration}`];
+  if (audio) args.push('-itsoffset', String(audioOffset), '-f', 'lavfi', '-i', `${audio}:d=${audioDuration}`);
+  args.push('-map', '0:v:0'); if (audio) args.push('-map', '1:a:0');
   args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p'); if (audio) args.push('-c:a', 'aac'); args.push(output);
   await run(args); return output;
 }
@@ -52,4 +52,11 @@ test('late cancellation before publication leaves no output or partial', async (
 
 test('rejects unavailable timing rather than inventing zero', () => {
   assert.throws(() => timingFromStreams({ channels: 2, sample_rate: '48000', duration: 'N/A', start_time: '0' }, { start_time: '0' }), error => error.code === 'timing-unavailable');
+});
+
+test('preserves a nonzero audio offset without truncating copied video', async () => {
+  const ctx = await setup(); const rawPath = await media(ctx.root, { videoDuration: 4, audioDuration: 3.5, audioOffset: 0.5 });
+  const receipt = await masterArtifact({ ...options({ ...ctx, rawPath }), videoSampleFrames: [0, 30, 89, 119] });
+  assert.equal(receipt.status, 'succeeded'); assert.equal(receipt.raw.timing.durationSeconds, 3.521333); assert.equal(receipt.raw.timing.audioStartSeconds, 0.478);
+  assert.equal(receipt.videoSamples.at(-1).frame, 119); assert.ok(Math.abs(receipt.priming.avOffsetDifferenceSeconds) <= receipt.priming.boundSeconds); assert.ok(Math.abs(receipt.priming.durationDifferenceSeconds) <= receipt.priming.boundSeconds);
 });

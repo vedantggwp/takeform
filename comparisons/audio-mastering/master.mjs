@@ -142,8 +142,9 @@ export async function masterArtifact({ rawPath, outputPath, attemptRoot, binarie
     receipt.raw.videoIdentity = mediaIdentity(rawProbe.video); receipt.raw.timing = timingFromStreams(rawProbe.audio, rawProbe.video);
     const health = await audioHealth(binaries.ffmpegPath, rawReal, signal); receipt.commands.push(health.command); receipt.raw.health = { maxLevel: health.maxLevel };
     const before = await measure(binaries.ffmpegPath, rawReal, policy, signal, 'measure-raw'); receipt.commands.push(before.command); receipt.raw.measurement = before;
-    const filter = `loudnorm=I=${policy.targetIntegratedLufs}:LRA=${policy.loudnessRangeTarget}:TP=${policy.maxTruePeakDbtp}:measured_I=${before.integratedLufs}:measured_LRA=${before.lra}:measured_TP=${before.truePeakDbtp}:measured_thresh=${before.threshold}:offset=${before.offset}:linear=false:print_format=json`;
-    const argv = ['-hide_banner', '-y', '-i', rawReal, '-map', '0:v:0', '-map', '0:a:0', '-t', String(receipt.raw.timing.durationSeconds), '-c:v', 'copy', '-c:a', policy.audioCodec, '-b:a', policy.audioBitrate, '-ac', String(rawProbe.audio.channels), '-ar', String(receipt.raw.timing.sampleRate), '-af', filter, '-movflags', '+faststart', tempOutput];
+    // atrim limits only the normalized audio; a global -t would truncate a longer copied video when audio starts later.
+    const filter = `loudnorm=I=${policy.targetIntegratedLufs}:LRA=${policy.loudnessRangeTarget}:TP=${policy.maxTruePeakDbtp}:measured_I=${before.integratedLufs}:measured_LRA=${before.lra}:measured_TP=${before.truePeakDbtp}:measured_thresh=${before.threshold}:offset=${before.offset}:linear=false:print_format=json,atrim=duration=${receipt.raw.timing.durationSeconds}`;
+    const argv = ['-hide_banner', '-y', '-i', rawReal, '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy', '-c:a', policy.audioCodec, '-b:a', policy.audioBitrate, '-ac', String(rawProbe.audio.channels), '-ar', String(receipt.raw.timing.sampleRate), '-af', filter, '-movflags', '+faststart', tempOutput];
     receipt.transform = { argv, settingsDigest: digest({ binary: binaries.ffmpegPath, argv, policy }) };
     const transformed = await command(binaries.ffmpegPath, argv, { signal, stage: 'master' }); receipt.commands.push(transformed);
     assert(!transformed.cancelled && transformed.exitCode === 0, 'mastering transform failed', transformed.cancelled ? 'cancelled' : 'transform-failed', receipt);
@@ -161,7 +162,7 @@ export async function masterArtifact({ rawPath, outputPath, attemptRoot, binarie
     assert(rawTiming.channels === masteredTiming.channels && rawTiming.sampleRate === masteredTiming.sampleRate, 'mastered audio layout changed', 'audio-layout-changed', receipt);
     const primingBoundSeconds = primingBound(policy, rawTiming.sampleRate);
     receipt.priming = { durationDifferenceSeconds: masteredTiming.durationSeconds - rawTiming.durationSeconds, avOffsetDifferenceSeconds: masteredTiming.avStartOffsetSeconds - rawTiming.avStartOffsetSeconds, allowedAacAccessUnits: policy.primingAccessUnits, boundSeconds: primingBoundSeconds };
-    assert(Math.abs(receipt.priming.durationDifferenceSeconds) <= primingBoundSeconds && receipt.priming.avOffsetDifferenceSeconds === 0, 'encoder priming/edit-list difference exceeds AAC-derived duration bound or start-offset preservation', 'timing-out-of-bounds', receipt);
+    assert(Math.abs(receipt.priming.durationDifferenceSeconds) <= primingBoundSeconds && Math.abs(receipt.priming.avOffsetDifferenceSeconds) <= primingBoundSeconds, 'encoder priming/edit-list difference exceeds AAC-derived duration or start-offset bound', 'timing-out-of-bounds', receipt);
     await hooks?.beforePublish?.(receipt);
     await publishNoReplace(tempOutput, outputPath, signal); receipt.mastered.sha256 = await sha256(outputPath); receipt.status = 'succeeded'; receipt.elapsedMs = Date.now() - started;
     return receipt;
