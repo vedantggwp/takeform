@@ -19,16 +19,19 @@ async function command(binary, args, { signal, stage } = {}) {
   return await new Promise((resolve, reject) => {
     const startedAt = new Date().toISOString();
     const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '', cancelled = false;
+    let stdout = '', stderr = '', cancelled = false, peakRssBytes = process.memoryUsage().rss;
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
     const abort = () => { cancelled = true; child.kill('SIGTERM'); };
     if (signal?.aborted) abort();
     signal?.addEventListener('abort', abort, { once: true });
+    const sampleRss = () => { peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss); };
+    sampleRss(); const sampler = setInterval(sampleRss, 100);
     child.on('error', error => reject(error));
     child.on('close', (exitCode, signalName) => {
+      clearInterval(sampler);
       signal?.removeEventListener('abort', abort);
-      resolve({ stage, binary, args, startedAt, endedAt: new Date().toISOString(), elapsedMs: Date.now() - Date.parse(startedAt), stdout, stderr, exitCode, signal: signalName, cancelled });
+      resolve({ stage, binary, args, startedAt, endedAt: new Date().toISOString(), elapsedMs: Date.now() - Date.parse(startedAt), stdout, stderr, exitCode, signal: signalName, cancelled, launcherPeakRssBytes: peakRssBytes });
     });
   });
 }
@@ -130,6 +133,7 @@ export async function masterArtifact({ rawPath, outputPath, attemptRoot, binarie
     throw new MasteringError(error.message, error.code ?? 'unexpected', receipt);
   } finally {
     await rm(tempOutput, { force: true });
+    receipt.cost = { launcherPeakRssBytes: Math.max(0, ...receipt.commands.map(item => item.launcherPeakRssBytes ?? 0)), producerBytes: receipt.raw?.bytes ?? null, masteredBytes: receipt.mastered?.sha256 ? (await stat(outputPath)).size : null };
     receipt.cleanup = { partialOutputAbsent: !(await stat(tempOutput).then(() => true).catch(() => false)) };
     await mkdir(attemptRoot, { recursive: true });
     await writeFile(path.join(attemptRoot, 'terminal-receipt.json'), JSON.stringify(receipt, null, 2));
