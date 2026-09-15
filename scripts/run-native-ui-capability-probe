@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+PROJECT="$ROOT_DIR/Tests/native-ui-capability/TakeformNativeUICapability.xcodeproj"
+SCHEME="TakeformNativeUICapability"
+MODE="${1:-run}"
+OUTPUT_DIR="${TAKEFORM_UI_PROBE_OUTPUT:-}"
+APP_BUNDLE="${TAKEFORM_UI_PROBE_APP:-}"
+SOURCE_SHA="${TAKEFORM_UI_PROBE_SOURCE_SHA:-}"
+TIMEOUT_SECONDS="${TAKEFORM_UI_PROBE_TIMEOUT_SECONDS:-90}"
+
+if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ]; then
+  echo "Usage: $0 [--build-for-testing]" >&2
+  exit 2
+fi
+if [ -z "$OUTPUT_DIR" ]; then
+  echo "TAKEFORM_UI_PROBE_OUTPUT is required" >&2
+  exit 2
+fi
+if ! [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TAKEFORM_UI_PROBE_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+if [ ! -d "$PROJECT" ]; then
+  echo "Missing UI test project: $PROJECT" >&2
+  exit 2
+fi
+if [ "$MODE" = run ] && [ ! -d "$APP_BUNDLE" ]; then
+  echo "TAKEFORM_UI_PROBE_APP must name a copied app bundle" >&2
+  exit 2
+fi
+
+mkdir -p "$OUTPUT_DIR"
+RESULT_BUNDLE="$OUTPUT_DIR/native-ui-capability.xcresult"
+DERIVED_DATA="$OUTPUT_DIR/DerivedData"
+LOG="$OUTPUT_DIR/xcodebuild.log"
+FACTS="$OUTPUT_DIR/facts.txt"
+ATTACHMENTS="$OUTPUT_DIR/attachments"
+
+rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
+{
+  echo "source_sha: ${SOURCE_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
+  echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
+  echo "mode: $MODE"
+  xcodebuild -version
+  sw_vers
+  uname -m
+  if [ "$MODE" = run ]; then
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_BUNDLE/Contents/Info.plist"
+    codesign -dvvv "$APP_BUNDLE" 2>&1 | grep -E 'Identifier=|CDHash=' || true
+  fi
+} > "$FACTS" 2>&1
+
+command=(
+  xcodebuild
+  "$( [ "$MODE" = run ] && echo test || echo build-for-testing )"
+  -project "$PROJECT"
+  -scheme "$SCHEME"
+  -destination 'platform=macOS,arch=arm64'
+  -parallel-testing-enabled NO
+  -derivedDataPath "$DERIVED_DATA"
+  -resultBundlePath "$RESULT_BUNDLE"
+)
+
+if [ "$MODE" = run ]; then
+  TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" "${command[@]}" > "$LOG" 2>&1 &
+else
+  "${command[@]}" > "$LOG" 2>&1 &
+fi
+pid=$!
+deadline=$((SECONDS + TIMEOUT_SECONDS))
+timed_out=0
+while kill -0 "$pid" 2>/dev/null; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    timed_out=1
+    kill "$pid" 2>/dev/null || true
+    break
+  fi
+  sleep 1
+done
+wait "$pid"
+status=$?
+
+if [ "$timed_out" -eq 1 ]; then
+  echo "probe_timeout_seconds: $TIMEOUT_SECONDS" >> "$FACTS"
+  status=124
+fi
+if [ -d "$RESULT_BUNDLE" ]; then
+  if [ "$MODE" = run ]; then
+    mkdir -p "$ATTACHMENTS"
+    if ! xcrun xcresulttool export attachments --path "$RESULT_BUNDLE" --output-path "$ATTACHMENTS" >> "$LOG" 2>&1; then
+      echo "attachment_export: failed" >> "$FACTS"
+      status=1
+    fi
+  else
+    echo "attachment_export: not_applicable" >> "$FACTS"
+  fi
+else
+  echo "result_bundle: missing" >> "$FACTS"
+  status=1
+fi
+if [ "$MODE" = run ] && ! find "$ATTACHMENTS" -type f -name '*.png' -print -quit | grep -q .; then
+  echo "window_screenshot: missing" >> "$FACTS"
+  status=1
+fi
+
+exit "$status"
