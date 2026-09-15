@@ -6,13 +6,16 @@ read its accessibility tree and retain a screenshot of the actual window. It
 does not accept F1, F3, distribution, rendering, media, or local-Mac behavior.
 
 The original capability-probe commits contain CI tooling atop F1
-`63fc27ecbceec5c536983f749f4ef91fd9802a8a`. The full F1 harness also merges
-the separately reviewed product fix `6b1cebdbc026a1a93d6e9fe23c356dc2050da042`,
-which adds the title's accessible name. Aside from that single product line,
-`Package.swift`, design assets, dev-bundle script, and F1 production source are
-unchanged from F1. The probe input SHA identifies the reviewed combined
-product-and-tooling head. A successful probe can inform the F1 native gate, but
-it does not complete any remaining F1 native case.
+`63fc27ecbceec5c536983f749f4ef91fd9802a8a`. The full F1 harness normally
+merges separately reviewed F1 product commits
+`6b1cebdbc026a1a93d6e9fe23c356dc2050da042` (the title accessible name) and
+`4449b9689c140def77f85643f706e44f1c60133c` (the visible app-owned Appearance
+preference). The combined probe head therefore contains product and tooling
+work. Compared with F1 `63fc`, those reviewed changes are in
+`Sources/TakeformApp/TakeformApp.swift`; `Package.swift`, design assets and the
+dev-bundle script are unchanged. The probe input SHA identifies the reviewed
+combined product-and-tooling head. A successful probe can inform the F1 native
+gate, but it does not complete any remaining F1 native case.
 
 The job is opt-in only: root can dispatch it manually after merge with the full
 reviewed commit SHA, or a maintainer can apply the exact
