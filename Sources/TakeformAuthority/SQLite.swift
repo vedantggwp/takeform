@@ -1,4 +1,5 @@
 import CSQLite
+import Darwin
 import Foundation
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -63,7 +64,13 @@ final class SQLiteDatabase {
         try execute("BEGIN IMMEDIATE")
         do {
             let value = try work()
+            #if DEBUG
+            AuthorityFaultInjection.terminateIfRequested("before-commit")
+            #endif
             try execute("COMMIT")
+            #if DEBUG
+            AuthorityFaultInjection.terminateIfRequested("after-commit")
+            #endif
             return value
         } catch {
             try? execute("ROLLBACK")
@@ -75,3 +82,12 @@ final class SQLiteDatabase {
         SQLiteError.message(handle.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "Unknown SQLite error")
     }
 }
+
+#if DEBUG
+private enum AuthorityFaultInjection {
+    static func terminateIfRequested(_ boundary: String) {
+        guard ProcessInfo.processInfo.environment["TAKEFORM_TEST_AUTHORITY_FAULT"] == boundary else { return }
+        _exit(75)
+    }
+}
+#endif

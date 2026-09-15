@@ -34,6 +34,31 @@ private func token(for fixture: Fixture) -> String {
     "fault-harness-\(fixture.projectID.uuidString)-\(fixture.grantID.uuidString)"
 }
 
+private func serviceStatus(_ fixture: Fixture, fault: String? = nil) throws -> Int32 {
+    let executable = CommandLine.arguments[0]
+    let harnessURL = executable.hasPrefix("/")
+        ? URL(fileURLWithPath: executable)
+        : URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(executable)
+    let service = harnessURL.standardizedFileURL.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityService")
+    let process = Process()
+    let input = Pipe()
+    let completed = DispatchSemaphore(value: 0)
+    process.executableURL = service
+    process.arguments = ["execute", package.path, fixture.grantID.uuidString, String(decoding: try JSONEncoder().encode(fixture.envelope), as: UTF8.self)]
+    if let fault { process.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_TEST_AUTHORITY_FAULT": fault]) { _, new in new } }
+    process.standardInput = input
+    process.terminationHandler = { _ in completed.signal() }
+    try process.run()
+    input.fileHandleForWriting.write(Data("\(token(for: fixture))\n".utf8))
+    input.fileHandleForWriting.closeFile()
+    guard completed.wait(timeout: .now() + 5) == .success else {
+        process.terminate()
+        _ = completed.wait(timeout: .now() + 1)
+        throw NSError(domain: "TakeformAuthorityFaultHarness", code: 6)
+    }
+    return process.terminationStatus
+}
+
 do {
     switch arguments[0] {
     case "setup":
@@ -52,26 +77,21 @@ do {
         try JSONEncoder().encode(Fixture(projectID: document.projectID, grantID: grant.id, envelope: command)).write(to: fixtureURL, options: .atomic)
         print("fault-harness: setup")
     case "before":
-        _ = try fixture()
-        _ = try authority()
-        print("fault-harness: barrier before transaction")
-        fflush(stdout)
-        _exit(75)
+        guard try serviceStatus(try fixture(), fault: "before-commit") == 75 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 7) }
+        print("fault-harness: service terminated immediately before SQLite commit")
     case "verify-before":
         let document = try authority().open().document
         guard document.revision == Revision(0), document.channel == nil else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 1) }
         print("fault-harness: PASS pre-commit termination retained revision 0")
     case "after":
         let fixture = try fixture()
-        let result = try authority().execute(fixture.envelope, grantID: fixture.grantID, token: token(for: fixture))
-        guard case .applied(let document) = result.outcome, document.revision == Revision(1) else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 2) }
-        print("fault-harness: barrier after durable commit before acknowledgement")
-        fflush(stdout)
-        _exit(75)
+        guard try serviceStatus(fixture, fault: "after-commit") == 75 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 2) }
+        print("fault-harness: service terminated after durable SQLite commit before response")
     case "replay":
         let fixture = try fixture()
-        let result = try authority().execute(fixture.envelope, grantID: fixture.grantID, token: token(for: fixture))
-        guard case .applied(let document) = result.outcome, document.revision == Revision(1), document.channel?.name == "Recovered" else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 3) }
+        guard try serviceStatus(fixture) == 0 else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 3) }
+        let document = try authority().open().document
+        guard document.revision == Revision(1), document.channel?.name == "Recovered" else { throw NSError(domain: "TakeformAuthorityFaultHarness", code: 3) }
         print("fault-harness: PASS post-commit replay returned revision 1 without another mutation")
     case "cleanup":
         if let stored = try? fixture() {

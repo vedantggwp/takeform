@@ -35,45 +35,43 @@ private struct PortableManifest: Codable {
 
 public final class ProjectAuthority {
     private let packageURL: URL
-    private let database: SQLiteDatabase
+    private var database: SQLiteDatabase!
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     public init(packageURL: URL) throws {
         self.packageURL = packageURL.standardizedFileURL
         guard !self.packageURL.path.contains("/.takeform/") else { throw AuthorityFailure.unauthorized }
-        let stateURL = packageURL.appendingPathComponent(".takeform", isDirectory: true)
-        try FileManager.default.createDirectory(at: stateURL, withIntermediateDirectories: true)
-        let manifestURL = stateURL.appendingPathComponent("manifest.json")
-        let databaseURL = stateURL.appendingPathComponent("project.sqlite")
-        if FileManager.default.fileExists(atPath: manifestURL.path), !FileManager.default.fileExists(atPath: databaseURL.path) {
-            throw AuthorityFailure.missingObject("project.sqlite")
-        }
-        let openedDatabase: SQLiteDatabase
-        do {
-            openedDatabase = try SQLiteDatabase(path: databaseURL)
-            try openedDatabase.execute("CREATE TABLE IF NOT EXISTS project_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            try openedDatabase.execute("CREATE TABLE IF NOT EXISTS command_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
-            try openedDatabase.execute("CREATE TABLE IF NOT EXISTS history (revision INTEGER PRIMARY KEY, before_state TEXT NOT NULL, after_state TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)")
-        } catch {
-            throw AuthorityFailure.corruptDatabase
-        }
-        database = openedDatabase
         encoder.outputFormatting = [.sortedKeys]
-        try initializeIfNeeded()
     }
 
     public func open(rebindMovedPackage: Bool = false) throws -> ProjectOpenState {
-        let document = try loadDocument()
-        try validateManifest(document)
-        var state = try loadMachineState(for: document.projectID)
-        let binding = state.binding
-        if let binding, binding.canonicalPath != packageURL.path, !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
-        if binding?.canonicalPath != packageURL.path {
-            state.binding = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
-            if binding != nil { state.grants = [] }
-            try saveMachineState(state, for: document.projectID)
+        let stateURL = packageURL.appendingPathComponent(".takeform", isDirectory: true)
+        let manifestURL = stateURL.appendingPathComponent("manifest.json")
+        let manifest: PortableManifest
+        let document: ProjectDocument
+        if FileManager.default.fileExists(atPath: manifestURL.path) {
+            do { manifest = try decoder.decode(PortableManifest.self, from: Data(contentsOf: manifestURL)) }
+            catch { throw AuthorityFailure.corruptDatabase }
+            guard manifest.schema <= 1 else { throw AuthorityFailure.newerSchema(manifest.schema) }
+            let state = try bind(projectID: manifest.projectID, rebindMovedPackage: rebindMovedPackage)
+            if state.binding?.canonicalPath != packageURL.path { throw AuthorityFailure.copyDecisionRequired }
+            guard FileManager.default.fileExists(atPath: stateURL.appendingPathComponent("project.sqlite").path) else { throw AuthorityFailure.missingObject("project.sqlite") }
+            try openDatabase()
+            document = try loadDocument()
+            try validateManifest(document, manifest: manifest)
+        } else {
+            guard !FileManager.default.fileExists(atPath: stateURL.appendingPathComponent("project.sqlite").path) else { throw AuthorityFailure.corruptDatabase }
+            document = ProjectDocument()
+            _ = try bind(projectID: document.projectID, rebindMovedPackage: rebindMovedPackage)
+            try openDatabase()
+            try initialize(document)
+            manifest = PortableManifest(projectID: document.projectID, schema: 1, objects: [])
         }
+        _ = manifest
+        let state = try loadMachineState(for: document.projectID)
+        let binding = state.binding
+        guard binding?.canonicalPath == packageURL.path else { throw AuthorityFailure.copyDecisionRequired }
         let projectionURL = packageURL.appendingPathComponent(".takeform/projection.json")
         let projection: ProjectDocument?
         do {
@@ -123,9 +121,7 @@ public final class ProjectAuthority {
         return result
     }
 
-    private func initializeIfNeeded() throws {
-        guard try database.value("SELECT value FROM project_state WHERE key = 'document'") == nil else { return }
-        let document = ProjectDocument()
+    private func initialize(_ document: ProjectDocument) throws {
         try save(document)
         let manifest = PortableManifest(projectID: document.projectID, schema: 1, objects: [])
         let data = try encoder.encode(manifest)
@@ -133,9 +129,7 @@ public final class ProjectAuthority {
         try writeProjection(document)
     }
 
-    private func validateManifest(_ document: ProjectDocument) throws {
-        let url = packageURL.appendingPathComponent(".takeform/manifest.json")
-        let manifest = try decoder.decode(PortableManifest.self, from: Data(contentsOf: url))
+    private func validateManifest(_ document: ProjectDocument, manifest: PortableManifest) throws {
         guard manifest.projectID == document.projectID else { throw AuthorityFailure.corruptDatabase }
         guard manifest.schema <= 1 else { throw AuthorityFailure.newerSchema(manifest.schema) }
         for object in manifest.objects {
@@ -201,6 +195,29 @@ public final class ProjectAuthority {
         let url = root.appendingPathComponent("Takeform/Authority/\(projectID.uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+    private func bind(projectID: UUID, rebindMovedPackage: Bool) throws -> MachineState {
+        var state = try loadMachineState(for: projectID)
+        let binding = state.binding
+        if let binding, binding.canonicalPath != packageURL.path, !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
+        if binding?.canonicalPath != packageURL.path {
+            state.binding = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
+            if binding != nil { state.grants = [] }
+            try saveMachineState(state, for: projectID)
+        }
+        return state
+    }
+    private func openDatabase() throws {
+        guard database == nil else { return }
+        let stateURL = packageURL.appendingPathComponent(".takeform", isDirectory: true)
+        try FileManager.default.createDirectory(at: stateURL, withIntermediateDirectories: true)
+        do {
+            let opened = try SQLiteDatabase(path: stateURL.appendingPathComponent("project.sqlite"))
+            try opened.execute("CREATE TABLE IF NOT EXISTS project_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS command_results (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)")
+            try opened.execute("CREATE TABLE IF NOT EXISTS history (revision INTEGER PRIMARY KEY, before_state TEXT NOT NULL, after_state TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)")
+            database = opened
+        } catch { throw AuthorityFailure.corruptDatabase }
     }
     private func loadMachineState(for projectID: UUID) throws -> MachineState {
         let url = try machineURL(for: projectID).appendingPathComponent("binding.json")

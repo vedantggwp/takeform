@@ -157,8 +157,10 @@ final class ProjectAuthorityTests: XCTestCase {
         let original = root.appendingPathComponent("Channel.takeform")
         let moved = root.appendingPathComponent("Moved.takeform")
         try FileManager.default.copyItem(at: original, to: moved)
+        let copiedDatabase = try Data(contentsOf: moved.appendingPathComponent(".takeform/project.sqlite"))
         let movedAuthority = try ProjectAuthority(packageURL: moved)
         XCTAssertThrowsError(try movedAuthority.open()) { XCTAssertEqual($0 as? AuthorityFailure, .copyDecisionRequired) }
+        XCTAssertEqual(try Data(contentsOf: moved.appendingPathComponent(".takeform/project.sqlite")), copiedDatabase)
         XCTAssertThrowsError(try execute(movedAuthority, CommandEnvelope(expectedRevision: document.revision, command: .renameChannel(name: "Must decide")), grant: grant)) {
             XCTAssertEqual($0 as? AuthorityFailure, .copyDecisionRequired)
         }
@@ -188,13 +190,15 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertFalse(try authority.open().projectionMatches)
 
         try FileManager.default.removeItem(at: state.appendingPathComponent("project.sqlite"))
-        XCTAssertThrowsError(try ProjectAuthority(packageURL: root.appendingPathComponent("Channel.takeform"))) {
+        let missingDatabase = try ProjectAuthority(packageURL: root.appendingPathComponent("Channel.takeform"))
+        XCTAssertThrowsError(try missingDatabase.open()) {
             XCTAssertEqual($0 as? AuthorityFailure, .missingObject("project.sqlite"))
         }
 
         let missing = root.appendingPathComponent("Missing.takeform/.takeform")
         try FileManager.default.createDirectory(at: missing, withIntermediateDirectories: true)
         let missingAuthority = try ProjectAuthority(packageURL: root.appendingPathComponent("Missing.takeform"))
+        _ = try missingAuthority.open()
         let missingManifestURL = missing.appendingPathComponent("manifest.json")
         var missingManifest = try JSONSerialization.jsonObject(with: Data(contentsOf: missingManifestURL)) as! [String: Any]
         missingManifest["objects"] = ["objects/declared-but-missing.json"]
@@ -204,7 +208,8 @@ final class ProjectAuthorityTests: XCTestCase {
         let corrupt = root.appendingPathComponent("Corrupt.takeform/.takeform")
         try FileManager.default.createDirectory(at: corrupt, withIntermediateDirectories: true)
         try Data("not sqlite".utf8).write(to: corrupt.appendingPathComponent("project.sqlite"))
-        XCTAssertThrowsError(try ProjectAuthority(packageURL: root.appendingPathComponent("Corrupt.takeform"))) {
+        let corruptAuthority = try ProjectAuthority(packageURL: root.appendingPathComponent("Corrupt.takeform"))
+        XCTAssertThrowsError(try corruptAuthority.open()) {
             XCTAssertEqual($0 as? AuthorityFailure, .corruptDatabase)
         }
     }

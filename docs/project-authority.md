@@ -53,7 +53,7 @@ disposable app-storage digest, then has the real CLI import its paired
 credential and runs the real service and CLI. It also measures 20 opens and 20
 paired CLI commands. Crash-
 barrier evidence comes from the separately built `TakeformAuthorityFaultHarness`:
-its owned process stops before invoking a transaction and after the authority
-returns a durable result but before it acknowledges to a caller. It has no
-fault switch in the app, CLI, or authority service. Native creator interaction
+in debug builds it drives the real service through private SQLite hooks
+immediately before and after `COMMIT`. Those hooks compile out of release
+targets and are absent from the app and CLI. Native creator interaction
 evidence remains separate acceptance work.
