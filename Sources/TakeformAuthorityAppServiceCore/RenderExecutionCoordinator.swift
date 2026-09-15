@@ -147,15 +147,14 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
             let packageURL = authority.packageURLForRender
             process.terminationHandler = { [weak self] terminated in
                 guard let self else { return }
-                self.lock.lock()
-                self.reapedPID[key] = terminated.processIdentifier
-                self.lock.unlock()
                 guard let authority = try? ProjectAuthority(packageURL: packageURL),
                       (try? authority.open()) != nil else {
                     self.cleanup(stage: activeAttempt.stage)
+                    self.recordReaped(terminated.processIdentifier, for: key)
                     return
                 }
                 self.finish(authority: authority, key: key, attempt: activeAttempt)
+                self.recordReaped(terminated.processIdentifier, for: key)
             }
             lock.lock()
             if active[key] != nil {
@@ -362,6 +361,10 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
 
     private func recordFailure(_ value: String, for key: Key) {
         lock.lock(); completionFailure[key] = value; lock.unlock()
+    }
+
+    private func recordReaped(_ pid: pid_t, for key: Key) {
+        lock.lock(); reapedPID[key] = pid; lock.unlock()
     }
 
     private func selectedRuntime(for projectID: UUID) -> RenderWorkerRuntime? {
