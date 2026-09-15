@@ -1,0 +1,38 @@
+# HyperFrames Player bundle
+
+This entry builds the interactive M comparison page for the accepted Native Preview Host. It is a static local bundle, not a producer export or a native acceptance result.
+
+The builder freezes the accepted M snapshot, derives every layer and media target from shared `frameState`, validates the reviewed shared derivative manifest, and copies only selected assets under the host’s granted bundle root. It copies the exact nested `@hyperframes/player` and `@hyperframes/core` 0.8.39 browser files from the approved runtime. It does not load a CDN, GSAP, a compatibility shim, or a Player/Core private global.
+
+The bundle uses Player’s public `seek`, `play`, and `pause` methods. Its native bridge preserves command request, session, and snapshot identities. A seek/load acknowledgement is `painted` only after the Player’s composition document exposes every active picture layer with the requested visibility, opacity, and geometry; inactive occurrences must be hidden, and active video must also have current data at the requested source time. This is browser DOM paint-readiness evidence, not native-renderer output evidence.
+
+The current host helper serves video under `.mp4` or `.webm`, while M also has H.264 MOV sources. The bundle preserves their original `.mov` path and bytes; their helper delivery is therefore an open host-side MIME allowlist requirement. `bundle-manifest.json` retains the original hash and source/served extensions. No media bytes, source times, or retime factors change.
+
+`THIRD_PARTY_NOTICES.md` inventories the copied `@hyperframes/player` and nested `@hyperframes/core` browser artifacts, including exact source, tag, commit, version, and hashes. Every generated bundle includes that inventory and the Apache-2.0 text at `LICENSES/Apache-2.0-HeyGen.txt`.
+
+## Build
+
+```sh
+/opt/homebrew/opt/node@22/bin/node comparisons/hyperframes/player/player.mjs \
+  --bundle-root BUNDLE_ROOT \
+  --fixture-root FIXTURE_ROOT \
+  --derivative-root DERIVATIVE_ROOT \
+  --media-prep-manifest DERIVATIVE_ROOT/manifest.json \
+  --media-prep-module comparisons/media-prep/media-prep.mjs \
+  --runtime RUNTIME_ROOT
+```
+
+The selected native host serves `BUNDLE_ROOT` at `/bundle/`; therefore `index.html` is written directly inside `BUNDLE_ROOT`.
+
+## Test
+
+```sh
+TAKEFORM_FIXTURE_ROOT=FIXTURE_ROOT \
+TAKEFORM_RUNTIME=RUNTIME_ROOT \
+TAKEFORM_DERIVATIVE_ROOT=DERIVATIVE_ROOT \
+TAKEFORM_MEDIA_PREP_MANIFEST=DERIVATIVE_ROOT/manifest.json \
+TAKEFORM_MEDIA_PREP_MODULE=comparisons/media-prep/media-prep.mjs \
+/opt/homebrew/opt/node@22/bin/node --test comparisons/hyperframes/player/player.test.mjs
+```
+
+Pinned Core 0.8.39 was observed to drive ordinary CSS animation through public Player seek in a local browser probe. Its 0.8.39 quickstart documents GSAP timelines rather than CSS/WAAPI composition authoring, so the CSS route is a pinned-runtime compatibility decision. Native WKWebView acceptance remains open while its driver is blocked.
