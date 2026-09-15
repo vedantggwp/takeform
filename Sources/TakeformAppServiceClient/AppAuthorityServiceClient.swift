@@ -78,6 +78,7 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
 
     @_spi(Testing) public func ownedProcessID() -> pid_t? { owned?.0.processIdentifier }
     @_spi(Testing) public func lastReapedPID() -> pid_t? { lastReapedProcessID }
+    @_spi(Testing) public func launchForTesting() throws { try launchIfNeeded() }
 
     private func stopOwnedService() async {
         guard let (process, exited) = owned else { return }

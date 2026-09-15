@@ -71,27 +71,44 @@ final class WorkspaceClientTests: XCTestCase {
         let socket = URL(fileURLWithPath: "/private/tmp/takeform-readiness-timeout-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
         defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
-        let client = AppAuthorityServiceClient(serviceExecutable: URL(fileURLWithPath: "/bin/sh"))
+        let client = AppAuthorityServiceClient(serviceExecutable: URL(fileURLWithPath: "/usr/bin/yes"))
+        try await client.launchForTesting()
+        let livePID = await client.ownedProcessID()
+        XCTAssertNotNil(livePID)
+        if let livePID { XCTAssertEqual(Darwin.kill(livePID, 0), 0) }
         do { try await client.startAndVerifyForTesting(); XCTFail("service without a socket must time out") }
         catch let failure as WorkspaceFailure { XCTAssertEqual(failure, .authorityUnavailable) }
         let ownedPID = await client.ownedProcessID()
         XCTAssertNil(ownedPID)
         let reapedPID = await client.lastReapedPID()
-        XCTAssertNotNil(reapedPID)
+        XCTAssertEqual(reapedPID, livePID)
         XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
     }
 
-    func testCopiedCLIAfterServiceShutdownReportsActionableUnavailableWithoutMutation() throws {
+    func testCopiedCLIAfterServiceShutdownReportsActionableUnavailableWithoutMutation() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-cli-after-stop-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let socket = URL(fileURLWithPath: "/private/tmp/tf-cli-after-stop-\(UUID().uuidString).sock")
+        AppAuthoritySocket.setTestingPath(socket.path)
+        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        let owner = AppAuthorityServiceClient(serviceExecutable: sourceRoot.appendingPathComponent(".build/debug/TakeformAuthorityAppService"))
+        try await owner.startAndVerifyForTesting()
+        let ownedPID = await owner.ownedProcessID()
+        XCTAssertNotNil(ownedPID)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
+        await owner.shutdown()
+        let reapedPID = await owner.lastReapedPID()
+        XCTAssertEqual(reapedPID, ownedPID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: socket.path))
         try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/takeform"), to: root.appendingPathComponent("takeform"))
         try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/TakeformAuthorityAppService"), to: root.appendingPathComponent("TakeformAuthorityAppService"))
         let package = root.appendingPathComponent("Unchanged.takeform")
         let command = CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "Denied", initialRecipe: [:]))
         let process = Process(); let stderr = Pipe(); process.executableURL = root.appendingPathComponent("takeform")
         process.arguments = ["execute", package.path, UUID().uuidString, String(decoding: try JSONEncoder().encode(command), as: UTF8.self)]
+        process.environment = ["TAKEFORM_AUTHORITY_SOCKET": socket.path]
         process.standardError = stderr; try process.run(); process.waitUntilExit()
         let message = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         XCTAssertNotEqual(process.terminationStatus, 0)
