@@ -21,7 +21,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
 
         try createChannel(in: app, named: "Harbor", projectURL: projectURL)
         XCTAssertTrue(app.staticTexts["Harbor"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Revision ")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Revision ")).firstMatch.exists)
         record(app, named: "creator-created")
 
         try importMedia(fixture, in: app)
@@ -122,7 +122,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         record(app, named: "creator-copy-decision")
         app.buttons["Rebind moved project"].click()
         XCTAssertTrue(app.staticTexts["Move me"].waitForExistence(timeout: 10))
-        let retiredGrant = app.otherElements["workspace-cli-grant-\(grantID.uuidString)"]
+        let retiredGrant = app.buttons["workspace-cli-grant-\(grantID.uuidString)"]
         XCTAssertTrue(waitForNonexistence(retiredGrant, timeout: 10), "Rebinding a copied project must invalidate its prior paired grant")
         let deniedAfterRebind = try runCopiedCLI(arguments: ["execute", copiedURL.path, grantID.uuidString, commandJSON(expectedRevision: 1, name: "Rebind denied")])
         XCTAssertEqual(deniedAfterRebind.status, 0, deniedAfterRebind.stderr)
@@ -199,7 +199,10 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         app.buttons["workspace-pair-cli"].click()
         XCTAssertTrue(app.buttons["workspace-confirm-pair-cli"].waitForExistence(timeout: 5))
         app.buttons["workspace-confirm-pair-cli"].click()
-        let grant = app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-cli-grant-")).firstMatch
+        // The app deliberately makes the grant's selection affordance a Button.
+        // Query that actual accessibility role, rather than assuming SwiftUI
+        // exposes every accessibility identifier as Other.
+        let grant = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-cli-grant-")).firstMatch
         XCTAssertTrue(grant.waitForExistence(timeout: 15), "Pairing did not publish an app-issued CLI grant")
         return try XCTUnwrap(UUID(uuidString: String(grant.identifier.dropFirst("workspace-cli-grant-".count))))
     }
@@ -226,7 +229,13 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
     /// Open and Save panels are system UI. This intentionally records the
     /// panel AX tree before interacting with it; a changed system hierarchy is
     /// a test failure with evidence, never a product-route fallback.
-    private func acceptSystemPanel(path: URL, filename: String? = nil, confirmation: String, app: XCUIApplication, named: String) throws {
+    private func acceptSystemPanel(
+        path: URL,
+        filename: String? = nil,
+        confirmation: String,
+        app: XCUIApplication,
+        named: String
+    ) throws {
         let panel = try presentedSystemPanel(in: app, confirmation: confirmation, named: named)
         attach(app.debugDescription, named: "\(named)-ax")
         capture(panel, named: named)
@@ -237,6 +246,10 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         XCTAssertTrue(folderField.waitForExistence(timeout: 5), "System panel did not expose its Go to Folder field")
         XCTAssertTrue(waitForHittable(folderField, timeout: 5), "System panel did not make its Go to Folder field ready")
         folderField.click()
+        // The retained failing panel captured an existing current-path value;
+        // typeText appended the fixture path and left Go to Folder open. Clear
+        // the focused field before entering the observed absolute file URL.
+        folderField.typeKey("a", modifierFlags: .command)
         folderField.typeText(path.path)
         folderField.typeKey(.return, modifierFlags: [])
         let goToFolder = app.sheets["GoToWindow"]
