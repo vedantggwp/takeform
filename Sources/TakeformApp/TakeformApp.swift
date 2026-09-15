@@ -92,8 +92,10 @@ final class WorkspaceModel: ObservableObject {
                 let result = try await client.open(packageURL: url, rebindMovedPackage: rebind)
                 snapshot = result
                 cliGrants = (try? await client.listCLIGrants(packageURL: url)) ?? []
+                selectedGrantID = cliGrants.contains(where: { $0.id == selectedGrantID }) ? selectedGrantID : nil
+                pendingRebindURL = nil
                 selectedEpisodeID = result.document.episodes.first?.id
-                status = "Opened revision \(result.document.revision.value)."
+                status = rebind ? "Rebound project at revision \(result.document.revision.value). Previous CLI grants were invalidated; pair again." : "Opened revision \(result.document.revision.value)."
             } catch let failure as WorkspaceFailure {
                 pendingRebindURL = failure == .copyDecisionRequired ? url : nil
                 error = failure; status = failure.errorDescription ?? "Unable to open project."
@@ -222,7 +224,7 @@ private struct WorkspaceView: View {
         .sheet(isPresented: $model.showPairing) { pairingSheet }
         .alert("Project needs attention", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             if model.pendingRebindURL != nil { Button("Rebind moved project") { model.rebindPendingProject() } }
-            Button("Dismiss", role: .cancel) { model.error = nil }
+            Button("Dismiss", role: .cancel) { model.error = nil; model.pendingRebindURL = nil }
         } message: { Text(model.error?.errorDescription ?? "No project changes were made.") }
     }
 
@@ -296,20 +298,24 @@ private struct WorkspaceView: View {
                     Button("Reset override") { model.submit(.resetOverride(episodeID: episode.id, key: overrideKey)) }
                         .disabled(overrideKey.isEmpty)
                 }
-                Section("CLI access") {
-                    Button("Pair CLI…") { model.showPairing = true }
-                    if model.cliGrants.isEmpty { Text("No paired CLI grants.").foregroundStyle(.secondary) }
-                    ForEach(model.cliGrants) { grant in
-                        HStack {
-                            Button { model.selectedGrantID = grant.id } label: { Image(systemName: model.selectedGrantID == grant.id ? "checkmark.circle.fill" : "circle") }
-                            VStack(alignment: .leading) { Text(grant.label); Text(grant.revokedAt == nil ? "Expires \(grant.expiresAt.formatted())" : "Revoked").font(.caption).foregroundStyle(.secondary) }
-                        }
-                    }
-                    Button("Revoke selected grant") { model.revokeCLI() }.disabled(model.selectedGrantID == nil)
-                }
+                cliAccess
             }.padding()
         } else {
-            ContentUnavailableView("Select an episode", systemImage: "slider.horizontal.3", description: Text("Its pinned recipe and override provenance will appear here."))
+            Form { cliAccess }
+        }
+    }
+
+    private var cliAccess: some View {
+        Section("CLI access") {
+            Button("Pair CLI…") { model.showPairing = true }
+            if model.cliGrants.isEmpty { Text("No paired CLI grants.").foregroundStyle(.secondary) }
+            ForEach(model.cliGrants) { grant in
+                HStack {
+                    Button { model.selectedGrantID = grant.id } label: { Image(systemName: model.selectedGrantID == grant.id ? "checkmark.circle.fill" : "circle") }
+                    VStack(alignment: .leading) { Text(grant.label); Text(grant.revokedAt == nil ? "Expires \(grant.expiresAt.formatted())" : "Revoked").font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+            Button("Revoke selected grant") { model.revokeCLI() }.disabled(model.selectedGrantID == nil)
         }
     }
 
