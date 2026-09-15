@@ -109,12 +109,13 @@ public enum ProjectCommand: Codable, Equatable, Sendable {
     case setOverride(episodeID: UUID, key: String, value: String)
     case resetOverride(episodeID: UUID, key: String)
     case addManagedAsset(ManagedAsset)
+    case replaceEpisodeComposition(episodeID: UUID, composition: EpisodeComposition)
     case undo
     case redo
 
     public var requiredScope: GrantScope {
         switch self {
-        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride, .addManagedAsset: return .editProject
+        case .undo, .redo, .createChannel, .renameChannel, .publishRecipe, .createEpisode, .setOverride, .resetOverride, .addManagedAsset, .replaceEpisodeComposition: return .editProject
         }
     }
 }
@@ -141,12 +142,13 @@ public struct ProjectDocument: Codable, Equatable, Sendable {
     public var episodes: [Episode]
     public var overrides: [Override]
     public var assets: [ManagedAsset]
+    public var episodeCompositions: [EpisodeComposition]
     public var revision: Revision
-    public init(projectID: UUID = UUID(), channel: Channel? = nil, recipes: [RecipeVersion] = [], episodes: [Episode] = [], overrides: [Override] = [], assets: [ManagedAsset] = [], revision: Revision = Revision(0)) {
-        self.projectID = projectID; self.channel = channel; self.recipes = recipes; self.episodes = episodes; self.overrides = overrides; self.assets = assets; self.revision = revision
+    public init(projectID: UUID = UUID(), channel: Channel? = nil, recipes: [RecipeVersion] = [], episodes: [Episode] = [], overrides: [Override] = [], assets: [ManagedAsset] = [], episodeCompositions: [EpisodeComposition] = [], revision: Revision = Revision(0)) {
+        self.projectID = projectID; self.channel = channel; self.recipes = recipes; self.episodes = episodes; self.overrides = overrides; self.assets = assets; self.episodeCompositions = episodeCompositions; self.revision = revision
     }
 
-    private enum CodingKeys: String, CodingKey { case projectID, channel, recipes, episodes, overrides, assets, revision }
+    private enum CodingKeys: String, CodingKey { case projectID, channel, recipes, episodes, overrides, assets, episodeCompositions, revision }
 
     /// Catalog entries were added after the first portable document format.
     /// Opening an older project therefore means an empty catalog, not a decode
@@ -159,6 +161,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable {
         episodes = try values.decodeIfPresent([Episode].self, forKey: .episodes) ?? []
         overrides = try values.decodeIfPresent([Override].self, forKey: .overrides) ?? []
         assets = try values.decodeIfPresent([ManagedAsset].self, forKey: .assets) ?? []
+        episodeCompositions = try values.decodeIfPresent([EpisodeComposition].self, forKey: .episodeCompositions) ?? []
         revision = try values.decode(Revision.self, forKey: .revision)
     }
 
