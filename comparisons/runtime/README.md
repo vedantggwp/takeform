@@ -27,6 +27,7 @@ The command emits JSON. It does not print executable or runtime paths. Errors co
 | `@hyperframes/player` | `0.8.39` | `sha512-sI0DwgEvf+hr78QRIUv9TKF7AoLGUQPJSqkbKkYiCjv5LfvkFrqhPThOt0re49WDwOnPsW67ZJZO+QafT4Md+w==` | [HyperFrames player](https://github.com/heygen-com/hyperframes/tree/main/packages/player) | npm metadata has no licence field. [Repository licence](https://github.com/heygen-com/hyperframes/blob/main/LICENSE). |
 | `remotion` | `4.0.524` | `sha512-jtoQbO7+UD7/4gcl0Onjq/Q27DP3qjI9hRimJJGuvU9p6OekY+Oyn1wNjYxG+hGH4i6InDFneN3sazFLuSF4Og==` | [Remotion core](https://github.com/remotion-dev/remotion/tree/main/packages/core) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 | `@remotion/renderer` | `4.0.524` | `sha512-0Rw/nsVu3OlPg11obmSm9ivLHAFYdZfpPxWFprHYWSeC82cLS4zEGdgy5tWUtuvQvaQ1MMohMhAzSEpqmsLgSQ==` | [Remotion renderer](https://github.com/remotion-dev/remotion/tree/main/packages/renderer) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
+| `@remotion/bundler` | `4.0.524` | `sha512-xEx5ql0R00tadUUWduma/haiRNJzu30UmG8LMUpUW7bdCcO8KeRqq41I/BRn4PqStUGbpi7/zkTA6kZ8yzUIHA==` | [Remotion bundler](https://github.com/remotion-dev/remotion/tree/main/packages/bundler) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 | `@remotion/player` | `4.0.524` | `sha512-MPaV64VKX4RFNFlEkoq7kKJKV6BfpSRdCAUKcjx6lVnF1VsSeb+wZKFGb3KvB8CzHYFkUM3RvhUi0JCxhnUmmA==` | [Remotion player](https://github.com/remotion-dev/remotion/tree/main/packages/player) | [Remotion licence](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md). |
 
 `react` and `react-dom` are both pinned to `18.2.0`. The committed lockfile records their registry integrities.
@@ -37,7 +38,7 @@ The registry metadata identifies the two upstream repositories and package direc
 
 The first install used Node `22.22.1` and npm `10.9.4`. It took 7 seconds as setup cost. `node_modules` used 211012 KiB after installation. No browser was downloaded. The install began with 17489804 KiB free and ended with 17136696 KiB free. Both values exceed the 2 GiB free-space floor.
 
-The doctor imports `@hyperframes/producer` and `@remotion/renderer`. It creates a HyperFrames job with `{num: 24000, den: 1001}` without rendering. It verifies Remotion's exported `ensureBrowser`, `openBrowser`, and `renderMedia` APIs without rendering.
+The doctor imports `@hyperframes/producer`, `@remotion/renderer`, and `@remotion/bundler`. It creates a HyperFrames job with `{num: 24000, den: 1001}` without rendering. It verifies Remotion's exported `ensureBrowser`, `openBrowser`, `renderMedia`, and `bundle` APIs without rendering.
 
 HyperFrames documents `chromePath`, `PRODUCER_HEADLESS_SHELL_PATH`, and `HYPERFRAMES_BROWSER_PATH` as override routes. Remotion exposes `ensureBrowser({browserExecutable})` and `openBrowser('chrome', {browserExecutable})`. The pinned launch implementations add sandbox-disabling and web-security weakening flags. The browser proof filters those known defaults at the executable boundary before the target starts. It does not share a browser.
 
@@ -62,4 +63,4 @@ npm test
 npm run doctor -- --ffmpeg ffmpeg
 ```
 
-The tests exercise missing private paths, unsupported Node, missing imports, invalid browser candidates, browser bootstrap failure, and a `TERM`-ignoring child. They do not render media or assert package-version strings.
+The tests exercise missing private paths, unsupported Node, missing imports, invalid browser candidates, browser bootstrap failure, a `TERM`-ignoring child, and the exact `@remotion/bundler` version. They do not render media.
