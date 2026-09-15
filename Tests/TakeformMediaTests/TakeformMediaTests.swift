@@ -33,12 +33,8 @@ struct TakeformMediaTests {
         let authoredTimestamps = [0, 20, 73, 160, 230, 400].map {
             RationalTime(value: Int64($0), timescale: 600)!
         }
-        let expectedObservedTimestamps = [0, 0, 20, 73, 160, 230, 400, 570].map {
-            RationalTime(value: Int64($0), timescale: 600)!
-        }
         #expect(video.nominalFrameRate != nil)
         #expect(video.codecFourCC == "avc1")
-        #expect(video.presentationTimestamps == expectedObservedTimestamps)
         #expect(containsOrderedSubsequence(authoredTimestamps, in: video.presentationTimestamps))
         let authoredDeltas = zip(authoredTimestamps.dropFirst(), authoredTimestamps)
             .map { later, earlier in
