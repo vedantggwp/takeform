@@ -10,7 +10,10 @@ struct RenderWorkerRuntime: Sendable {
     let node: URL
     let worker: URL
     let runtimeRoot: URL
+    /// The app-selected Chrome target. It is never replaced by a PATH lookup.
     let browser: URL
+    /// The profile-pinned in-bundle security wrapper passed to HyperFrames.
+    let browserWrapper: URL
     let ffmpeg: URL
     let ffprobe: URL
 }
@@ -36,7 +39,8 @@ private struct RenderWorkerRequest: Encodable {
     struct Runtime: Codable {
         let runtimeRoot: String
         let nodeVersion: String
-        let browserExecutable: String
+        let browserWrapperExecutable: String
+        let browserTargetExecutable: String
         let ffmpegExecutable: String
         let ffprobeExecutable: String
     }
@@ -100,6 +104,30 @@ private struct PersistedRenderRuntimeSelectors: Codable {
 private struct RenderRuntimeIdentity: Codable, Equatable {
     let nodeVersion: String
     let workerSHA256: String
+    let browserWrapperSHA256: String
+    let browserSHA256: String
+    let ffmpegSHA256: String
+    let ffprobeSHA256: String
+}
+
+/// The package profile binds the worker and its security wrapper to exact
+/// in-bundle bytes. Selected tools remain machine-local configuration.
+private struct RenderRuntimeProfile: Decodable {
+    struct PinnedFile: Decodable {
+        let path: String
+        let sha256: String
+    }
+
+    struct Launcher: Decodable {
+        let kind: String
+        let path: String
+        let sha256: String
+    }
+
+    let schemaVersion: Int
+    let nodeVersion: String
+    let worker: PinnedFile
+    let launchers: [Launcher]
 }
 
 /// Operation responses are retained separately from the configuration itself:
@@ -149,7 +177,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
                 let object = try ManagedImport.verifiedObjectURL(ManagedAsset(id: asset.id, digest: asset.digest, byteLength: asset.byteLength, filename: "render-input", mediaType: asset.mediaType, probe: asset.probe), package: authority.packageURLForRender)
                 return RenderWorkerObject(assetID: asset.id, digest: asset.digest, byteLength: asset.byteLength, localPath: object.path)
             }
-            let request = RenderWorkerRequest(jobID: input.status.jobID, attemptID: attemptID, snapshotSHA256: snapshotSHA256, snapshot: input.snapshot, resolvedObjects: objects, stageDirectory: stage.path, outputFileName: "render.mp4", runtime: .init(runtimeRoot: runtime.runtimeRoot.path, nodeVersion: try version(runtime.node, arguments: ["--version"]), browserExecutable: runtime.browser.path, ffmpegExecutable: runtime.ffmpeg.path, ffprobeExecutable: runtime.ffprobe.path))
+            let request = RenderWorkerRequest(jobID: input.status.jobID, attemptID: attemptID, snapshotSHA256: snapshotSHA256, snapshot: input.snapshot, resolvedObjects: objects, stageDirectory: stage.path, outputFileName: "render.mp4", runtime: .init(runtimeRoot: runtime.runtimeRoot.path, nodeVersion: try version(runtime.node, arguments: ["--version"]), browserWrapperExecutable: runtime.browserWrapper.path, browserTargetExecutable: runtime.browser.path, ffmpegExecutable: runtime.ffmpeg.path, ffprobeExecutable: runtime.ffprobe.path))
             let requestURL = stage.appendingPathComponent("attempt-request.json")
             try JSONEncoder.sorted.encode(request).write(to: requestURL, options: .atomic)
             let marker = RenderAttemptMarker(schemaVersion: 1, projectID: input.snapshot.projectID, jobID: input.status.jobID, attemptID: attemptID, snapshotSHA256: snapshotSHA256, machineBindingDigest: input.machineBindingDigest)
@@ -482,7 +510,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         let configurationURL = Self.machineRoot(projectID: projectID).appendingPathComponent("renderer-selectors.json")
         guard let configuration = try? safeDecode(PersistedRenderRuntimeSelectors.self, at: configurationURL),
               configuration.machineBindingDigest == machineBindingDigest,
-              let configured = Self.bundledRuntime(selectors: configuration),
+              let configured = bundledRuntime(selectors: configuration),
               case .ready = readiness(for: configured),
               (try? runtimeIdentity(for: configured)) == configuration.runtimeIdentity else { return nil }
         return configured
@@ -502,7 +530,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
                   marker.machineBindingDigest == input.machineBindingDigest else { return nil }
             // The process is deliberately unstarted: recovery never signals a
             // process whose ownership did not survive this service instance.
-            return Active(process: Process(), attemptID: marker.attemptID, snapshotSHA256: marker.snapshotSHA256, stage: stage, runtime: RenderWorkerRuntime(node: URL(fileURLWithPath: "/dev/null"), worker: URL(fileURLWithPath: "/dev/null"), runtimeRoot: URL(fileURLWithPath: "/dev/null"), browser: URL(fileURLWithPath: "/dev/null"), ffmpeg: URL(fileURLWithPath: "/dev/null"), ffprobe: URL(fileURLWithPath: "/dev/null")))
+            return Active(process: Process(), attemptID: marker.attemptID, snapshotSHA256: marker.snapshotSHA256, stage: stage, runtime: RenderWorkerRuntime(node: URL(fileURLWithPath: "/dev/null"), worker: URL(fileURLWithPath: "/dev/null"), runtimeRoot: URL(fileURLWithPath: "/dev/null"), browser: URL(fileURLWithPath: "/dev/null"), browserWrapper: URL(fileURLWithPath: "/dev/null"), ffmpeg: URL(fileURLWithPath: "/dev/null"), ffprobe: URL(fileURLWithPath: "/dev/null")))
         }
     }
 
@@ -532,10 +560,18 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         }
     }
 
-    private static func bundledRuntime(selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
+    private func bundledRuntime(selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
         let service = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let resources = service.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/RendererRuntime", isDirectory: true)
-        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), worker: resources.appendingPathComponent("episode-render-worker.mjs"), runtimeRoot: resources, browser: URL(fileURLWithPath: selectors.browser), ffmpeg: URL(fileURLWithPath: selectors.ffmpeg), ffprobe: URL(fileURLWithPath: selectors.ffprobe))
+        guard let profileData = try? safeRegularData(at: resources.appendingPathComponent("runtime-profile.json")),
+              let profile = try? JSONDecoder().decode(RenderRuntimeProfile.self, from: profileData),
+              profile.schemaVersion == 1,
+              profile.nodeVersion == "v22.22.1",
+              let worker = containedProfileFile(root: resources, relativePath: profile.worker.path, expectedSHA256: profile.worker.sha256, executable: false),
+              let browserLauncher = profile.launchers.first(where: { $0.kind == "browser" }),
+              profile.launchers.filter({ $0.kind == "browser" }).count == 1,
+              let browserWrapper = containedProfileFile(root: resources, relativePath: browserLauncher.path, expectedSHA256: browserLauncher.sha256, executable: true) else { return nil }
+        return RenderWorkerRuntime(node: resources.appendingPathComponent("node/bin/node"), worker: worker, runtimeRoot: resources, browser: URL(fileURLWithPath: selectors.browser), browserWrapper: browserWrapper, ffmpeg: URL(fileURLWithPath: selectors.ffmpeg), ffprobe: URL(fileURLWithPath: selectors.ffprobe))
     }
 
     private func candidateRuntime(projectID: UUID, selectors: PersistedRenderRuntimeSelectors) -> RenderWorkerRuntime? {
@@ -544,7 +580,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
         if let provider { return provider(projectID) }
 #endif
         if let injected = runtime(projectID) { return injected }
-        return Self.bundledRuntime(selectors: selectors)
+        return bundledRuntime(selectors: selectors)
     }
 
     private func canonicalSelectors(_ selectors: RenderRuntimeSelectors) -> PersistedRenderRuntimeSelectors? {
@@ -553,7 +589,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
               let ffprobe = canonicalExecutable(selectors.ffprobe) else { return nil }
         // Configuration has not been preflighted yet; identity is filled only
         // immediately before the atomically written validated record.
-        return PersistedRenderRuntimeSelectors(browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe, machineBindingDigest: "", runtimeIdentity: RenderRuntimeIdentity(nodeVersion: "", workerSHA256: ""))
+        return PersistedRenderRuntimeSelectors(browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe, machineBindingDigest: "", runtimeIdentity: RenderRuntimeIdentity(nodeVersion: "", workerSHA256: "", browserWrapperSHA256: "", browserSHA256: "", ffmpegSHA256: "", ffprobeSHA256: ""))
     }
 
     private func canonicalExecutable(_ url: URL) -> String? {
@@ -590,7 +626,14 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
     }
 
     private func runtimeIdentity(for runtime: RenderWorkerRuntime) throws -> RenderRuntimeIdentity {
-        RenderRuntimeIdentity(nodeVersion: try version(runtime.node, arguments: ["--version"]), workerSHA256: digest(try safeRegularData(at: runtime.worker)))
+        RenderRuntimeIdentity(
+            nodeVersion: try version(runtime.node, arguments: ["--version"]),
+            workerSHA256: digest(try safeRegularData(at: runtime.worker)),
+            browserWrapperSHA256: digest(try safeExecutableData(at: runtime.browserWrapper)),
+            browserSHA256: digest(try safeExecutableData(at: runtime.browser)),
+            ffmpegSHA256: digest(try safeExecutableData(at: runtime.ffmpeg)),
+            ffprobeSHA256: digest(try safeExecutableData(at: runtime.ffprobe))
+        )
     }
 
     private func preflight(_ runtime: RenderWorkerRuntime) -> Bool {
@@ -599,7 +642,7 @@ final class RenderExecutionCoordinator: @unchecked Sendable {
     }
 
     private func readiness(for runtime: RenderWorkerRuntime) -> RenderRuntimeReadiness {
-        guard [runtime.node, runtime.browser, runtime.ffmpeg, runtime.ffprobe].allSatisfy({ FileManager.default.isExecutableFile(atPath: $0.path) }),
+        guard [runtime.node, runtime.browserWrapper, runtime.browser, runtime.ffmpeg, runtime.ffprobe].allSatisfy({ (try? safeExecutableData(at: $0)) != nil }),
               (try? safeRegularData(at: runtime.worker)) != nil else {
             return .unavailable(reason: "The bundled renderer or selected executable is unavailable.")
         }
@@ -705,6 +748,14 @@ private extension RenderExecutionCoordinator {
         return try Data(contentsOf: url)
     }
 
+    func safeExecutableData(at url: URL) throws -> Data {
+        var info = stat()
+        guard lstat(url.path, &info) == 0,
+              (info.st_mode & S_IFMT) == S_IFREG,
+              (info.st_mode & S_IXUSR) != 0 else { throw AuthorityFailure.unauthorized }
+        return try Data(contentsOf: url)
+    }
+
     func isRegularDirectory(_ url: URL) -> Bool {
         var info = stat()
         return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFDIR
@@ -713,6 +764,33 @@ private extension RenderExecutionCoordinator {
     func safeChild(_ name: String, of root: URL) -> URL? {
         guard name == URL(fileURLWithPath: name).lastPathComponent, !name.isEmpty else { return nil }
         return root.appendingPathComponent(name)
+    }
+
+    /// A package profile may name only a regular file beneath the real runtime
+    /// root. Every parent is lstat-checked so a matching external file cannot
+    /// enter through a replaced `tools` directory.
+    func containedProfileFile(root: URL, relativePath: String, expectedSHA256: String, executable: Bool) -> URL? {
+        guard expectedSHA256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+              !relativePath.hasPrefix("/"),
+              !relativePath.isEmpty else { return nil }
+        let parts = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return nil }
+        var parent = root
+        guard isRegularDirectory(parent) else { return nil }
+        for part in parts.dropLast() {
+            parent.appendPathComponent(String(part), isDirectory: true)
+            guard isRegularDirectory(parent) else { return nil }
+        }
+        let file = parent.appendingPathComponent(String(parts[parts.count - 1]))
+        let data: Data
+        if executable {
+            guard let value = try? safeExecutableData(at: file) else { return nil }
+            data = value
+        } else {
+            guard let value = try? safeRegularData(at: file) else { return nil }
+            data = value
+        }
+        return digest(data) == expectedSHA256 ? file : nil
     }
 
     func cleanup(stage: URL) { try? FileManager.default.removeItem(at: stage) }

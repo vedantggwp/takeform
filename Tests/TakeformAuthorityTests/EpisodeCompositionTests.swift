@@ -453,16 +453,18 @@ final class EpisodeCompositionTests: XCTestCase {
         let node = runtime.appendingPathComponent("node")
         let worker = runtime.appendingPathComponent("worker")
         let browser = runtime.appendingPathComponent("browser")
+        let browserWrapper = runtime.appendingPathComponent("browser-wrapper")
         let ffmpeg = runtime.appendingPathComponent("ffmpeg")
         let ffprobe = runtime.appendingPathComponent("ffprobe")
         try "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo v22.22.1; exit 0; fi\nworker=\"$1\"; shift; exec \"$worker\" \"$@\"\n".write(to: node, atomically: true, encoding: .utf8)
-        let defaultWorker = "#!/bin/sh\nstage=\"$TAKEFORM_RENDER_STAGE\"\njob=\"$TAKEFORM_RENDER_JOB\"\nattempt=\"$TAKEFORM_RENDER_ATTEMPT\"\nhash=\"$TAKEFORM_RENDER_SNAPSHOT_SHA256\"\nprintf render > \"$stage/render.mp4\"\nsha=$(/usr/bin/shasum -a 256 \"$stage/render.mp4\" | /usr/bin/awk '{print $1}')\nprintf '{\\\"schemaVersion\\\":1,\\\"jobID\\\":\\\"%s\\\",\\\"attemptID\\\":\\\"%s\\\",\\\"outcome\\\":\\\"succeeded\\\",\\\"input\\\":{\\\"compositionDigest\\\":\\\"ignored\\\",\\\"snapshotSHA256\\\":\\\"%s\\\",\\\"assets\\\":[]},\\\"artifact\\\":{\\\"fileName\\\":\\\"render.mp4\\\",\\\"byteLength\\\":6,\\\"sha256\\\":\\\"%s\\\"}}' \"$job\" \"$attempt\" \"$hash\" \"$sha\" > \"$stage/attempt-receipt.json\"\n"
+        let defaultWorker = "#!/bin/sh\nstage=\"$TAKEFORM_RENDER_STAGE\"\njob=\"$TAKEFORM_RENDER_JOB\"\nattempt=\"$TAKEFORM_RENDER_ATTEMPT\"\nhash=\"$TAKEFORM_RENDER_SNAPSHOT_SHA256\"\nrequest=\"$2\"\ngrep -q '\\\"browserWrapperExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"browserTargetExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"ffmpegExecutable\\\"' \"$request\" || exit 65\ngrep -q '\\\"ffprobeExecutable\\\"' \"$request\" || exit 65\nprintf render > \"$stage/render.mp4\"\nsha=$(/usr/bin/shasum -a 256 \"$stage/render.mp4\" | /usr/bin/awk '{print $1}')\nprintf '{\\\"schemaVersion\\\":1,\\\"jobID\\\":\\\"%s\\\",\\\"attemptID\\\":\\\"%s\\\",\\\"outcome\\\":\\\"succeeded\\\",\\\"input\\\":{\\\"compositionDigest\\\":\\\"ignored\\\",\\\"snapshotSHA256\\\":\\\"%s\\\",\\\"assets\\\":[]},\\\"artifact\\\":{\\\"fileName\\\":\\\"render.mp4\\\",\\\"byteLength\\\":6,\\\"sha256\\\":\\\"%s\\\"}}' \"$job\" \"$attempt\" \"$hash\" \"$sha\" > \"$stage/attempt-receipt.json\"\n"
         try (workerScript ?? defaultWorker).write(to: worker, atomically: true, encoding: .utf8)
         try "#!/bin/sh\necho FakeTool 1.0\n".write(to: browser, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexec \"$TAKEFORM_BROWSER_EXECUTABLE\" \"$@\"\n".write(to: browserWrapper, atomically: true, encoding: .utf8)
         try "#!/bin/sh\necho FakeTool 1.0\n".write(to: ffmpeg, atomically: true, encoding: .utf8)
         let defaultProbe = "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then echo FakeTool 1.0; else printf '{\\\"streams\\\":[{\\\"codec_type\\\":\\\"video\\\",\\\"width\\\":1920,\\\"height\\\":1080,\\\"avg_frame_rate\\\":\\\"30/1\\\",\\\"nb_frames\\\":\\\"360\\\"}],\\\"format\\\":{\\\"duration\\\":\\\"12.0\\\"}}\\n'; fi\n"
         try (ffprobeScript ?? defaultProbe).write(to: ffprobe, atomically: true, encoding: .utf8)
-        for url in [node, worker, browser, ffmpeg, ffprobe] { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path) }
-        return RenderWorkerRuntime(node: node, worker: worker, runtimeRoot: runtime, browser: browser, ffmpeg: ffmpeg, ffprobe: ffprobe)
+        for url in [node, worker, browser, browserWrapper, ffmpeg, ffprobe] { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path) }
+        return RenderWorkerRuntime(node: node, worker: worker, runtimeRoot: runtime, browser: browser, browserWrapper: browserWrapper, ffmpeg: ffmpeg, ffprobe: ffprobe)
     }
 }
