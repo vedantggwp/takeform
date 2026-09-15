@@ -45,7 +45,8 @@ private struct PortableManifest: Codable {
 private struct RenderCommandFingerprint: Codable {
     let expectedRevision: Revision
     let episodeID: UUID
-    let compositionDigest: String
+    let requestedDigest: String
+    let canonicalDigest: String
     let format: EpisodeRenderFormat
 }
 
@@ -267,9 +268,9 @@ public final class ProjectAuthority {
     }
 
     private func commandFingerprint(_ envelope: CommandEnvelope, document: ProjectDocument) throws -> String {
-        guard case let .requestEpisodeRender(episodeID, _, format) = envelope.command else { return try encode(envelope) }
+        guard case let .requestEpisodeRender(episodeID, requestedDigest, format) = envelope.command else { return try encode(envelope) }
         let recomputedDigest = try document.episodeCompositions.first(where: { $0.episodeID == episodeID }).map { try self.digest(of: $0.canonicalData()) } ?? "missing"
-        return try encode(RenderCommandFingerprint(expectedRevision: envelope.expectedRevision, episodeID: episodeID, compositionDigest: recomputedDigest, format: format))
+        return try encode(RenderCommandFingerprint(expectedRevision: envelope.expectedRevision, episodeID: episodeID, requestedDigest: requestedDigest, canonicalDigest: recomputedDigest, format: format))
     }
 
     private func digest(of data: Data) -> String {

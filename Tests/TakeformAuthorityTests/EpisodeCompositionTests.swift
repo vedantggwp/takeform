@@ -137,6 +137,8 @@ final class EpisodeCompositionTests: XCTestCase {
         XCTAssertEqual(status.requestedRevision, committed.revision)
         XCTAssertEqual(try authority.open().document.revision, committed.revision, "logical render request must not revise portable document")
         XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "exact command replay must return stored request")
+        let malformedReplay = CommandEnvelope(id: request.id, expectedRevision: request.expectedRevision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4))
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(malformedReplay, credential: credential).outcome, .rejected(reason: "command-id-reused-with-different-request"), "a changed caller-supplied digest must not replay an accepted request")
 
         let stale = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: Revision(committed.revision.value - 1), command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)), credential: credential)
         XCTAssertEqual(stale.outcome, .conflict(currentRevision: committed.revision))
