@@ -18,6 +18,8 @@ public enum AppAuthorityRequest: Codable, Sendable {
     case materializeRender(URL, UUID, CommandID, Data)
     case exportRender(URL, UUID, CommandID, URL, EpisodeRenderExportDecision, Data)
     case playbackSource(URL, UUID, CommandID, Data)
+    case configureRenderRuntime(URL, RenderRuntimeSelectors, CommandID, Data)
+    case renderRuntimeReadiness(URL, Data)
     case pairedExecute(URL, CommandEnvelope, UUID, String)
     case pairedImport(URL, [URL], UUID, String)
     case pairedRequestRender(URL, CommandEnvelope, UUID, String)
@@ -26,6 +28,27 @@ public enum AppAuthorityRequest: Codable, Sendable {
     case pairedMaterializeRender(URL, UUID, CommandID, UUID, String)
     case pairedExportRender(URL, UUID, CommandID, URL, EpisodeRenderExportDecision, UUID, String)
     case pairedRenderContext(URL, UUID, UUID, String)
+}
+
+/// Explicit machine-local executables selected by the app. These URLs are
+/// never stored in the portable project and are never accepted from the CLI.
+public struct RenderRuntimeSelectors: Codable, Equatable, Sendable {
+    public let browser: URL
+    public let ffmpeg: URL
+    public let ffprobe: URL
+
+    public init(browser: URL, ffmpeg: URL, ffprobe: URL) {
+        self.browser = browser
+        self.ffmpeg = ffmpeg
+        self.ffprobe = ffprobe
+    }
+}
+
+/// Readiness is recomputed from the current machine state. It deliberately
+/// reports tool facts without returning their local paths.
+public enum RenderRuntimeReadiness: Codable, Equatable, Sendable {
+    case ready(nodeVersion: String, browserVersion: String, ffmpegVersion: String, ffprobeVersion: String)
+    case unavailable(reason: String)
 }
 
 /// This app-only response contains a freshly checked machine-local URL. It is
@@ -52,7 +75,7 @@ public struct EpisodeRenderPlaybackSource: Codable, Sendable {
     }
 }
 
-public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case importOutcomes([ManagedImportOutcome]); case pairing(UUID, String); case grants([CLIPairingSummary]); case renderStatus(EpisodeRenderRequestStatus); case renderMaterialization(EpisodeRenderMaterialization); case renderExport(EpisodeRenderExportResult); case renderPlaybackSource(EpisodeRenderPlaybackSource); case renderContext(EpisodeRenderContext); case success; case failure(WorkspaceFailure) }
+public enum AppAuthorityResponse: Codable, Sendable { case snapshot(WorkspaceSnapshot); case result(CommandResult); case importOutcomes([ManagedImportOutcome]); case pairing(UUID, String); case grants([CLIPairingSummary]); case renderStatus(EpisodeRenderRequestStatus); case renderMaterialization(EpisodeRenderMaterialization); case renderExport(EpisodeRenderExportResult); case renderPlaybackSource(EpisodeRenderPlaybackSource); case renderContext(EpisodeRenderContext); case renderRuntimeReadiness(RenderRuntimeReadiness); case success; case failure(WorkspaceFailure) }
 public enum AppAuthoritySocketFailure: Error { case unverifiedPeer }
 public final class AppAuthoritySocketListener: @unchecked Sendable {
     public let fileDescriptor: Int32

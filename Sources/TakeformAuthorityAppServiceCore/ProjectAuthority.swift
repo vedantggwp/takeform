@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import Darwin
 import TakeformAuthorityEngine
+import TakeformAppAuthorityWire
 import TakeformCore
 import TakeformWorkspace
 
@@ -688,6 +689,30 @@ extension ProjectAuthority {
         _ = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
         _ = try recordReadOperation(jobID: jobID, operationID: operationID, kind: "playback")
         return try renderAttemptInput(jobID: jobID)
+    }
+
+    /// Runtime selection is an app-only machine-state operation. The logical
+    /// project database never receives executable locations or readiness.
+    func configureRenderRuntimeForAuthenticatedCreator(selectors: RenderRuntimeSelectors, operationID: CommandID, credential: String) throws -> RenderRuntimeReadiness {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machine = try loadMachineState(for: opened.document.projectID)
+        guard let binding = machine.binding else { throw AuthorityFailure.unauthorized }
+        return try RenderExecutionCoordinator.shared.configureRuntime(
+            projectID: opened.document.projectID,
+            machineBindingDigest: digest(of: try encoder.encode(binding)),
+            selectors: selectors,
+            operationID: operationID
+        )
+    }
+
+    func renderRuntimeReadinessForAuthenticatedCreator(credential: String) throws -> RenderRuntimeReadiness {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machine = try loadMachineState(for: opened.document.projectID)
+        guard let binding = machine.binding else { throw AuthorityFailure.unauthorized }
+        return RenderExecutionCoordinator.shared.runtimeReadiness(
+            projectID: opened.document.projectID,
+            machineBindingDigest: digest(of: try encoder.encode(binding))
+        )
     }
 
     public func cancelEpisodeRenderForAuthenticatedCreator(jobID: UUID, operationID: CommandID, credential: String) throws -> EpisodeRenderRequestStatus {

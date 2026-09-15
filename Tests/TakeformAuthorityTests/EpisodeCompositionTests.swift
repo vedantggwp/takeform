@@ -237,6 +237,48 @@ final class EpisodeCompositionTests: XCTestCase {
         guard case .failure = CreatorAuthorityService.respond(to: .playbackSource(movedPackage, status.jobID, CommandID(), Data(credential.utf8)), from: .app) else { return XCTFail("a rebound package must not receive the prior machine-local playback URL") }
     }
 
+    func testAppRuntimeSetupIsBoundedIdempotentAndNeverAvailableToCLI() throws {
+        let package = root.appendingPathComponent("Runtime.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let machineRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Takeform/Authority/\(opened.document.projectID.uuidString)/renders", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: machineRoot) }
+
+        let runtime = try fakeRenderRuntime()
+        let coordinator = RenderExecutionCoordinator.shared
+        coordinator.installTestRuntime { _ in runtime }
+        defer { coordinator.clearTestRuntime() }
+        let selectors = RenderRuntimeSelectors(browser: runtime.browser, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        let operationID = CommandID()
+        guard case let .renderRuntimeReadiness(.ready(node, browser, ffmpeg, ffprobe)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("validated app runtime setup failed") }
+        XCTAssertEqual(node, "v22.22.1")
+        XCTAssertEqual(browser, "FakeTool 1.0")
+        XCTAssertEqual(ffmpeg, "FakeTool 1.0")
+        XCTAssertEqual(ffprobe, "FakeTool 1.0")
+        guard case let .renderRuntimeReadiness(.ready(replayedNode, replayedBrowser, replayedFFmpeg, replayedFFprobe)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("an exact setup replay did not return its stored readiness") }
+        XCTAssertEqual(replayedNode, node)
+        XCTAssertEqual(replayedBrowser, browser)
+        XCTAssertEqual(replayedFFmpeg, ffmpeg)
+        XCTAssertEqual(replayedFFprobe, ffprobe)
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, selectors, CommandID(), Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not configure renderer selectors") }
+
+        let invalid = root.appendingPathComponent("not-executable")
+        try Data("not executable".utf8).write(to: invalid)
+        let invalidSelectors = RenderRuntimeSelectors(browser: invalid, ffmpeg: runtime.ffmpeg, ffprobe: runtime.ffprobe)
+        guard case let .renderRuntimeReadiness(.unavailable(reason)) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, invalidSelectors, CommandID(), Data(credential.utf8)), from: .app) else { return XCTFail("invalid runtime setup was accepted") }
+        XCTAssertTrue(reason.contains("regular executable"))
+        guard case .failure(.rejected) = CreatorAuthorityService.respond(to: .configureRenderRuntime(package, invalidSelectors, operationID, Data(credential.utf8)), from: .app) else { return XCTFail("a reused setup operation ID must reject changed selectors") }
+        guard case .renderRuntimeReadiness(.ready) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(package, Data(credential.utf8)), from: .app) else { return XCTFail("an invalid setup must not clobber prior valid selectors") }
+
+        let movedPackage = root.appendingPathComponent("RuntimeMoved.takeform")
+        try FileManager.default.moveItem(at: package, to: movedPackage)
+        let movedAuthority = try ProjectAuthority(packageURL: movedPackage)
+        _ = try movedAuthority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
+        guard case .renderRuntimeReadiness(.unavailable) = CreatorAuthorityService.respond(to: .renderRuntimeReadiness(movedPackage, Data(credential.utf8)), from: .app) else { return XCTFail("a rebinding must force fresh runtime readiness") }
+    }
+
     func testCancelledWorkerIsReapedAndCannotPublishItsLateReceipt() throws {
         let package = root.appendingPathComponent("CancelledWorker.takeform")
         let credential = "creator"

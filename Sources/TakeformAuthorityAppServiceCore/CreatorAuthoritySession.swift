@@ -13,7 +13,7 @@ public enum CreatorAuthorityService {
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.app, .requestRender), (.app, .renderStatus), (.app, .cancelRender), (.app, .materializeRender), (.app, .exportRender), (.app, .playbackSource), (.cli, .pairedExecute), (.cli, .pairedImport), (.cli, .pairedRequestRender), (.cli, .pairedRenderStatus), (.cli, .pairedCancelRender), (.cli, .pairedMaterializeRender), (.cli, .pairedExportRender), (.cli, .pairedRenderContext): true
+        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.app, .requestRender), (.app, .renderStatus), (.app, .cancelRender), (.app, .materializeRender), (.app, .exportRender), (.app, .playbackSource), (.app, .configureRenderRuntime), (.app, .renderRuntimeReadiness), (.cli, .pairedExecute), (.cli, .pairedImport), (.cli, .pairedRequestRender), (.cli, .pairedRenderStatus), (.cli, .pairedCancelRender), (.cli, .pairedMaterializeRender), (.cli, .pairedExportRender), (.cli, .pairedRenderContext): true
         default: false
         }
     }
@@ -104,6 +104,12 @@ public enum CreatorAuthorityService {
             let input = try authority.playbackAttemptInputForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: String(decoding: credential, as: UTF8.self))
             guard let source = RenderExecutionCoordinator.shared.playbackSource(for: input) else { throw AuthorityFailure.renderUnavailable }
             return .renderPlaybackSource(source)
+        case let .configureRenderRuntime(url, selectors, operationID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderRuntimeReadiness(try authority.configureRenderRuntimeForAuthenticatedCreator(selectors: selectors, operationID: operationID, credential: String(decoding: credential, as: UTF8.self)))
+        case let .renderRuntimeReadiness(url, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderRuntimeReadiness(try authority.renderRuntimeReadinessForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self)))
         case let .pairedExecute(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.execute(envelope, grantID: grantID, token: token))

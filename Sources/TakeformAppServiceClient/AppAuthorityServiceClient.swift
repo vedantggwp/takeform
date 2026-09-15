@@ -134,6 +134,22 @@ public actor AppAuthorityServiceClient: WorkspaceClient {
         }
         return source
     }
+    public func configureRenderRuntime(packageURL: URL, selectors: RenderRuntimeSelectors, operationID: CommandID = CommandID()) async throws -> RenderRuntimeReadiness {
+        let response = try await request(.configureRenderRuntime(packageURL, selectors, operationID, try credential()))
+        guard case let .renderRuntimeReadiness(readiness) = response else {
+            if case let .failure(failure) = response { throw failure }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return readiness
+    }
+    public func renderRuntimeReadiness(packageURL: URL) async throws -> RenderRuntimeReadiness {
+        let response = try await request(.renderRuntimeReadiness(packageURL, try credential()))
+        guard case let .renderRuntimeReadiness(readiness) = response else {
+            if case let .failure(failure) = response { throw failure }
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return readiness
+    }
     public func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws {
         let r = try await request(.pair(packageURL, label, expiresAt, try credential()))
         guard case let .pairing(id, raw) = r else { throw WorkspaceFailure.authorityUnavailable }
