@@ -5,6 +5,7 @@ import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
 import {cleanupAttemptScratch, createAttempt, finishAttempt, freezeSnapshot, frameState, reserveStorage} from '../common/index.mjs';
+import {writeTlProject} from './tl-composition.mjs';
 
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
 const runtimeDefault = process.env.TAKEFORM_RUNTIME;
@@ -158,13 +159,17 @@ export class HyperframesAdapter {
   }
 
   async start({fixtureId, attemptRoot}) {
-    if (fixtureId !== 'M') throw new Error('This lease authorizes M only');
+    if (!['M', 'T', 'L'].includes(fixtureId)) throw new Error(`Unsupported fixture ${fixtureId}`);
     const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot: this.fixtureRoot});
     if (!this.mediaPrep?.modulePath || !this.mediaPrep?.manifestPath || !this.mediaPrep?.derivativeRoot) throw new Error('shared media preparation is required');
     const loader = await import(pathToFileURL(resolve(this.mediaPrep.modulePath)).href);
     const manifestBytes = await readFile(this.mediaPrep.manifestPath);
     const manifest = JSON.parse(manifestBytes.toString('utf8'));
-    const preparedEntries = await loader.validateManifest(manifest, {derivativeRoot: this.mediaPrep.derivativeRoot, expectedOriginals: loader.expectedOriginalsFromSnapshot(snapshot, fixtureId)});
+    const expectedOriginals = {
+      ...loader.expectedOriginalsFromSnapshot(snapshot, 'M'),
+      ...loader.expectedOriginalsFromSnapshot(snapshot, fixtureId)
+    };
+    const preparedEntries = await loader.validateManifest(manifest, {derivativeRoot: this.mediaPrep.derivativeRoot, expectedOriginals});
     const prepared = new Map(preparedEntries.map((entry) => [entry.sourceId, entry]));
     const mediaPreparation = mediaPreparationReceipt(manifestBytes, manifest, preparedEntries);
     const fixture = snapshot._manifests[fixtureId].manifest;
@@ -177,7 +182,9 @@ export class HyperframesAdapter {
     const fileSystem = await statfs(attemptRoot);
     const freeBytes = Number(fileSystem.bavail * fileSystem.bsize);
     const reservation = reserveStorage({route: 'streaming', width: fixture.canonicalPlan.width, height: fixture.canonicalPlan.height, frameCount: fixture.expected.frameCount, expectedOutputBytes: 256 * 1024 * 1024, decodeCacheBytes: 512 * 1024 * 1024, pipelineBufferBytes: 512 * 1024 * 1024, runtimeFreeFloorBytes: 1024 * 1024 * 1024, freeBytes});
-    const bundleHash = await writeProject(snapshot, fixtureId, this.fixtureRoot, project, prepared, this.mediaPrep.derivativeRoot);
+    const bundleHash = fixtureId === 'M'
+      ? await writeProject(snapshot, fixtureId, this.fixtureRoot, project, prepared, this.mediaPrep.derivativeRoot)
+      : await writeTlProject(snapshot, fixtureId, this.fixtureRoot, project, prepared, this.mediaPrep.derivativeRoot);
     const producer = await importProducer(this.runtime);
     const producerConfig = {...producer.DEFAULT_CONFIG, browserGpuMode: 'software', browserTimeout: 30000, chromePath: browserWrapper, enableBrowserPool: false, enableStreamingEncode: true, forceScreenshot: false, lowMemoryMode: false, protocolTimeout: 30000, streamingEncodeMaxDurationSeconds: 1801};
     const controller = new AbortController();

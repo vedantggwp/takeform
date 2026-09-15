@@ -1,11 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {mkdtemp, readFile, readdir, rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {pathToFileURL} from 'node:url';
 import {freezeSnapshot} from '../common/index.mjs';
 import {framePayload, HyperframesAdapter, mediaPreparationReceipt, ownedProcessTree} from './adapter.mjs';
 import {longFilmSupport, talkingHeadSupport} from './fixture-support.mjs';
+import {tlPayload, writeTlProject} from './tl-composition.mjs';
 
 const fixtureRoot = process.env.FIXTURE_ROOT;
+const runtime = process.env.TAKEFORM_RUNTIME;
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
+
+async function pinnedPublicParsers(html) {
+  assert.ok(runtime, 'TAKEFORM_RUNTIME is required for public producer compilation checks');
+  const core = await import(pathToFileURL(join(runtime, 'node_modules/@hyperframes/core/dist/index.js')).href);
+  const engine = await import(pathToFileURL(join(runtime, 'node_modules/@hyperframes/engine/dist/index.js')).href);
+  const producer = await import(pathToFileURL(join(runtime, 'node_modules/@hyperframes/producer/dist/index.js')).href);
+  const compiled = core.compileTimingAttrs(html).html;
+  const lint = await producer.runHyperframeLint({entryFile: 'index.html', html: compiled});
+  assert.equal(lint.errorCount, 0, lint.findings.map((finding) => finding.message).join('\n'));
+  return {audio: engine.parseAudioElements(compiled), compiled, videos: engine.parseVideoElements(compiled)};
+}
+
+async function generatedProject(snapshot, fixtureId) {
+  const project = await mkdtemp(join(tmpdir(), `takeform-hf-${fixtureId.toLowerCase()}-`));
+  await writeTlProject(snapshot, fixtureId, fixtureRoot, project, new Map(), project);
+  return {html: await readFile(join(project, 'index.html'), 'utf8'), project};
+}
 
 test('M browser payload uses accepted frame state and media element kinds', async () => {
   assert.ok(fixtureRoot);
@@ -89,4 +112,52 @@ test('L support retains rational rate, all chapter labels, both handles at every
   assert.ok(support.producerAudioTracks.every((track) => track.automation?.lanes[0].target === 'volume' || track.volume === 1));
   assert.ok(support.producerAudioTracks.every((track) => (track.automation?.lanes[0].points.length ?? 0) <= 512));
   for (let frame = 0; frame < support.frameCount; frame += 1) assert.ok(support.stateAt(frame).audio.roles.length > 0);
+});
+
+test('T generates a producer-compiled composition with separate retimed audio and corrected caption edges', async () => {
+  assert.ok(fixtureRoot);
+  const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot});
+  const payload = tlPayload(snapshot, 'T');
+  assert.equal(payload.frameCount, 2700);
+  assert.deepEqual(payload.rate, {num: 30, den: 1});
+  assert.equal(payload.captions.at(-1).endFrame <= payload.frameCount, true);
+  const secondTake = payload.visuals.find((visual) => visual.sourceId === 'take2');
+  assert.ok(secondTake);
+  assert.notDeepEqual(secondTake.sourceRate, {num: 1, den: 1});
+  const {html, project} = await generatedProject(snapshot, 'T');
+  try {
+    const parsed = await pinnedPublicParsers(html);
+    assert.equal(parsed.videos.length, payload.visuals.length);
+    assert.equal(parsed.audio.length, payload.tracks.length);
+    assert.ok(parsed.videos.every((video) => video.hasAudio === false));
+    assert.ok(parsed.audio.some((track) => track.id.includes('oDlg2A') && track.playbackRate !== 1));
+    assert.ok(parsed.audio.some((track) => track.fxChain && track.automation));
+    assert.ok(html.includes('creator names the cut,'), 'corrected caption text must be emitted');
+    assert.deepEqual((await readdir(join(project, 'media'))).sort(), Object.values(payload.sources).map((source) => source.path.slice('media/'.length)).sort());
+  } finally {
+    await rm(project, {force: true, recursive: true});
+  }
+});
+
+test('L generates exact rational-rate joins, dual visual handles, and continuous separate audio', async () => {
+  assert.ok(fixtureRoot);
+  const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot});
+  const payload = tlPayload(snapshot, 'L');
+  assert.equal(payload.frameCount, 43157);
+  assert.deepEqual(payload.rate, {num: 24000, den: 1001});
+  assert.equal(payload.chapters.length, 15);
+  const transitionVisuals = payload.visuals.filter((visual) => visual.styleSamples.length > 1);
+  assert.equal(transitionVisuals.length, 28);
+  const {html, project} = await generatedProject(snapshot, 'L');
+  try {
+    const parsed = await pinnedPublicParsers(html);
+    assert.equal(parsed.videos.length, payload.visuals.length);
+    assert.equal(parsed.audio.length, payload.tracks.length);
+    assert.ok(parsed.videos.every((video) => video.hasAudio === false));
+    assert.ok(parsed.audio.every((track) => track.start >= 0 && track.end > track.start));
+    assert.ok(html.includes('chapter15'));
+    assert.match(html, /data-composition-id="takeform-L"[^>]*data-duration="/);
+  } finally {
+    await rm(project, {force: true, recursive: true});
+  }
 });

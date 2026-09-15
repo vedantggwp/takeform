@@ -101,6 +101,7 @@ function producerTrack(run, rate) {
     v: usesDbGain ? sample.gainDb : sample.gain
   }));
   return {
+    id: `audio-${run.first.occurrenceId}-${run.first.role}-${run.first.layer}-${run.frames[0].frame}`,
     // Preserve rational source identities alongside future markup attributes.
     outputRange: run.first.outputRange,
     sourceRate: sourceRate(run.first, run.frames[1] && {sourceTime: run.frames[1].sourceTime}, rate),
