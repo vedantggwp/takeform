@@ -3,30 +3,38 @@ import Security
 
 /// Native-app credential used only to authenticate the app's UDS creator session.
 /// It is never a CLI pairing token and is never written into a project package.
+///
+/// The developer build uses the macOS file-keychain ACL model. It deliberately does
+/// not claim a data-protection keychain access group, which would require a provisioned
+/// signing profile. The UDS service verifies the peer's code identity separately.
 public enum CreatorCredentialStore {
     public static let service = "com.takeform.app.creator-session"
     public static let account = "creator-session-v1"
-    public static let accessGroup = "com.takeform.app.creator"
 
-    private static func query(returnData: Bool) throws -> [CFString: Any] {
-        guard let task = SecTaskCreateFromSelf(nil),
-              let groups = SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) as? [String],
-              groups.contains(accessGroup) else {
-            throw WorkspaceFailure.creatorAuthorizationRequired
-        }
-        var query: [CFString: Any] = [
+    private static var query: [CFString: Any] {
+        [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
-            kSecAttrAccessGroup: accessGroup,
             kSecUseAuthenticationUI: kSecUseAuthenticationUIFail
         ]
-        if returnData { query[kSecReturnData] = true }
-        return query
+    }
+
+    private static func creatorAccess() throws -> SecAccess {
+        guard let executable = Bundle.main.executablePath else { throw WorkspaceFailure.creatorAuthorizationRequired }
+        var trusted: SecTrustedApplication?
+        guard SecTrustedApplicationCreateFromPath(executable, &trusted) == errSecSuccess, let trusted else {
+            throw WorkspaceFailure.creatorAuthorizationRequired
+        }
+        var access: SecAccess?
+        guard SecAccessCreate("Takeform creator session" as CFString, [trusted] as CFArray, &access) == errSecSuccess, let access else {
+            throw WorkspaceFailure.creatorAuthorizationRequired
+        }
+        return access
     }
 
     public static func loadOrCreate() throws -> Data {
-        let readQuery = try query(returnData: true)
+        var readQuery = query; readQuery[kSecReturnData] = true
         var value: CFTypeRef?
         let status = SecItemCopyMatching(readQuery as CFDictionary, &value)
         if status == errSecSuccess, let data = value as? Data, !data.isEmpty { return data }
@@ -34,16 +42,15 @@ public enum CreatorCredentialStore {
 
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw WorkspaceFailure.creatorAuthorizationRequired }
-        let credential = Data(bytes)
-        var addition = try query(returnData: false)
-        addition[kSecValueData] = credential
-        addition[kSecAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        var addition = query
+        addition[kSecValueData] = Data(bytes)
+        addition[kSecAttrAccess] = try creatorAccess()
         guard SecItemAdd(addition as CFDictionary, nil) == errSecSuccess else { throw WorkspaceFailure.creatorAuthorizationRequired }
-        return credential
+        return Data(bytes)
     }
 
     public static func rotate() throws {
-        let status = SecItemDelete(try query(returnData: false) as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw WorkspaceFailure.creatorAuthorizationRequired }
     }
 }
