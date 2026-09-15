@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {lstat, mkdir, readFile, rename, stat, symlink, writeFile} from 'node:fs/promises';
 import {basename, extname, join, resolve} from 'node:path';
 import {promisify} from 'node:util';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {pathToFileURL} from 'node:url';
 
 const schemaVersion = 1;
 const execFile = promisify(execFileCallback);
@@ -165,6 +165,14 @@ async function requireProfileLauncher(root, kind) {
   return {kind, path, relativePath: launcher.path, sha256: launcher.sha256};
 }
 
+async function requireProfileWorker(root) {
+  const worker = runtimeProfile.worker;
+  if (!worker || !/^[a-f0-9]{64}$/.test(worker.sha256 ?? '')) fail('INVALID_RUNTIME_PROFILE', 'Runtime profile has no valid worker hash');
+  const path = containedPath(root, worker.path, 'worker');
+  if (hash(await readFile(path)) !== worker.sha256) fail('RUNTIME_WORKER_MISMATCH', 'Worker does not match the runtime profile');
+  return {path: worker.path, sha256: worker.sha256};
+}
+
 async function executableFacts(path, label, arguments_) {
   let stdout;
   try {
@@ -208,6 +216,7 @@ export async function validateRuntime(runtime) {
     packages.push({path, name, version});
   }
   const browserWrapper = await requireProfileLauncher(root, 'browser');
+  const worker = await requireProfileWorker(root);
   const browserTargetExecutable = await requireExecutable(runtime.browserTargetExecutable, 'Browser target');
   const ffmpegExecutable = await requireExecutable(runtime.ffmpegExecutable, 'FFmpeg');
   const ffprobeExecutable = await requireExecutable(runtime.ffprobeExecutable, 'FFprobe');
@@ -221,6 +230,7 @@ export async function validateRuntime(runtime) {
     runtimeRoot: root,
     receiptFacts: {
       browserWrapper: {path: browserWrapper.relativePath, sha256: browserWrapper.sha256},
+      worker,
       browserTarget: await executableFacts(browserTargetExecutable, 'Browser target', ['--version']),
       ffmpeg: await executableFacts(ffmpegExecutable, 'FFmpeg', ['-version']),
       ffprobe: await executableFacts(ffprobeExecutable, 'FFprobe', ['-version']),

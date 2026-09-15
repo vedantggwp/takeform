@@ -126,14 +126,16 @@ if [ -n "$RENDERER_NODE_ROOT" ]; then
   mkdir -p "$RENDERER_BUNDLE/tools"
   cp "$ROOT_DIR/renderer/launchers/secure-browser-launcher.sh" "$RENDERER_BUNDLE/tools/secure-browser-launcher.sh"
   chmod 755 "$RENDERER_BUNDLE/tools/secure-browser-launcher.sh"
-  EXPECTED_BROWSER_WRAPPER_SHA="$($RENDERER_NODE -e '
+  EXPECTED_RENDERER_HASHES="$($RENDERER_NODE -e '
     const fs = require("node:fs");
     const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     const entry = profile.launchers?.find((candidate) => candidate.kind === "browser");
-    if (!entry || entry.path !== "tools/secure-browser-launcher.sh" || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? "")) process.exit(64);
-    process.stdout.write(entry.sha256);
+    if (!entry || entry.path !== "tools/secure-browser-launcher.sh" || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? "") || profile.worker?.path !== "episode-render-worker.mjs" || !/^[a-f0-9]{64}$/.test(profile.worker.sha256 ?? "")) process.exit(64);
+    process.stdout.write(`${entry.sha256} ${profile.worker.sha256}`);
   ' "$ROOT_DIR/renderer/runtime-profile.json")"
+  read -r EXPECTED_BROWSER_WRAPPER_SHA EXPECTED_WORKER_SHA <<< "$EXPECTED_RENDERER_HASHES"
   [ "$(shasum -a 256 "$RENDERER_BUNDLE/tools/secure-browser-launcher.sh" | awk '{print $1}')" = "$EXPECTED_BROWSER_WRAPPER_SHA" ] || { echo "Renderer browser wrapper does not match runtime-profile.json." >&2; exit 65; }
+  [ "$(shasum -a 256 "$RENDERER_BUNDLE/episode-render-worker.mjs" | awk '{print $1}')" = "$EXPECTED_WORKER_SHA" ] || { echo "Renderer worker does not match runtime-profile.json." >&2; exit 65; }
 fi
 
 cat >"$APP_BUNDLE/Contents/Info.plist" <<PLIST

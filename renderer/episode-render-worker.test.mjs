@@ -76,6 +76,7 @@ test('runtime rejects a forged pinned package identity before a renderer import'
     }));
     await import('node:fs/promises').then(({mkdir}) => mkdir(join(root, 'tools'), {recursive: true}));
     await copyFile(new URL('./launchers/secure-browser-launcher.sh', import.meta.url), browserWrapper);
+    await copyFile(new URL('./episode-render-worker.mjs', import.meta.url), join(root, 'episode-render-worker.mjs'));
     await chmod(browserWrapper, 0o755);
     await Promise.all(runtimeProfile.packages.map(async ({path, name, version}) => {
       const packagePath = join(root, 'node_modules', path, 'package.json');
@@ -109,6 +110,7 @@ test('runtime rejects a modified packaged browser wrapper before renderer import
     await mkdir(join(root, 'tools'), {recursive: true});
     const wrapper = join(root, 'tools', 'secure-browser-launcher.sh');
     await copyFile(new URL('./launchers/secure-browser-launcher.sh', import.meta.url), wrapper);
+    await copyFile(new URL('./episode-render-worker.mjs', import.meta.url), join(root, 'episode-render-worker.mjs'));
     await chmod(wrapper, 0o755);
     for (const {path, name, version} of runtimeProfile.packages) {
       const packageDirectory = join(root, 'node_modules', path);
