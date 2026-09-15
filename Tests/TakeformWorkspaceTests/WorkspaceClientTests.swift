@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 @testable import TakeformAuthorityAppServiceCore
 import TakeformCore
 @testable import TakeformApp
+@_spi(Testing) import TakeformRenderedPreview
 
 private actor DelayedOpenWorkspaceClient: WorkspaceClient {
     private var openContinuations: [CheckedContinuation<WorkspaceSnapshot, Error>] = []
@@ -49,6 +50,8 @@ private actor DelayedOpenWorkspaceClient: WorkspaceClient {
 private actor RecordingRenderWorkspaceClient: WorkspaceClient, RenderWorkspaceClient {
     private let snapshot: WorkspaceSnapshot
     private var recordedRenderRequests: [CommandEnvelope] = []
+    private var statusContinuations: [CheckedContinuation<EpisodeRenderRequestStatus, Error>] = []
+    private var playbackContinuations: [CheckedContinuation<EpisodeRenderPlaybackSource, Error>] = []
 
     init(snapshot: WorkspaceSnapshot) {
         self.snapshot = snapshot
@@ -80,9 +83,13 @@ private actor RecordingRenderWorkspaceClient: WorkspaceClient, RenderWorkspaceCl
         return CommandResult(id: envelope.id, outcome: .renderRequested(status))
     }
 
-    func renderStatus(packageURL: URL, jobID: UUID) async throws -> EpisodeRenderRequestStatus { throw WorkspaceFailure.authorityUnavailable }
+    func renderStatus(packageURL: URL, jobID: UUID) async throws -> EpisodeRenderRequestStatus {
+        try await withCheckedThrowingContinuation { statusContinuations.append($0) }
+    }
     func cancelEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID) async throws -> EpisodeRenderRequestStatus { throw WorkspaceFailure.authorityUnavailable }
-    func playbackSource(packageURL: URL, jobID: UUID, operationID: CommandID) async throws -> EpisodeRenderPlaybackSource { throw WorkspaceFailure.authorityUnavailable }
+    func playbackSource(packageURL: URL, jobID: UUID, operationID: CommandID) async throws -> EpisodeRenderPlaybackSource {
+        try await withCheckedThrowingContinuation { playbackContinuations.append($0) }
+    }
     func exportEpisodeRender(packageURL: URL, jobID: UUID, operationID: CommandID, destination: URL, decision: EpisodeRenderExportDecision) async throws -> EpisodeRenderExportResult { throw WorkspaceFailure.authorityUnavailable }
     func configureRenderRuntime(packageURL: URL, selectors: RenderRuntimeSelectors, operationID: CommandID) async throws -> RenderRuntimeReadiness { throw WorkspaceFailure.authorityUnavailable }
     func renderRuntimeReadiness(packageURL: URL) async throws -> RenderRuntimeReadiness {
@@ -94,6 +101,26 @@ private actor RecordingRenderWorkspaceClient: WorkspaceClient, RenderWorkspaceCl
     }
 
     func renderRequest() -> CommandEnvelope? { recordedRenderRequests.first }
+
+    func waitForStatusRequests(_ count: Int) async {
+        while statusContinuations.count < count { await Task.yield() }
+    }
+
+    func finishStatus(_ index: Int, with status: EpisodeRenderRequestStatus) {
+        statusContinuations[index].resume(returning: status)
+    }
+
+    func waitForPlaybackRequests(_ count: Int) async {
+        while playbackContinuations.count < count { await Task.yield() }
+    }
+
+    func finishPlayback(_ index: Int, with source: EpisodeRenderPlaybackSource) {
+        playbackContinuations[index].resume(returning: source)
+    }
+
+    func failPlayback(_ index: Int, with error: Error) {
+        playbackContinuations[index].resume(throwing: error)
+    }
 }
 
 final class WorkspaceClientTests: XCTestCase {
@@ -185,6 +212,99 @@ final class WorkspaceClientTests: XCTestCase {
             XCTAssertNil(model.activeRender)
             XCTAssertNil(model.renderStatus)
         }
+    }
+
+    func testLatestStatusAndPreviewLoadWinSameJobRaces() async throws {
+        let package = URL(fileURLWithPath: "/private/tmp/render-races.takeform", isDirectory: true)
+        let episode = Episode(name: "Assembly", recipeVersion: 1)
+        let output = CompositionOutput(
+            width: 1920,
+            height: 1080,
+            frameRate: try XCTUnwrap(CompositionTime(value: 30, timescale: 1)),
+            duration: try XCTUnwrap(CompositionTime(value: 10, timescale: 1))
+        )
+        let composition = EpisodeComposition(episodeID: episode.id, output: output, occurrences: [], captions: [])
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let document = ProjectDocument(
+            channel: Channel(name: "Harbor"),
+            recipes: [RecipeVersion(id: 1, values: ["title": "Creator cut"])],
+            episodes: [episode],
+            episodeCompositions: [composition],
+            revision: Revision(7)
+        )
+        let client = RecordingRenderWorkspaceClient(
+            snapshot: WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: package)
+        )
+        let player = await MainActor.run {
+            RenderedPreviewPlayer(assetVerifier: { _ in })
+        }
+        let model = await MainActor.run {
+            WorkspaceModel(client: client, renderClient: client, renderedPreviewPlayer: player)
+        }
+        await MainActor.run { model.open(package, rebind: false) }
+        for _ in 0..<100 where await MainActor.run(body: { model.document == nil }) { await Task.yield() }
+
+        let active = ActiveRender(packageURL: package, episodeID: episode.id, revision: Revision(7), compositionDigest: digest, jobID: UUID())
+        let running = EpisodeRenderRequestStatus(
+            jobID: active.jobID,
+            episodeID: episode.id,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            format: .mp4,
+            logicalState: .requested,
+            progress: .indeterminate,
+            availability: .running
+        )
+        let completed = EpisodeRenderRequestStatus(
+            jobID: active.jobID,
+            episodeID: episode.id,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            format: .mp4,
+            logicalState: .completed,
+            progress: .indeterminate,
+            availability: .available
+        )
+        let source = EpisodeRenderPlaybackSource(
+            jobID: active.jobID,
+            requestedRevision: active.revision,
+            compositionDigest: digest,
+            output: output,
+            descriptor: EpisodeRenderDescriptor(jobID: active.jobID, format: .mp4, byteLength: 1, sha256: String(repeating: "a", count: 64)),
+            videoStreamCount: 1,
+            audioStreamCount: 0,
+            artifactURL: URL(fileURLWithPath: "/private/tmp/verified-render.mp4")
+        )
+        await MainActor.run {
+            model.activeRender = active
+            model.renderStatus = running
+            model.refreshRenderStatus()
+            model.refreshRenderStatus()
+        }
+        await client.waitForStatusRequests(2)
+        await client.finishStatus(1, with: completed)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != completed }) { await Task.yield() }
+        await client.finishStatus(0, with: running)
+        for _ in 0..<100 { await Task.yield() }
+        let retainedStatus = await MainActor.run { model.renderStatus }
+        XCTAssertEqual(retainedStatus, completed)
+
+        await MainActor.run {
+            model.loadRenderedPreview()
+            model.loadRenderedPreview()
+        }
+        await client.waitForPlaybackRequests(2)
+        await client.finishPlayback(1, with: source)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity == nil }) { await Task.yield() }
+        await client.failPlayback(0, with: WorkspaceFailure.authorityUnavailable)
+        for _ in 0..<100 { await Task.yield() }
+
+        let identity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let message = await MainActor.run { model.renderMessage }
+        XCTAssertEqual(identity?.jobID, active.jobID)
+        XCTAssertEqual(identity?.requestedRevision, active.revision)
+        XCTAssertEqual(identity?.compositionDigest, digest)
+        XCTAssertEqual(message, "Ready to preview the verified render.")
     }
 
     func testVerifiedPreviewAssetRequiresCurrentAuthoritySelection() {

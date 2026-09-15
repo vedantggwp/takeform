@@ -158,6 +158,9 @@ extension WorkspaceModel {
                 expectedRevision: document.revision,
                 command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)
             )
+            renderStatusGeneration &+= 1
+            let statusGeneration = renderStatusGeneration
+            renderPreviewLoadGeneration &+= 1
             activeRender = nil
             renderStatus = nil
             renderedPreviewPlayer.clear()
@@ -168,7 +171,8 @@ extension WorkspaceModel {
                 defer { isWorking = false }
                 do {
                     let result = try await renderClient.requestEpisodeRender(packageURL: packageURL, envelope: envelope)
-                    guard isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
+                    guard renderStatusGeneration == statusGeneration,
+                          isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
                     guard case let .renderRequested(status) = result.outcome else {
                         renderMessage = WorkspacePresentation.commandMessage(result)
                         return
@@ -177,10 +181,12 @@ extension WorkspaceModel {
                     renderStatus = status
                     renderMessage = renderStatusMessage(status)
                 } catch let failure as WorkspaceFailure {
-                    guard isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
+                    guard renderStatusGeneration == statusGeneration,
+                          isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
                     renderMessage = failure.errorDescription ?? "Render request was not accepted."
                 } catch {
-                    guard isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
+                    guard renderStatusGeneration == statusGeneration,
+                          isCurrentRenderContext(context, packageURL: packageURL, episodeID: episode.id, revision: document.revision, digest: digest) else { return }
                     renderMessage = "Render request was not accepted."
                 }
             }
@@ -191,20 +197,24 @@ extension WorkspaceModel {
 
     func refreshRenderStatus() {
         guard let activeRender else { return }
+        renderStatusGeneration &+= 1
+        let statusGeneration = renderStatusGeneration
         Task { [weak self] in
             guard let self else { return }
             do {
                 let status = try await renderClient.renderStatus(packageURL: activeRender.packageURL, jobID: activeRender.jobID)
-                guard self.activeRender == activeRender, isCurrentRenderContext(activeRender) else { return }
+                guard self.renderStatusGeneration == statusGeneration,
+                      self.activeRender == activeRender,
+                      isCurrentRenderContext(activeRender) else { return }
                 renderStatus = status
                 renderMessage = renderStatusMessage(status)
                 if status.logicalState != .completed || status.availability != .available { renderedPreviewPlayer.clear() }
             } catch let failure as WorkspaceFailure {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
                 renderMessage = failure.errorDescription ?? "Render status is unavailable."
                 renderedPreviewPlayer.clear()
             } catch {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
                 renderMessage = "Render status is unavailable."
                 renderedPreviewPlayer.clear()
             }
@@ -214,21 +224,25 @@ extension WorkspaceModel {
     func cancelRender() {
         guard let activeRender else { return }
         let operationID = CommandID()
+        renderStatusGeneration &+= 1
+        let statusGeneration = renderStatusGeneration
+        renderPreviewLoadGeneration &+= 1
+        renderedPreviewPlayer.clear()
         isWorking = true
         Task { [weak self] in
             guard let self else { return }
             defer { isWorking = false }
             do {
                 let status = try await renderClient.cancelEpisodeRender(packageURL: activeRender.packageURL, jobID: activeRender.jobID, operationID: operationID)
-                guard self.activeRender == activeRender else { return }
+                guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
                 renderStatus = status
                 renderMessage = renderStatusMessage(status)
                 renderedPreviewPlayer.clear()
             } catch let failure as WorkspaceFailure {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
                 renderMessage = failure.errorDescription ?? "Render cancellation was not accepted."
             } catch {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderStatusGeneration == statusGeneration, self.activeRender == activeRender else { return }
                 renderMessage = "Render cancellation was not accepted."
             }
         }
@@ -240,6 +254,8 @@ extension WorkspaceModel {
             return
         }
         let operationID = CommandID()
+        renderPreviewLoadGeneration &+= 1
+        let previewLoadGeneration = renderPreviewLoadGeneration
         isWorking = true
         renderMessage = "Loading the verified render…"
         Task { [weak self] in
@@ -247,7 +263,8 @@ extension WorkspaceModel {
             defer { isWorking = false }
             do {
                 let source = try await renderClient.playbackSource(packageURL: activeRender.packageURL, jobID: activeRender.jobID, operationID: operationID)
-                guard self.activeRender == activeRender,
+                guard self.renderPreviewLoadGeneration == previewLoadGeneration,
+                      self.activeRender == activeRender,
                       source.jobID == activeRender.jobID,
                       source.requestedRevision == activeRender.revision,
                       source.compositionDigest == activeRender.compositionDigest,
@@ -256,17 +273,19 @@ extension WorkspaceModel {
                     return
                 }
                 try await renderedPreviewPlayer.load(source)
-                guard self.activeRender == activeRender, isCurrentRenderContext(activeRender) else {
+                guard self.renderPreviewLoadGeneration == previewLoadGeneration,
+                      self.activeRender == activeRender,
+                      isCurrentRenderContext(activeRender) else {
                     renderedPreviewPlayer.clear()
                     return
                 }
                 renderMessage = "Ready to preview the verified render."
             } catch let failure as WorkspaceFailure {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderPreviewLoadGeneration == previewLoadGeneration, self.activeRender == activeRender else { return }
                 renderedPreviewPlayer.clear()
                 renderMessage = failure.errorDescription ?? "The verified render is unavailable."
             } catch {
-                guard self.activeRender == activeRender else { return }
+                guard self.renderPreviewLoadGeneration == previewLoadGeneration, self.activeRender == activeRender else { return }
                 renderedPreviewPlayer.clear()
                 renderMessage = "The verified render is unavailable."
             }
@@ -274,7 +293,11 @@ extension WorkspaceModel {
     }
 
     func exportRenderedEpisode() {
-        guard let activeRender, renderedPreviewPlayer.sourceIdentity?.jobID == activeRender.jobID else {
+        guard let activeRender,
+              let identity = renderedPreviewPlayer.sourceIdentity,
+              identity.jobID == activeRender.jobID,
+              identity.requestedRevision == activeRender.revision,
+              identity.compositionDigest == activeRender.compositionDigest else {
             renderMessage = "Load the verified render before exporting it."
             return
         }
@@ -298,6 +321,8 @@ extension WorkspaceModel {
     }
 
     func invalidateRender() {
+        renderStatusGeneration &+= 1
+        renderPreviewLoadGeneration &+= 1
         activeRender = nil
         renderStatus = nil
         renderMessage = nil
@@ -438,7 +463,10 @@ struct EpisodeRenderControls: View {
                     .accessibilityIdentifier("episode-render-load-preview")
             }
         }
-        if model.renderedPreviewPlayer.sourceIdentity?.jobID == status.jobID {
+        if let identity = model.renderedPreviewPlayer.sourceIdentity,
+           identity.jobID == status.jobID,
+           identity.requestedRevision == status.requestedRevision,
+           identity.compositionDigest == status.compositionDigest {
             RenderedPreviewView(player: model.renderedPreviewPlayer.player)
                 .frame(minHeight: 180)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))

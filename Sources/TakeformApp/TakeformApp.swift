@@ -117,7 +117,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var renderStatus: EpisodeRenderRequestStatus?
     @Published var renderMessage: String?
     @Published var renderRuntimeSelectionNames: RenderRuntimeSelectionNames?
-    let renderedPreviewPlayer = RenderedPreviewPlayer()
+    let renderedPreviewPlayer: RenderedPreviewPlayer
 
     let client: any WorkspaceClient
     let renderClient: any RenderWorkspaceClient
@@ -125,13 +125,20 @@ final class WorkspaceModel: ObservableObject {
     private var selectionTask: Task<Void, Never>?
     private var workspaceGeneration = 0
     private var selectionGeneration = 0
+    var renderStatusGeneration = 0
+    var renderPreviewLoadGeneration = 0
     private var requestedPackageURL: URL?
     var activeRender: ActiveRender?
     var selectedRenderRuntimeURLs: [RenderRuntimeTool: URL] = [:]
 
-    init(client: any WorkspaceClient, renderClient: (any RenderWorkspaceClient)? = nil) {
+    init(
+        client: any WorkspaceClient,
+        renderClient: (any RenderWorkspaceClient)? = nil,
+        renderedPreviewPlayer: RenderedPreviewPlayer = RenderedPreviewPlayer()
+    ) {
         self.client = client
         self.renderClient = renderClient ?? (client as? any RenderWorkspaceClient) ?? UnavailableRenderWorkspaceClient()
+        self.renderedPreviewPlayer = renderedPreviewPlayer
     }
 
     var document: ProjectDocument? { snapshot?.document }
