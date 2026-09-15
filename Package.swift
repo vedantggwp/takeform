@@ -20,6 +20,7 @@ let package = Package(
         .target(name: "TakeformAuthority", dependencies: ["CSQLite", "TakeformCore"]),
         .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
         .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace"]),
+        .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthority", "TakeformCore", "TakeformWorkspace"]),
         .executableTarget(name: "TakeformDoctor", dependencies: ["TakeformSupport"]),
         .executableTarget(name: "TakeformCLI", dependencies: ["TakeformAuthority", "TakeformCore"]),
         .executableTarget(name: "TakeformAuthorityService", dependencies: ["TakeformAuthority", "TakeformCore"]),
