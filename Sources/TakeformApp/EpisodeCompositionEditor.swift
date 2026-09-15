@@ -11,6 +11,8 @@ enum WorkspaceCommandCompletion {
     init(_ outcome: CommandOutcome) {
         switch outcome {
         case .applied(let document): self = .applied(document)
+        case .renderRequested:
+            self = .rejected("The authority returned a renderer request for a composition save. No composition change was accepted.")
         case .conflict(let revision): self = .conflict(revision)
         case .rejected(let reason): self = .rejected(reason)
         }
