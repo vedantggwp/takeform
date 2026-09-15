@@ -81,6 +81,25 @@ public struct CompositionCrop: Codable, Equatable, Sendable {
     }
 }
 
+/// A normalized destination rectangle on the composition canvas. This is
+/// distinct from `CompositionCrop`, which selects a source region.
+public struct CompositionOutputRect: Codable, Equatable, Sendable {
+    public let x: CompositionTime
+    public let y: CompositionTime
+    public let width: CompositionTime
+    public let height: CompositionTime
+    public init(x: CompositionTime, y: CompositionTime, width: CompositionTime, height: CompositionTime) {
+        self.x = x; self.y = y; self.width = width; self.height = height
+    }
+
+    public static let fullCanvas = CompositionOutputRect(
+        x: CompositionTime(value: 0, timescale: 1)!,
+        y: CompositionTime(value: 0, timescale: 1)!,
+        width: CompositionTime(value: 1, timescale: 1)!,
+        height: CompositionTime(value: 1, timescale: 1)!
+    )
+}
+
 public struct CompositionOutput: Codable, Equatable, Sendable {
     public let width: Int
     public let height: Int
@@ -110,8 +129,25 @@ public struct CompositionOccurrence: Codable, Equatable, Sendable, Identifiable 
     public let layer: Int
     public let order: Int
     public let crop: CompositionCrop
-    public init(id: UUID = UUID(), assetID: UUID, assetDigest: String, source: CompositionSource, outputRange: CompositionRange, layer: Int, order: Int, crop: CompositionCrop) {
-        self.id = id; self.assetID = assetID; self.assetDigest = assetDigest; self.source = source; self.outputRange = outputRange; self.layer = layer; self.order = order; self.crop = crop
+    public let outputRect: CompositionOutputRect
+    public init(id: UUID = UUID(), assetID: UUID, assetDigest: String, source: CompositionSource, outputRange: CompositionRange, layer: Int, order: Int, crop: CompositionCrop, outputRect: CompositionOutputRect = .fullCanvas) {
+        self.id = id; self.assetID = assetID; self.assetDigest = assetDigest; self.source = source; self.outputRange = outputRange; self.layer = layer; self.order = order; self.crop = crop; self.outputRect = outputRect
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, assetID, assetDigest, source, outputRange, layer, order, crop, outputRect }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try values.decode(UUID.self, forKey: .id),
+            assetID: try values.decode(UUID.self, forKey: .assetID),
+            assetDigest: try values.decode(String.self, forKey: .assetDigest),
+            source: try values.decode(CompositionSource.self, forKey: .source),
+            outputRange: try values.decode(CompositionRange.self, forKey: .outputRange),
+            layer: try values.decode(Int.self, forKey: .layer),
+            order: try values.decode(Int.self, forKey: .order),
+            crop: try values.decode(CompositionCrop.self, forKey: .crop),
+            outputRect: try values.decodeIfPresent(CompositionOutputRect.self, forKey: .outputRect) ?? .fullCanvas
+        )
     }
 }
 
@@ -175,6 +211,7 @@ public enum CompositionValidationFailure: Error, Equatable, Sendable {
     case rangeOutsideSource
     case rangeOutsideOutput
     case invalidCrop
+    case invalidOutputRect
     case invalidLayer
     case sameLayerOverlap
     case emptyCaption
@@ -197,6 +234,7 @@ public enum CompositionValidationFailure: Error, Equatable, Sendable {
         case .rangeOutsideSource: "composition-range-outside-source"
         case .rangeOutsideOutput: "composition-range-outside-output"
         case .invalidCrop: "composition-invalid-crop"
+        case .invalidOutputRect: "composition-invalid-output-rect"
         case .invalidLayer: "composition-invalid-layer"
         case .sameLayerOverlap: "composition-same-layer-overlap"
         case .emptyCaption: "composition-empty-caption"
@@ -221,6 +259,7 @@ public extension EpisodeComposition {
             guard occurrence.layer >= 0 else { throw CompositionValidationFailure.invalidLayer }
             try validate(range: occurrence.outputRange, within: output.duration, outside: .rangeOutsideOutput)
             try validate(crop: occurrence.crop)
+            try validate(outputRect: occurrence.outputRect)
             guard let asset = assets.first(where: { $0.id == occurrence.assetID }) else { throw CompositionValidationFailure.missingAsset }
             guard asset.digest == occurrence.assetDigest else { throw CompositionValidationFailure.assetDigestMismatch }
             guard let probe = asset.probe else { throw CompositionValidationFailure.missingProbe }
@@ -273,5 +312,15 @@ public extension EpisodeComposition {
         let one = CompositionTime(value: 1, timescale: 1)!
         guard try crop.x.checkedAdd(crop.width).checkedCompare(one) != .orderedDescending,
               try crop.y.checkedAdd(crop.height).checkedCompare(one) != .orderedDescending else { throw CompositionValidationFailure.invalidCrop }
+    }
+
+    private func validate(outputRect: CompositionOutputRect) throws {
+        guard try outputRect.x.checkedCompare(zero) != .orderedAscending,
+              try outputRect.y.checkedCompare(zero) != .orderedAscending,
+              try outputRect.width.checkedCompare(zero) == .orderedDescending,
+              try outputRect.height.checkedCompare(zero) == .orderedDescending else { throw CompositionValidationFailure.invalidOutputRect }
+        let one = CompositionTime(value: 1, timescale: 1)!
+        guard try outputRect.x.checkedAdd(outputRect.width).checkedCompare(one) != .orderedDescending,
+              try outputRect.y.checkedAdd(outputRect.height).checkedCompare(one) != .orderedDescending else { throw CompositionValidationFailure.invalidOutputRect }
     }
 }
