@@ -9,6 +9,8 @@ OUTPUT_DIR="${TAKEFORM_UI_PROBE_OUTPUT:-}"
 APP_BUNDLE="${TAKEFORM_UI_PROBE_APP:-}"
 SOURCE_SHA="${TAKEFORM_UI_PROBE_SOURCE_SHA:-}"
 TIMEOUT_SECONDS="${TAKEFORM_UI_PROBE_TIMEOUT_SECONDS:-180}"
+FAILED_LANES_ONLY="${TAKEFORM_UI_PROBE_FAILED_LANES_ONLY:-0}"
+DISPLAY_MODE_ALLOWED="${TAKEFORM_UI_PROBE_ALLOW_DISPLAY_MODE:-0}"
 
 if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ]; then
   echo "Usage: $0 [--build-for-testing]" >&2
@@ -43,6 +45,8 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
   echo "source_sha: ${SOURCE_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
   echo "actual_source_sha: $(git -C "$ROOT_DIR" rev-parse HEAD)"
   echo "mode: $MODE"
+  echo "failed_lanes_only: $FAILED_LANES_ONLY"
+  echo "display_mode_allowed: $DISPLAY_MODE_ALLOWED"
   xcodebuild -version
   sw_vers
   uname -m
@@ -65,10 +69,19 @@ command=(
   -derivedDataPath "$DERIVED_DATA"
   -resultBundlePath "$RESULT_BUNDLE"
 )
+if [ "$FAILED_LANES_ONLY" = "1" ]; then
+  command+=(
+    '-only-testing:TakeformNativeUICapabilityTests/testKeyboardMenuTraversalOpensNativeAbout'
+    '-only-testing:TakeformNativeUICapabilityTests/testLightAndDarkAppearanceRemainLegible'
+    '-only-testing:TakeformNativeUICapabilityTests/testResizePreservesReachableNativeControls'
+  )
+fi
 
 set -m
 if [ "$MODE" = run ]; then
-  TEST_RUNNER_TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" "${command[@]}" > "$LOG" 2>&1 &
+  TEST_RUNNER_TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" \
+    TEST_RUNNER_TAKEFORM_UI_PROBE_ALLOW_DISPLAY_MODE="$DISPLAY_MODE_ALLOWED" \
+    "${command[@]}" > "$LOG" 2>&1 &
 else
   "${command[@]}" > "$LOG" 2>&1 &
 fi

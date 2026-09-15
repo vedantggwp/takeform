@@ -48,6 +48,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     func testKeyboardMenuTraversalOpensNativeAbout() throws {
+        let displayModeLease = try acquireDisplayModeLease()
+        defer { restoreDisplayMode(displayModeLease) }
         let app = try launchReady()
         defer { finishCase(app, named: "f1-09-keyboard-menu-final") }
 
@@ -60,8 +62,6 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
         let about = app.menuItems["About Takeform"]
         XCTAssertTrue(about.waitForExistence(timeout: 5), "Keyboard activation did not open the Takeform menu")
-        app.typeKey(.downArrow, modifierFlags: [])
-        XCTAssertTrue(about.isHittable, "Down Arrow did not leave About Takeform available for keyboard activation")
         attach(app.debugDescription, named: "f1-09-about-menu-open-ax")
         capture(app, named: "f1-09-keyboard-menu")
 
@@ -97,6 +97,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     func testResizePreservesReachableNativeControls() throws {
+        let displayModeLease = try acquireDisplayModeLease()
+        defer { restoreDisplayMode(displayModeLease) }
         let app = try launchReady()
         defer { finishCase(app, named: "f1-06-resized-final") }
 
@@ -126,6 +128,8 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     }
 
     func testLightAndDarkAppearanceRemainLegible() throws {
+        let displayModeLease = try acquireDisplayModeLease()
+        defer { restoreDisplayMode(displayModeLease) }
         let app = try launchReady()
         defer { finishCase(app, named: "f1-08-appearance-final") }
 
@@ -395,30 +399,47 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
     ) throws -> CGFloat {
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: screenshot.pngRepresentation))
         let labelFrame = label.frame
-        let captureFrame = app.frame
+        let display = try screen(containingAXPoint: CGPoint(x: labelFrame.midX, y: labelFrame.midY))
+        let displayFrame = display.frame
         let settingsWindowFrame = app.windows.allElementsBoundByIndex
             .map(\.frame)
             .first(where: { $0.contains(labelFrame) })
         let labelPixels = screenshotPixels(
             for: labelFrame,
-            captureFrame: captureFrame,
+            captureFrame: displayFrame,
             bitmapSize: CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
         )
-        let foreground = try extremeColor(in: labelPixels, bitmap: bitmap, preferLight: mode == "Dark")
         let backgroundScreenRect = CGRect(x: labelFrame.minX + 4, y: labelFrame.minY - 18, width: 12, height: 12)
         XCTAssertFalse(backgroundScreenRect.intersects(labelFrame), "Panel background sample overlaps the Appearance label frame")
         let panelPixels = screenshotPixels(
             for: backgroundScreenRect,
-            captureFrame: captureFrame,
+            captureFrame: displayFrame,
             bitmapSize: CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
         )
+        attach(
+            """
+            mode: \(mode)
+            screenshotPixels: \(bitmap.pixelsWide)x\(bitmap.pixelsHigh)
+            displayFrameAX: \(displayFrame)
+            displayVisibleFrame: \(display.visibleFrame)
+            settingsWindowFrameAX: \(String(describing: settingsWindowFrame))
+            foregroundRegionAX: \(labelFrame)
+            foregroundRegionPixels: \(labelPixels)
+            backgroundRegionAX: \(backgroundScreenRect)
+            backgroundRegionPixels: \(panelPixels)
+            backgroundOutsideLabelFrame: \(!backgroundScreenRect.intersects(labelFrame))
+            """,
+            named: "f1-\(mode.lowercased())-appearance-coordinate-basis"
+        )
+        let foreground = try extremeColor(in: labelPixels, bitmap: bitmap, preferLight: mode == "Dark")
         let background = try averageColor(in: panelPixels, bitmap: bitmap)
         let ratio = contrastRatio(foreground, background)
         attach(
             """
             mode: \(mode)
             screenshotPixels: \(bitmap.pixelsWide)x\(bitmap.pixelsHigh)
-            appCaptureFrameAX: \(captureFrame)
+            displayFrameAX: \(displayFrame)
+            displayVisibleFrame: \(display.visibleFrame)
             settingsWindowFrameAX: \(String(describing: settingsWindowFrame))
             foregroundRegionAX: \(labelFrame)
             foregroundRegionPixels: \(labelPixels)
@@ -432,6 +453,36 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
             named: "f1-\(mode.lowercased())-appearance-contrast"
         )
         return ratio
+    }
+
+    private func screen(containingAXPoint point: CGPoint) throws -> NSScreen {
+        guard let display = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
+            throw ProbeConfigurationError.screenNotFoundForAccessibilityPoint(point)
+        }
+        return display
+    }
+
+    private func acquireDisplayModeLease() throws -> DisplayModeLease {
+        guard ProcessInfo.processInfo.environment["TAKEFORM_UI_PROBE_ALLOW_DISPLAY_MODE"] == "1" else {
+            throw ProbeConfigurationError.displayModeMutationNotExplicitlyEnabled
+        }
+        do {
+            let lease = try DisplayModeLease.acquire()
+            attach(lease.acquisitionFacts, named: "f1-display-mode-acquired")
+            return lease
+        } catch {
+            attach("displayModeAcquireFailure: \(error.localizedDescription)", named: "f1-display-mode-unsupported")
+            throw error
+        }
+    }
+
+    private func restoreDisplayMode(_ lease: DisplayModeLease) {
+        do {
+            attach(try lease.restore(), named: "f1-display-mode-restored")
+        } catch {
+            attach("displayModeRestoreFailure: \(error.localizedDescription)", named: "f1-display-mode-restore-failure")
+            XCTFail("The CI display mode did not restore: \(error.localizedDescription)")
+        }
     }
 
     private func screenshotPixels(for screenRect: CGRect, captureFrame: CGRect, bitmapSize: CGSize) -> CGRect {
@@ -518,6 +569,12 @@ private enum ProbeConfigurationError: LocalizedError {
     case copiedAppNotRunning(String)
     case copiedAppWindowNotFound(pid_t)
     case invalidContrastRegion
+    case displayModeMutationNotExplicitlyEnabled
+    case displayScreenNumberUnavailable
+    case displayModeUnavailable(String)
+    case displayModeSetFailed(CGError)
+    case displayModeRestoreFailed(CGError)
+    case screenNotFoundForAccessibilityPoint(CGPoint)
 
     var errorDescription: String? {
         switch self {
@@ -531,7 +588,195 @@ private enum ProbeConfigurationError: LocalizedError {
             return "Copied F1 app has no onscreen normal-layer window for PID \(pid)"
         case .invalidContrastRegion:
             return "Appearance contrast sample region is outside the screenshot"
+        case .displayModeMutationNotExplicitlyEnabled:
+            return "The CI-only display mode preflight is not enabled"
+        case .displayScreenNumberUnavailable:
+            return "The test display did not expose NSScreenNumber"
+        case .displayModeUnavailable(let facts):
+            return "No supported CI display mode provided a 1024x700 visible work area. \(facts)"
+        case .displayModeSetFailed(let status):
+            return "CGDisplaySetDisplayMode failed with CGError \(status.rawValue)"
+        case .displayModeRestoreFailed(let status):
+            return "CGDisplaySetDisplayMode restore failed with CGError \(status.rawValue)"
+        case .screenNotFoundForAccessibilityPoint(let point):
+            return "No NSScreen contained accessibility point \(point)"
         }
+    }
+}
+
+private final class DisplayModeLease {
+    private let displayID: CGDirectDisplayID
+    private let originalMode: CGDisplayMode
+    private let originalScreen: NSScreen
+    private let chosenMode: CGDisplayMode
+    private let allModeFacts: String
+
+    let acquisitionFacts: String
+
+    private init(
+        displayID: CGDirectDisplayID,
+        originalMode: CGDisplayMode,
+        originalScreen: NSScreen,
+        chosenMode: CGDisplayMode,
+        allModeFacts: String,
+        acquisitionFacts: String
+    ) {
+        self.displayID = displayID
+        self.originalMode = originalMode
+        self.originalScreen = originalScreen
+        self.chosenMode = chosenMode
+        self.allModeFacts = allModeFacts
+        self.acquisitionFacts = acquisitionFacts
+    }
+
+    static func acquire() throws -> DisplayModeLease {
+        let originalScreen = try currentMainScreen()
+        let displayID = try screenDisplayID(for: originalScreen)
+        guard let originalMode = CGDisplayCopyDisplayMode(displayID) else {
+            throw ProbeConfigurationError.displayModeUnavailable("CGDisplayCopyDisplayMode returned nil for display \(displayID)")
+        }
+
+        let modes = (CGDisplayCopyAllDisplayModes(displayID, nil) as? [CGDisplayMode] ?? [])
+        let allModeFacts = modes
+            .sorted(by: { modeSortKey($0) < modeSortKey($1) })
+            .map(modeDescription)
+            .joined(separator: "\n")
+        let candidates = modes.filter {
+            $0.isUsableForDesktopGUI()
+                && $0.width >= 1280
+                && $0.height >= 900
+        }
+        guard let chosenMode = candidates.min(by: { modeArea($0) < modeArea($1) }) else {
+            throw ProbeConfigurationError.displayModeUnavailable(
+                "displayID: \(displayID)\noriginalMode: \(modeDescription(originalMode))\noriginalScreenFrame: \(originalScreen.frame)\noriginalVisibleFrame: \(originalScreen.visibleFrame)\navailableModes:\n\(allModeFacts)"
+            )
+        }
+
+        let setStatus = CGDisplaySetDisplayMode(displayID, chosenMode, nil)
+        guard setStatus == .success else {
+            throw ProbeConfigurationError.displayModeSetFailed(setStatus)
+        }
+
+        do {
+            let configuredScreen = try waitForScreen(
+                displayID: displayID,
+                matching: chosenMode,
+                requiringVisibleSize: CGSize(width: 1024, height: 700)
+            )
+            return DisplayModeLease(
+                displayID: displayID,
+                originalMode: originalMode,
+                originalScreen: originalScreen,
+                chosenMode: chosenMode,
+                allModeFacts: allModeFacts,
+                acquisitionFacts: """
+                displayID: \(displayID)
+                originalMode: \(modeDescription(originalMode))
+                originalScreenFrame: \(originalScreen.frame)
+                originalVisibleFrame: \(originalScreen.visibleFrame)
+                chosenMode: \(modeDescription(chosenMode))
+                configuredScreenFrame: \(configuredScreen.frame)
+                configuredVisibleFrame: \(configuredScreen.visibleFrame)
+                availableModes:
+                \(allModeFacts)
+                """
+            )
+        } catch {
+            let restoreStatus = CGDisplaySetDisplayMode(displayID, originalMode, nil)
+            let restoredFacts: String
+            if restoreStatus == .success,
+               let restoredScreen = try? waitForScreen(
+                   displayID: displayID,
+                   matching: originalMode,
+                   requiringVisibleSize: .zero
+               ) {
+                restoredFacts = "restoredScreenFrame: \(restoredScreen.frame)\nrestoredVisibleFrame: \(restoredScreen.visibleFrame)"
+            } else {
+                restoredFacts = "restoredScreenFrame: unavailable"
+            }
+            throw ProbeConfigurationError.displayModeUnavailable(
+                "postSwitchFailure: \(error.localizedDescription)\nrestoreStatus: \(restoreStatus.rawValue)\n\(restoredFacts)\ndisplayID: \(displayID)\noriginalMode: \(modeDescription(originalMode))\nchosenMode: \(modeDescription(chosenMode))\navailableModes:\n\(allModeFacts)"
+            )
+        }
+    }
+
+    func restore() throws -> String {
+        let status = CGDisplaySetDisplayMode(displayID, originalMode, nil)
+        guard status == .success else {
+            throw ProbeConfigurationError.displayModeRestoreFailed(status)
+        }
+        let restoredScreen = try Self.waitForScreen(
+            displayID: displayID,
+            matching: originalMode,
+            requiringVisibleSize: .zero
+        )
+        return """
+        displayID: \(displayID)
+        restoredMode: \(Self.modeDescription(originalMode))
+        restoredScreenFrame: \(restoredScreen.frame)
+        restoredVisibleFrame: \(restoredScreen.visibleFrame)
+        chosenModeWas: \(Self.modeDescription(chosenMode))
+        originalScreenWas: \(originalScreen.frame) visible \(originalScreen.visibleFrame)
+        enumeratedModesWere:
+        \(allModeFacts)
+        """
+    }
+
+    private static func currentMainScreen() throws -> NSScreen {
+        guard let screen = NSScreen.main else {
+            throw ProbeConfigurationError.displayModeUnavailable("NSScreen.main was nil")
+        }
+        return screen
+    }
+
+    private static func screenDisplayID(for screen: NSScreen) throws -> CGDirectDisplayID {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        guard let number = screen.deviceDescription[key] as? NSNumber else {
+            throw ProbeConfigurationError.displayScreenNumberUnavailable
+        }
+        return CGDirectDisplayID(number.uint32Value)
+    }
+
+    private static func waitForScreen(
+        displayID: CGDirectDisplayID,
+        matching mode: CGDisplayMode,
+        requiringVisibleSize: CGSize
+    ) throws -> NSScreen {
+        let deadline = Date().addingTimeInterval(3)
+        repeat {
+            if let screen = NSScreen.screens.first(where: { (try? screenDisplayID(for: $0)) == displayID }),
+               screen.frame.size.width == CGFloat(mode.width),
+               screen.frame.size.height == CGFloat(mode.height),
+               screen.visibleFrame.width >= requiringVisibleSize.width,
+               screen.visibleFrame.height >= requiringVisibleSize.height {
+                return screen
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+
+        let observed = NSScreen.screens.map { screen in
+            let observedDisplayID = (try? screenDisplayID(for: screen)).map { String($0) } ?? "unavailable"
+            return "frame=\(screen.frame) visible=\(screen.visibleFrame) displayID=\(observedDisplayID)"
+        }.joined(separator: "\n")
+        throw ProbeConfigurationError.displayModeUnavailable(
+            "display did not settle within 3s for \(modeDescription(mode)); requiredVisible=\(requiringVisibleSize); observedScreens:\n\(observed)"
+        )
+    }
+
+    private static func modeArea(_ mode: CGDisplayMode) -> Int {
+        Int(mode.width * mode.height)
+    }
+
+    private static func modeSortKey(_ mode: CGDisplayMode) -> (Int, Int, Int32) {
+        (
+            Int(mode.width),
+            Int(mode.height),
+            mode.ioDisplayModeID
+        )
+    }
+
+    private static func modeDescription(_ mode: CGDisplayMode) -> String {
+        "id=\(mode.ioDisplayModeID) points=\(mode.width)x\(mode.height) pixels=\(mode.pixelWidth)x\(mode.pixelHeight) refresh=\(mode.refreshRate) ioFlags=\(mode.ioFlags) usable=\(mode.isUsableForDesktopGUI())"
     }
 }
 

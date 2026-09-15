@@ -45,7 +45,8 @@ Settings through its button and Command-Comma shortcut, coordinate-driven
 window resizing, the visible app-owned System/Light/Dark Appearance preference,
 native menu and control reachability, and terminate/relaunch behavior. It uses
 the documented Control-F2 menu-bar focus shortcut followed by Right Arrow,
-Return, Down Arrow and Return to activate About through the keyboard, retaining
+Return and Return to activate the initially selected About item through the
+keyboard, retaining
 AX and screenshot evidence of the focused/open-menu stages and the native
 About dialog. Each case attaches
 an app screenshot and the actual title element's type, identifier, label,
@@ -81,6 +82,24 @@ reads `TAKEFORM_UI_PROBE_APP`; it is not an app-launch environment variable.
 This is the documented `xcodebuild` transport for test-runner variables in the
 [Xcode 13 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-13-release-notes)
 (74104870) and the installed `xcodebuild` manual.
+
+After a failed-lane run finds that the hosted screen cannot fit the unchanged
+1024-by-700 initial outer-window gate, the CI-only failed-lane retry may use
+public CoreGraphics display-mode APIs before it launches Takeform. The runner
+enumerates desktop-usable modes, records their IOKit IDs and point/pixel sizes,
+then selects only a supported mode of at least 1280 by 900 points. It confirms
+the resulting `NSScreen.visibleFrame` is at least 1024 by 700 before launching
+the copied app. The original mode, selected mode, post-switch frame, and
+explicit restoration result are retained. A failed set, unavailable candidate,
+short visible frame, or restore failure leaves the 1024-by-700 gate unfulfilled
+with its facts attached; it never substitutes a smaller threshold. This path is
+enabled only by the workflow's test-runner environment, is not used by a local
+structural build, and changes neither runner defaults nor a personal Mac.
+
+The failed-lane retry limits XCTest to keyboard menu traversal, outer-window
+resize, and Appearance contrast, plus each case's existing copied-app launch
+preflight. Previously successful launch, About, Settings, and relaunch evidence
+remains retained rather than being rerun unchanged.
 
 The full walkthrough has 180 seconds for `xcodebuild` and the job has an
 eight-minute ceiling. On timeout the launcher terminates and reaps only the
