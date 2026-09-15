@@ -48,6 +48,8 @@ jobs:
           ./scripts/package-dev-bundle "$probe_root/bundle"
           ditto "$probe_root/bundle/Takeform.app" "$probe_root/Takeform.app"
           ./scripts/verify-dev-bundle "$probe_root/Takeform.app"
+      - name: Validate runner-temporary path containment
+        run: ./scripts/test-run-native-creator-walkthrough-paths
       - name: Run bounded XCTest capability probe
         env:
           DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer

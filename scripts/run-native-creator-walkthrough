@@ -11,8 +11,8 @@ SOURCE_SHA="${TAKEFORM_CREATOR_WALKTHROUGH_SOURCE_SHA:-}"
 TEST_ROOT="${TAKEFORM_CREATOR_WALKTHROUGH_ROOT:-}"
 TIMEOUT_SECONDS="${TAKEFORM_CREATOR_WALKTHROUGH_TIMEOUT_SECONDS:-180}"
 
-if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ]; then
-  echo "Usage: $0 [--build-for-testing]" >&2
+if [ "$MODE" != "run" ] && [ "$MODE" != "--build-for-testing" ] && [ "$MODE" != "--validate-runner-paths" ]; then
+  echo "Usage: $0 [--build-for-testing|--validate-runner-paths]" >&2
   exit 2
 fi
 if [ -z "$OUTPUT_DIR" ]; then
@@ -37,34 +37,65 @@ if [ "$MODE" = run ] && [ -z "$TEST_ROOT" ]; then
 fi
 
 RUNNER_TEMP_PHYSICAL=""
-require_runner_descendant() {
+canonical_runner_descendant() {
   local candidate="$1"
   local label="$2"
-  local existing="$candidate"
   local resolved
 
   [ -n "${RUNNER_TEMP:-}" ] || { echo "RUNNER_TEMP is required for run mode" >&2; exit 2; }
-  RUNNER_TEMP_PHYSICAL="$(cd -P "$RUNNER_TEMP" && pwd)"
-  case "$candidate" in
-    "$RUNNER_TEMP_PHYSICAL"/*) ;;
-    *) echo "$label must be an absolute descendant of RUNNER_TEMP" >&2; exit 2 ;;
-  esac
-  while [ ! -e "$existing" ]; do
-    existing="$(dirname "$existing")"
-  done
-  resolved="$(cd -P "$existing" && pwd)"
-  case "$resolved" in
-    "$RUNNER_TEMP_PHYSICAL"|"$RUNNER_TEMP_PHYSICAL"/*) ;;
-    *) echo "$label traverses a symlink outside RUNNER_TEMP" >&2; exit 2 ;;
-  esac
+  resolved="$(python3 - "$RUNNER_TEMP" "$candidate" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+runner = Path(sys.argv[1]).resolve(strict=True)
+candidate = Path(sys.argv[2])
+if not candidate.is_absolute():
+    raise SystemExit("candidate must be absolute")
+resolved = candidate.resolve(strict=False)
+try:
+    resolved.relative_to(runner)
+except ValueError:
+    raise SystemExit("candidate escapes RUNNER_TEMP")
+if resolved == runner:
+    raise SystemExit("candidate must be a descendant of RUNNER_TEMP")
+print(resolved)
+PY
+)" || { echo "$label must be an absolute, canonical descendant of RUNNER_TEMP" >&2; exit 2; }
+  RUNNER_TEMP_PHYSICAL="$(python3 - "$RUNNER_TEMP" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+)" || { echo "RUNNER_TEMP could not be resolved" >&2; exit 2; }
+  printf '%s\n' "$resolved"
 }
 
-if [ "$MODE" = run ]; then
-  require_runner_descendant "$OUTPUT_DIR" "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT"
-  require_runner_descendant "$TEST_ROOT" "TAKEFORM_CREATOR_WALKTHROUGH_ROOT"
+if [ "$MODE" = run ] || [ "$MODE" = "--validate-runner-paths" ]; then
+  if ! OUTPUT_DIR="$(canonical_runner_descendant "$OUTPUT_DIR" "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT")"; then
+    exit 2
+  fi
+  if ! TEST_ROOT="$(canonical_runner_descendant "$TEST_ROOT" "TAKEFORM_CREATOR_WALKTHROUGH_ROOT")"; then
+    exit 2
+  fi
+fi
+
+if [ "$MODE" = "--validate-runner-paths" ]; then
+  exit 0
 fi
 
 mkdir -p "$OUTPUT_DIR"
+if [ "$MODE" = run ]; then
+  mkdir -p "$TEST_ROOT"
+  if ! revalidated_output="$(canonical_runner_descendant "$OUTPUT_DIR" "TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT")"; then
+    exit 2
+  fi
+  if ! revalidated_root="$(canonical_runner_descendant "$TEST_ROOT" "TAKEFORM_CREATOR_WALKTHROUGH_ROOT")"; then
+    exit 2
+  fi
+  [ "$OUTPUT_DIR" = "$revalidated_output" ] || { echo "output path changed after creation" >&2; exit 2; }
+  [ "$TEST_ROOT" = "$revalidated_root" ] || { echo "test root changed after creation" >&2; exit 2; }
+fi
 RESULT_BUNDLE="$OUTPUT_DIR/native-creator-walkthrough.xcresult"
 DERIVED_DATA="$OUTPUT_DIR/DerivedData"
 LOG="$OUTPUT_DIR/xcodebuild.log"

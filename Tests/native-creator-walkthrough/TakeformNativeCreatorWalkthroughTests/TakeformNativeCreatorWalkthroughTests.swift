@@ -82,12 +82,12 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         let grantID = try XCTUnwrap(UUID(uuidString: String(grant.identifier.dropFirst("workspace-cli-grant-".count))))
         record(app, named: "creator-cli-paired")
 
-        let rename = commandJSON(expectedRevision: 0, name: "CLI committed")
+        let rename = commandJSON(expectedRevision: 1, name: "CLI committed")
         let accepted = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, rename])
         XCTAssertEqual(accepted.status, 0, accepted.stderr)
         XCTAssertTrue(accepted.stdout.contains("applied"), accepted.stdout)
 
-        let stale = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, commandJSON(expectedRevision: 0, name: "stale")])
+        let stale = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, commandJSON(expectedRevision: 1, name: "stale")])
         XCTAssertEqual(stale.status, 0, stale.stderr)
         XCTAssertTrue(stale.stdout.contains("conflict"), stale.stdout)
 
@@ -100,7 +100,7 @@ final class TakeformNativeCreatorWalkthroughTests: XCTestCase {
         selection.click()
         app.buttons["workspace-revoke-cli"].click()
         XCTAssertTrue(app.staticTexts["CLI access revoked."].waitForExistence(timeout: 10))
-        let denied = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, commandJSON(expectedRevision: 1, name: "denied")])
+        let denied = try runCopiedCLI(arguments: ["execute", projectURL.path, grantID.uuidString, commandJSON(expectedRevision: 2, name: "denied")])
         XCTAssertNotEqual(denied.status, 0)
         XCTAssertTrue(denied.stderr.contains("open Takeform"), denied.stderr)
         record(app, named: "creator-cli-revoked")

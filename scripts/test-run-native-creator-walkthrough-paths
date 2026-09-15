@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+LAUNCHER="$ROOT_DIR/scripts/run-native-creator-walkthrough"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/takeform-creator-paths.XXXXXX")"
+RUNNER="$SCRATCH/runner"
+OUTSIDE="$SCRATCH/outside"
+trap 'rm -rf "$SCRATCH"' EXIT
+mkdir -p "$RUNNER" "$OUTSIDE"
+ln -s "$OUTSIDE" "$RUNNER/existing-link"
+
+must_reject() {
+  local output="$1"
+  local test_root="$2"
+  if RUNNER_TEMP="$RUNNER" \
+    TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$output" \
+    TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$test_root" \
+    "$LAUNCHER" --validate-runner-paths >/dev/null 2>&1; then
+    echo "accepted unsafe path: $output" >&2
+    exit 1
+  fi
+}
+
+must_reject "$RUNNER/out/../../escaped" "$RUNNER/test-inputs"
+test ! -e "$SCRATCH/escaped"
+must_reject "$RUNNER/existing-link/escaped" "$RUNNER/test-inputs"
+test ! -e "$OUTSIDE/escaped"
+
+RUNNER_TEMP="$RUNNER" \
+  TAKEFORM_CREATOR_WALKTHROUGH_OUTPUT="$RUNNER/valid/artifacts" \
+  TAKEFORM_CREATOR_WALKTHROUGH_ROOT="$RUNNER/valid/test-inputs" \
+  "$LAUNCHER" --validate-runner-paths >/dev/null
+test ! -e "$RUNNER/valid/artifacts"
+test ! -e "$RUNNER/valid/test-inputs"
