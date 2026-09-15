@@ -14,6 +14,7 @@ test('M browser payload uses accepted frame state and media element kinds', asyn
   assert.equal(payload.sources.harborCorrupt, undefined);
   assert.equal(payload.sources.lpMatchedVideo.element, 'video');
   assert.equal(payload.sources.lpMismatchStill.element, 'image');
+  assert.deepEqual(payload.frames[150].pictureLayers[0].geometry.border, {color: '#f4f1ea', width: 0.003});
   assert.equal(Object.keys(payload.sources).length, 12);
   assert.ok(Math.max(...payload.frames.map((frame) => frame.pictureLayers.length)) >= 4);
 });

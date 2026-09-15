@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto';
-import {mkdir, readdir, stat, statfs, symlink, writeFile} from 'node:fs/promises';
-import {basename, join, resolve} from 'node:path';
+import {mkdir, readdir, readFile, stat, statfs, symlink, writeFile} from 'node:fs/promises';
+import {basename, extname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {createAttempt, finishAttempt, freezeSnapshot, frameState, reserveStorage} from '../common/index.mjs';
+import {cleanupAttemptScratch, createAttempt, finishAttempt, freezeSnapshot, frameState, reserveStorage} from '../common/index.mjs';
 
 const acceptedCommit = '8a3daf1978093a3d67649b8f3779a9aa15fab876';
 const runtimeDefault = process.env.TAKEFORM_RUNTIME;
@@ -41,6 +41,8 @@ function seek(time) {
     node.style.width = (geometry.width * 100) + '%';
     node.style.height = (geometry.height * 100) + '%';
     node.style.opacity = String(layer.opacity);
+    node.style.boxSizing = 'border-box';
+    node.style.border = (geometry.border.width * 1920) + 'px solid ' + geometry.border.color;
     node.style.transform = 'translate(' + ((geometry.translateX ?? 0) * 100) + '%, ' + ((geometry.translateY ?? 0) * 100) + '%) rotate(' + geometry.rotationDegrees + 'deg)';
     if (node instanceof HTMLVideoElement) {
       const sourceTime = seconds(layer.sourceTime);
@@ -90,19 +92,27 @@ async function directoryBytes(directory) {
   return total;
 }
 
-export function framePayload(snapshot, fixtureId) {
+export function framePayload(snapshot, fixtureId, prepared = new Map()) {
   const fixture = snapshot._manifests[fixtureId];
   const frames = Array.from({length: fixture.manifest.expected.frameCount}, (_, frame) => frameState(snapshot, fixtureId, frame));
   const selected = new Set(frames.flatMap((state) => state.pictureLayers.map((layer) => layer.sourceId)));
-  const sources = Object.fromEntries(fixture.manifest.sources.filter((source) => selected.has(source.id)).map((source) => [source.id, {element: ['video', 'livePhotoVideo'].includes(source.kind) ? 'video' : 'image', id: source.id, path: `media/${source.path.split('/').at(-1)}`}]));
+  const sources = Object.fromEntries(fixture.manifest.sources.filter((source) => selected.has(source.id)).map((source) => {
+    const path = prepared.get(source.id)?.path ?? source.path;
+    return [source.id, {element: ['video', 'livePhotoVideo'].includes(source.kind) ? 'video' : 'image', id: source.id, path: `media/${source.id}${path.slice(path.lastIndexOf('.'))}`}];
+  }));
   return {durationSeconds: fixture.manifest.expected.outputDuration.ticks / fixture.manifest.expected.outputDuration.timescale, frames, rate: fixture.rate, sources};
 }
 
-async function writeProject(snapshot, fixtureId, fixtureRoot, project) {
-  const payload = framePayload(snapshot, fixtureId);
+async function writeProject(snapshot, fixtureId, fixtureRoot, project, prepared, derivativeRoot) {
+  const payload = framePayload(snapshot, fixtureId, prepared);
   const fixtureDirectory = join(fixtureRoot, fixtureId);
   await mkdir(project, {recursive: true});
-  await symlink(join(fixtureDirectory, 'media'), join(project, 'media'));
+  const media = join(project, 'media');
+  await mkdir(media, {recursive: true});
+  for (const source of snapshot._manifests[fixtureId].manifest.sources.filter((source) => source.id in payload.sources)) {
+    const entry = prepared.get(source.id);
+    await symlink(entry ? resolve(derivativeRoot, entry.path) : resolve(fixtureDirectory, source.path), join(media, basename(payload.sources[source.id].path)));
+  }
   await writeFile(join(project, 'state.json'), JSON.stringify(payload));
   await writeFile(join(project, 'composition.mjs'), browserModule);
   await writeFile(join(project, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#101114}#root{position:relative}</style></head><body><main id="root" data-composition-id="takeform-montage" data-width="1920" data-height="1080" data-duration="16" data-no-timeline data-probe-marker="hyperframes-montage"></main><script type="module" src="./composition.mjs"></script></body></html>');
@@ -110,9 +120,10 @@ async function writeProject(snapshot, fixtureId, fixtureRoot, project) {
 }
 
 export class HyperframesAdapter {
-  constructor({browser, fixtureRoot, runtime}) {
+  constructor({browser, fixtureRoot, mediaPrep, runtime}) {
     this.browser = browser;
     this.fixtureRoot = fixtureRoot;
+    this.mediaPrep = mediaPrep;
     this.runtime = runtime;
     this.controllers = new Map();
   }
@@ -120,6 +131,11 @@ export class HyperframesAdapter {
   async start({fixtureId, attemptRoot}) {
     if (fixtureId !== 'M') throw new Error('This lease authorizes M only');
     const snapshot = await freezeSnapshot({acceptedCommit, fixtureRoot: this.fixtureRoot});
+    if (!this.mediaPrep?.modulePath || !this.mediaPrep?.manifestPath || !this.mediaPrep?.derivativeRoot) throw new Error('shared media preparation is required');
+    const loader = await import(pathToFileURL(resolve(this.mediaPrep.modulePath)).href);
+    const manifest = JSON.parse(await readFile(this.mediaPrep.manifestPath, 'utf8'));
+    const preparedEntries = await loader.validateManifest(manifest, {derivativeRoot: this.mediaPrep.derivativeRoot, expectedOriginals: loader.expectedOriginalsFromSnapshot(snapshot, fixtureId)});
+    const prepared = new Map(preparedEntries.map((entry) => [entry.sourceId, entry]));
     const fixture = snapshot._manifests[fixtureId].manifest;
     const project = join(attemptRoot, 'project');
     const work = join(attemptRoot, 'work');
@@ -130,18 +146,21 @@ export class HyperframesAdapter {
     const fileSystem = await statfs(attemptRoot);
     const freeBytes = Number(fileSystem.bavail * fileSystem.bsize);
     const reservation = reserveStorage({route: 'streaming', width: fixture.canonicalPlan.width, height: fixture.canonicalPlan.height, frameCount: fixture.expected.frameCount, expectedOutputBytes: 256 * 1024 * 1024, decodeCacheBytes: 512 * 1024 * 1024, pipelineBufferBytes: 512 * 1024 * 1024, runtimeFreeFloorBytes: 1024 * 1024 * 1024, freeBytes});
-    const bundleHash = await writeProject(snapshot, fixtureId, this.fixtureRoot, project);
+    const bundleHash = await writeProject(snapshot, fixtureId, this.fixtureRoot, project, prepared, this.mediaPrep.derivativeRoot);
     const producer = await importProducer(this.runtime);
     const producerConfig = {...producer.DEFAULT_CONFIG, browserGpuMode: 'software', browserTimeout: 30000, chromePath: browserWrapper, enableBrowserPool: false, enableStreamingEncode: true, forceScreenshot: false, lowMemoryMode: false, protocolTimeout: 30000, streamingEncodeMaxDurationSeconds: 1801};
     const controller = new AbortController();
     this.controllers.set(attempt.id, controller);
     const progress = [];
+    const processSamples = [];
     let highWaterBytes = 0;
     let lowestFreeBytes = freeBytes;
     const sample = setInterval(async () => {
       const sampleFileSystem = await statfs(attemptRoot);
       lowestFreeBytes = Math.min(lowestFreeBytes, Number(sampleFileSystem.bavail * sampleFileSystem.bsize));
       highWaterBytes = Math.max(highWaterBytes, await directoryBytes(attemptRoot));
+      const usage = process.resourceUsage();
+      processSamples.push({atMs: Date.now() - started, cpuMicros: usage.userCPUTime + usage.systemCPUTime, maxRssKiB: usage.maxRSS});
     }, 1000);
     process.env.TAKEFORM_BROWSER_EXECUTABLE = this.browser;
     const job = producer.createRenderJob({entryFile: 'index.html', format: 'mp4', fps: fixture.canonicalPlan.outputFrameRate, hdrMode: 'force-sdr', producerConfig, quality: 'standard', strictness: 'strict', workers: 1});
@@ -150,12 +169,14 @@ export class HyperframesAdapter {
       await producer.executeRenderJob(job, project, output, (renderJob, message) => progress.push({message: String(message).slice(0, 240), status: renderJob.status}), controller.signal);
       highWaterBytes = Math.max(highWaterBytes, await directoryBytes(attemptRoot));
       const finished = await finishAttempt(attempt, {status: job.status === 'complete' ? 'completed' : 'failed'});
-      const result = {attempt: finished, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, progress, reservation, snapshotId: snapshot.snapshotId};
+      const cleaned = await cleanupAttemptScratch(finished);
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, highWaterBytes, jobStatus: job.status, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } catch (error) {
       const finished = await finishAttempt(attempt, {status: controller.signal.aborted ? 'interrupted' : 'failed'});
-      const result = {attempt: finished, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, progress, reservation, snapshotId: snapshot.snapshotId};
+      const cleaned = await cleanupAttemptScratch(finished);
+      const result = {attempt: cleaned, bundleHash, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message.slice(0, 400) : 'unknown', highWaterBytes, lowestFreeBytes, processSamples, progress, reservation, snapshotId: snapshot.snapshotId};
       await writeFile(join(attemptRoot, 'receipt.json'), receiptJson(result, attemptRoot));
       return result;
     } finally {
@@ -179,7 +200,7 @@ export class HyperframesAdapter {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = args(process.argv.slice(2));
-  const adapter = new HyperframesAdapter({browser: options.browser ?? browserDefault, fixtureRoot: options['fixture-root'], runtime: options.runtime ?? runtimeDefault});
+  const adapter = new HyperframesAdapter({browser: options.browser ?? browserDefault, fixtureRoot: options['fixture-root'], mediaPrep: {derivativeRoot: options['derivative-root'], manifestPath: options['media-prep-manifest'], modulePath: options['media-prep-module']}, runtime: options.runtime ?? runtimeDefault});
   const result = await adapter.start({fixtureId: options.fixture ?? 'M', attemptRoot: resolve(options['attempt-root'])});
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
