@@ -58,6 +58,16 @@ canonical_path() {
   /usr/bin/python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
+require_fresh_output_root() {
+  local requested="$1" parent canonical_parent
+  [ ! -e "$requested" ] || { echo "--output-root must be a fresh directory." >&2; exit 65; }
+  parent="$(dirname "$requested")"
+  [ -d "$parent" ] && [ ! -L "$parent" ] || { echo "--output-root parent must be an existing non-symlink directory." >&2; exit 65; }
+  canonical_parent="$(canonical_path "$parent")"
+  [ "$canonical_parent" = "$parent" ] || { echo "--output-root parent must not contain symlinked ancestors." >&2; exit 65; }
+  /bin/mkdir "$requested"
+}
+
 require_regular_executable() {
   local label="$1" candidate="$2" canonical
   [ -n "$candidate" ] && [ "${candidate#/}" != "$candidate" ] || { echo "$label must be an absolute path." >&2; exit 65; }
@@ -80,7 +90,7 @@ sha256() {
   /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}'
 }
 
-mkdir -p "$OUTPUT_ROOT"
+require_fresh_output_root "$OUTPUT_ROOT"
 OUTPUT_ROOT="$(canonical_path "$OUTPUT_ROOT")"
 [ "$OUTPUT_ROOT" != "/" ] || { echo "--output-root must not be the filesystem root." >&2; exit 64; }
 DOWNLOADS="$OUTPUT_ROOT/downloads"
