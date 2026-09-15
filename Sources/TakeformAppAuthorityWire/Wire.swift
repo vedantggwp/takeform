@@ -51,6 +51,11 @@ public enum AppAuthoritySocket {
         try send(request, fd)
         return try receive(AppAuthorityResponse.self, fd)
     }
+    public static func verifyService(expectedService: URL) throws {
+        let fd = try connect(); defer { close(fd) }
+        guard let requirement = AppAuthorityPeer.requirement(for: expectedService), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else { throw AppAuthoritySocketFailure.unverifiedPeer }
+    }
+    public static var endpointExists: Bool { FileManager.default.fileExists(atPath: path) }
  public static func send<T:Encodable>(_ x:T,_ fd:Int32)throws{var d=try JSONEncoder().encode(x);d.append(10);guard d.withUnsafeBytes({Darwin.write(fd,$0.baseAddress!,d.count)})==d.count else{throw WorkspaceFailure.authorityUnavailable}}
  public static func receive<T:Decodable>(_ t:T.Type,_ fd:Int32)throws->T{var d=Data();var b:UInt8=0;while d.count<1_000_000{guard Darwin.read(fd,&b,1)>0 else{throw WorkspaceFailure.authorityUnavailable};if b==10{return try JSONDecoder().decode(t,from:d)};d.append(b)};throw WorkspaceFailure.authorityUnavailable}
 }

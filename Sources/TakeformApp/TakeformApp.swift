@@ -4,18 +4,28 @@ import TakeformCore
 import TakeformSupport
 import TakeformWorkspace
 import TakeformAppAuthorityWire
+import TakeformAppServiceClient
+
+private let authorityClient = AppAuthorityServiceClient()
 
 final class TakeformAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await authorityClient.shutdown()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 @main
 struct TakeformApp: App {
     @NSApplicationDelegateAdaptor(TakeformAppDelegate.self) private var appDelegate
-    @StateObject private var workspace = WorkspaceModel(client: NativeAuthorityClient())
+    @StateObject private var workspace = WorkspaceModel(client: authorityClient)
 
     var body: some Scene {
         WindowGroup("Takeform", id: "main") {

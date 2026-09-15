@@ -23,7 +23,8 @@ let package = Package(
         .target(name: "TakeformAuthorityAppServiceCore", dependencies: ["TakeformAuthorityEngine", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .target(name: "TakeformWorkspace", dependencies: ["TakeformCore"]),
         .target(name: "TakeformAppAuthorityWire", dependencies: ["TakeformCore", "TakeformWorkspace"]),
-        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .target(name: "TakeformAppServiceClient", dependencies: ["TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
+        .executableTarget(name: "TakeformApp", dependencies: ["TakeformSupport", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire", "TakeformAppServiceClient"]),
         .executableTarget(name: "TakeformAuthorityAppService", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore", "TakeformWorkspace", "TakeformAppAuthorityWire"]),
         .executableTarget(name: "TakeformDoctor", dependencies: ["TakeformSupport"]),
         .executableTarget(name: "TakeformCLI", dependencies: ["TakeformCore", "TakeformAppAuthorityWire"]),
@@ -32,6 +33,6 @@ let package = Package(
         .executableTarget(name: "TakeformAuthorityFaultHarness", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformCore"]),
         .testTarget(name: "TakeformSupportTests", dependencies: ["TakeformSupport"]),
         .testTarget(name: "TakeformAuthorityTests", dependencies: ["TakeformAuthorityAppServiceCore", "TakeformAppAuthorityWire", "TakeformCore"]),
-        .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore"])
+        .testTarget(name: "TakeformWorkspaceTests", dependencies: ["TakeformWorkspace", "TakeformCore", "TakeformAppServiceClient", "TakeformAppAuthorityWire"])
     ]
 )
