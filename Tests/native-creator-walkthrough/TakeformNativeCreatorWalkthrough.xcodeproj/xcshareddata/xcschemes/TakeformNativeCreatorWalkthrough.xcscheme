@@ -3,14 +3,14 @@
   <BuildAction parallelizeBuildables="NO" buildImplicitDependencies="NO">
     <BuildActionEntries>
       <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="NO">
-        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A10000000000000000000040" BuildableName="TakeformNativeUICapabilityTests.xctest" BlueprintName="TakeformNativeUICapabilityTests" ReferencedContainer="container:TakeformNativeUICapability.xcodeproj" />
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A10000000000000000000040" BuildableName="TakeformNativeCreatorWalkthroughTests.xctest" BlueprintName="TakeformNativeCreatorWalkthroughTests" ReferencedContainer="container:TakeformNativeCreatorWalkthrough.xcodeproj" />
       </BuildActionEntry>
     </BuildActionEntries>
   </BuildAction>
   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
     <Testables>
       <TestableReference skipped="NO">
-        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A10000000000000000000040" BuildableName="TakeformNativeUICapabilityTests.xctest" BlueprintName="TakeformNativeUICapabilityTests" ReferencedContainer="container:TakeformNativeUICapability.xcodeproj" />
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A10000000000000000000040" BuildableName="TakeformNativeCreatorWalkthroughTests.xctest" BlueprintName="TakeformNativeCreatorWalkthroughTests" ReferencedContainer="container:TakeformNativeCreatorWalkthrough.xcodeproj" />
       </TestableReference>
     </Testables>
   </TestAction>
