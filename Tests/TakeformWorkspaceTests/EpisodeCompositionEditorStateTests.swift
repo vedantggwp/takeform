@@ -76,6 +76,25 @@ final class EpisodeCompositionEditorStateTests: XCTestCase {
         XCTAssertEqual(state.draft, currentDraft)
     }
 
+    func testDelayedResponseForOldRevisionCannotReplaceCurrentDraft() {
+        let fixture = makeFixture()
+        let package = URL(fileURLWithPath: "/private/tmp/revision-editor.takeform", isDirectory: true)
+        let state = EpisodeCompositionEditorState()
+        state.synchronize(document: fixture.document, packageURL: package, episode: fixture.episode)
+        state.add(asset: fixture.asset)
+        let oldRequest = state.context!
+        var updatedDocument = fixture.document
+        updatedDocument.revision = Revision(1)
+        state.synchronize(document: updatedDocument, packageURL: package, episode: fixture.episode)
+        let currentDraft = state.draft
+
+        state.receive(.applied(fixture.document), for: oldRequest, packageURL: package, episode: fixture.episode)
+
+        XCTAssertEqual(state.context?.revision, Revision(1))
+        XCTAssertEqual(state.draft, currentDraft)
+        XCTAssertTrue(state.needsResolution)
+    }
+
     private func makeFixture() -> (document: ProjectDocument, episode: Episode, asset: ManagedAsset) {
         let episode = Episode(name: "Opening", recipeVersion: 1)
         let asset = ManagedAsset(

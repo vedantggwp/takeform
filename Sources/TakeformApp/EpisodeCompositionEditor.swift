@@ -271,6 +271,7 @@ final class EpisodeCompositionEditorState: ObservableObject {
         }
         guard context.revision != incoming.revision else { return }
         if isDirty {
+            self.context = incoming
             needsResolution = true
             message = "The committed composition changed. Reload to resolve it, or keep this local draft and adjust it."
         } else {
@@ -349,7 +350,7 @@ final class EpisodeCompositionEditorState: ObservableObject {
     }
 
     func receive(_ completion: WorkspaceCommandCompletion, for request: Context, packageURL: URL, episode: Episode) {
-        guard context?.packageURL == request.packageURL, context?.episodeID == request.episodeID else { return }
+        guard context == request else { return }
         isSaving = false
         switch completion {
         case .applied(let document):
