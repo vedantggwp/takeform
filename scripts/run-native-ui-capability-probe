@@ -52,9 +52,12 @@ rm -rf "$RESULT_BUNDLE" "$DERIVED_DATA" "$ATTACHMENTS"
   fi
 } > "$FACTS" 2>&1
 
+action="test"
+if [ "$MODE" = "--build-for-testing" ]; then
+  action="build-for-testing"
+fi
 command=(
-  xcodebuild
-  "$( [ "$MODE" = run ] && echo test || echo build-for-testing )"
+  xcodebuild "$action"
   -project "$PROJECT"
   -scheme "$SCHEME"
   -destination 'platform=macOS,arch=arm64'
@@ -63,18 +66,58 @@ command=(
   -resultBundlePath "$RESULT_BUNDLE"
 )
 
+set -m
 if [ "$MODE" = run ]; then
   TAKEFORM_UI_PROBE_APP="$APP_BUNDLE" "${command[@]}" > "$LOG" 2>&1 &
 else
   "${command[@]}" > "$LOG" 2>&1 &
 fi
 pid=$!
+
+collect_descendants() {
+  local parent="$1"
+  local child
+  while IFS= read -r child; do
+    [ -n "$child" ] || continue
+    collect_descendants "$child"
+    printf '%s\n' "$child"
+  done < <(/usr/bin/pgrep -P "$parent" 2>/dev/null || true)
+}
+
+terminate_owned_processes() {
+  local child
+  local descendants=()
+  while IFS= read -r child; do
+    descendants+=("$child")
+  done < <(collect_descendants "$pid")
+
+  echo "timeout_cleanup: terminate requested" >> "$FACTS"
+  kill -TERM -- "-$pid" 2>/dev/null || true
+  if [ "${#descendants[@]}" -gt 0 ]; then
+    kill -TERM "${descendants[@]}" 2>/dev/null || true
+  fi
+  sleep 2
+
+  local survivors=()
+  for child in "$pid" "${descendants[@]}"; do
+    if kill -0 "$child" 2>/dev/null; then
+      survivors+=("$child")
+    fi
+  done
+  if [ "${#survivors[@]}" -gt 0 ]; then
+    kill -KILL "${survivors[@]}" 2>/dev/null || true
+    echo "timeout_cleanup: forced reaping for ${#survivors[@]} owned process(es)" >> "$FACTS"
+  else
+    echo "timeout_cleanup: all owned processes exited after TERM" >> "$FACTS"
+  fi
+}
+
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 timed_out=0
 while kill -0 "$pid" 2>/dev/null; do
   if [ "$SECONDS" -ge "$deadline" ]; then
     timed_out=1
-    kill "$pid" 2>/dev/null || true
+    terminate_owned_processes
     break
   fi
   sleep 1
