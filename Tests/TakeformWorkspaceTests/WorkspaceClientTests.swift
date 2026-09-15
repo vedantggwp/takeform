@@ -289,14 +289,32 @@ final class WorkspaceClientTests: XCTestCase {
         let retainedStatus = await MainActor.run { model.renderStatus }
         XCTAssertEqual(retainedStatus, completed)
 
+        // A current nonavailable status supersedes an in-flight authority
+        // playback fetch for this same job.
+        await MainActor.run {
+            model.loadRenderedPreview()
+            model.refreshRenderStatus()
+        }
+        await client.waitForPlaybackRequests(1)
+        await client.waitForStatusRequests(3)
+        await client.finishStatus(2, with: running)
+        for _ in 0..<100 where await MainActor.run(body: { model.renderStatus != running }) { await Task.yield() }
+        await client.finishPlayback(0, with: source)
+        for _ in 0..<100 { await Task.yield() }
+        let unavailableIdentity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
+        let unavailableMessage = await MainActor.run { model.renderMessage }
+        XCTAssertNil(unavailableIdentity)
+        XCTAssertEqual(unavailableMessage, "Render is running.")
+
+        await MainActor.run { model.renderStatus = completed }
         await MainActor.run {
             model.loadRenderedPreview()
             model.loadRenderedPreview()
         }
-        await client.waitForPlaybackRequests(2)
-        await client.finishPlayback(1, with: source)
+        await client.waitForPlaybackRequests(3)
+        await client.finishPlayback(2, with: source)
         for _ in 0..<100 where await MainActor.run(body: { model.renderedPreviewPlayer.sourceIdentity == nil }) { await Task.yield() }
-        await client.failPlayback(0, with: WorkspaceFailure.authorityUnavailable)
+        await client.failPlayback(1, with: WorkspaceFailure.authorityUnavailable)
         for _ in 0..<100 { await Task.yield() }
 
         let identity = await MainActor.run { model.renderedPreviewPlayer.sourceIdentity }
