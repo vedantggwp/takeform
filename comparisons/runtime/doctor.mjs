@@ -11,6 +11,8 @@ const packages = [
   ['@hyperframes/producer', '0.8.39'],
   ['@hyperframes/engine', '0.8.39'],
   ['@hyperframes/player', '0.8.39'],
+  ['@hyperframes/player/node_modules/@hyperframes/core', '0.8.39'],
+  ['@hyperframes/core', '0.8.40'],
   ['@remotion/bundler', '4.0.524'],
   ['remotion', '4.0.524'],
   ['@remotion/renderer', '4.0.524'],
