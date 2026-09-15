@@ -91,6 +91,10 @@ public final class ProjectAuthority {
         let grant = grantID.flatMap { id in bindingState.grants.first(where: { $0.id == id }) }
         let presentedTokenDigest = token.map({ tokenDigest($0) })
         guard grant?.isActive == true, grant?.authorityEpoch == binding?.epoch, grant?.tokenDigest == presentedTokenDigest, grant?.scopes.contains(envelope.command.requiredScope) == true else { return CommandResult(id: envelope.id, outcome: .rejected(reason: "unauthorized")) }
+        return try executeAuthorized(envelope)
+    }
+
+    private func executeAuthorized(_ envelope: CommandEnvelope) throws -> CommandResult {
         let result = try database.transaction {
             let fingerprint = try encode(envelope)
             if let stored = try database.value("SELECT result FROM command_results WHERE id = ?", bindings: [envelope.id.value.uuidString]) {
@@ -203,7 +207,7 @@ public final class ProjectAuthority {
         if let binding, binding.canonicalPath != packageURL.path, !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
         if binding?.canonicalPath != packageURL.path {
             state.binding = MachineBinding(canonicalPath: packageURL.path, epoch: (binding?.epoch ?? 0) + 1)
-            if binding != nil { state.grants = []; state.creatorCredentialDigest = nil }
+            if binding != nil { state.grants = [] }
             try saveMachineState(state, for: projectID)
         }
         return state
@@ -230,42 +234,44 @@ public final class ProjectAuthority {
 }
 
 @_spi(AuthorityAppService)
-public struct AuthorityCreatorSession: Sendable {
-    fileprivate let credential: String
-    fileprivate init(credential: String) { self.credential = credential }
-}
-
-@_spi(AuthorityAppService)
-public enum AuthorityAppServiceGate {
-    /// Only the UDS service invokes this after code-identity and connection checks.
-    public static func session(creatorCredential: String) -> AuthorityCreatorSession { AuthorityCreatorSession(credential: creatorCredential) }
-}
-
 extension ProjectAuthority {
-    @_spi(AuthorityAppService)
-    public func establishCreator(_ session: AuthorityCreatorSession) throws {
-        let openState = try open()
-        var state = try loadMachineState(for: openState.document.projectID)
-        let digest = tokenDigest(session.credential)
-        if let existing = state.creatorCredentialDigest, existing != digest { throw AuthorityFailure.unauthorized }
-        state.creatorCredentialDigest = digest
-        try saveMachineState(state, for: openState.document.projectID)
+    /// Service-only native path. Its credential is never accepted by CLI commands.
+    public func openForAuthenticatedCreator(credential: String, rebindMovedPackage: Bool) throws -> ProjectOpenState {
+        let projectID = try portableProjectID()
+        let state = try loadMachineState(for: projectID)
+        let digest = tokenDigest(credential)
+        if let binding = state.binding {
+            guard state.creatorCredentialDigest == digest else { throw AuthorityFailure.unauthorized }
+            if binding.canonicalPath != packageURL.path && !rebindMovedPackage { throw AuthorityFailure.copyDecisionRequired }
+        }
+        let opened = try open(rebindMovedPackage: rebindMovedPackage)
+        var updated = try loadMachineState(for: opened.document.projectID)
+        if updated.creatorCredentialDigest == nil { updated.creatorCredentialDigest = digest; try saveMachineState(updated, for: opened.document.projectID) }
+        guard updated.creatorCredentialDigest == digest else { throw AuthorityFailure.unauthorized }
+        return opened
     }
 
-    @_spi(AuthorityAppService)
-    public func issueCLIGrant(_ session: AuthorityCreatorSession, label: String, scopes: Set<GrantScope>, expiresAt: Date, rawToken: String) throws -> Grant {
-        let openState = try open()
-        var state = try loadMachineState(for: openState.document.projectID)
-        guard state.creatorCredentialDigest == tokenDigest(session.credential), let epoch = state.binding?.epoch else { throw AuthorityFailure.unauthorized }
+    public func executeForAuthenticatedCreator(_ envelope: CommandEnvelope, credential: String) throws -> CommandResult {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        let state = try loadMachineState(for: opened.document.projectID)
+        guard state.creatorCredentialDigest == tokenDigest(credential) else { throw AuthorityFailure.unauthorized }
+        return try executeAuthorized(envelope)
+    }
+
+    public func issuePairedCLIGrant(credential: String, label: String, scopes: Set<GrantScope>, expiresAt: Date, rawToken: String) throws -> Grant {
+        let opened = try openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        var state = try loadMachineState(for: opened.document.projectID)
+        guard let epoch = state.binding?.epoch else { throw AuthorityFailure.unauthorized }
         let grant = Grant(label: label, scopes: scopes, expiresAt: expiresAt, authorityEpoch: epoch, tokenDigest: tokenDigest(rawToken))
-        state.grants.append(grant); try saveMachineState(state, for: openState.document.projectID); return grant
+        state.grants.append(grant); try saveMachineState(state, for: opened.document.projectID); return grant
     }
 
-    @_spi(AuthorityAppService)
-    public func revokeCLIGrant(_ session: AuthorityCreatorSession, grantID: UUID) throws {
-        let openState = try open(); var state = try loadMachineState(for: openState.document.projectID)
-        guard state.creatorCredentialDigest == tokenDigest(session.credential) else { throw AuthorityFailure.unauthorized }
-        guard let i = state.grants.firstIndex(where: { $0.id == grantID }) else { return }
-        state.grants[i].revokedAt = Date(); try saveMachineState(state, for: openState.document.projectID)
+    private func portableProjectID() throws -> UUID {
+        let manifestURL = packageURL.appendingPathComponent(".takeform/manifest.json")
+        if FileManager.default.fileExists(atPath: manifestURL.path) {
+            guard let manifest = try? decoder.decode(PortableManifest.self, from: Data(contentsOf: manifestURL)) else { throw AuthorityFailure.corruptDatabase }
+            return manifest.projectID
+        }
+        return try open().document.projectID
     }
 }
