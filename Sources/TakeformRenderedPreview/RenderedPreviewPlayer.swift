@@ -6,6 +6,18 @@ import TakeformCore
 
 /// A copied pixel buffer proves the requested encoded item time decoded. It does
 /// not make a claim about physical audio presentation.
+public struct RenderedPreviewIdentity: Equatable, Sendable {
+    public let jobID: UUID
+    public let requestedRevision: Revision
+    public let compositionDigest: String
+
+    public init(jobID: UUID, requestedRevision: Revision, compositionDigest: String) {
+        self.jobID = jobID
+        self.requestedRevision = requestedRevision
+        self.compositionDigest = compositionDigest
+    }
+}
+
 public struct DecodedRenderedFrame {
     public let requestedFrame: Int
     public let itemTime: CMTime
@@ -44,8 +56,19 @@ public final class RenderedPreviewPlayer: NSObject {
     private var sourceGeneration = UUID()
     private var seekGeneration = UUID()
     private var source: EpisodeRenderPlaybackSource?
+    private let testAssetVerifier: (@Sendable (EpisodeRenderPlaybackSource) async throws -> Void)?
 
-    public override init() { super.init() }
+    public private(set) var sourceIdentity: RenderedPreviewIdentity?
+
+    public override init() {
+        testAssetVerifier = nil
+        super.init()
+    }
+
+    @_spi(Testing) public init(assetVerifier: @escaping @Sendable (EpisodeRenderPlaybackSource) async throws -> Void) {
+        testAssetVerifier = assetVerifier
+        super.init()
+    }
 
     /// Loads one freshly authority-validated artifact. Call `clear()` before a
     /// revision/digest mismatch becomes selectable in the UI.
@@ -53,12 +76,20 @@ public final class RenderedPreviewPlayer: NSObject {
         // A newly selected authority source supersedes any prior revision before
         // asynchronous asset inspection begins.
         clear()
+        let loadToken = sourceGeneration
         try validate(source)
         try await verifyEncodedAsset(source)
+        guard loadToken == sourceGeneration else {
+            throw RenderedPreviewFailure.staleSource
+        }
 
-        sourceGeneration = UUID()
         seekGeneration = UUID()
         self.source = source
+        sourceIdentity = RenderedPreviewIdentity(
+            jobID: source.jobID,
+            requestedRevision: source.requestedRevision,
+            compositionDigest: source.compositionDigest
+        )
 
         let videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
@@ -80,6 +111,7 @@ public final class RenderedPreviewPlayer: NSObject {
         item = nil
         videoOutput = nil
         source = nil
+        sourceIdentity = nil
     }
 
     public func play() { player.play() }
@@ -129,6 +161,10 @@ public final class RenderedPreviewPlayer: NSObject {
     }
 
     private func verifyEncodedAsset(_ source: EpisodeRenderPlaybackSource) async throws {
+        if let testAssetVerifier {
+            try await testAssetVerifier(source)
+            return
+        }
         let asset = AVURLAsset(url: source.artifactURL)
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
