@@ -13,7 +13,7 @@ public enum CreatorAuthorityService {
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute), (.cli, .pairedImport): true
+        case (.app, .open), (.app, .create), (.app, .importMedia), (.app, .cancelImport), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.app, .requestRender), (.app, .renderStatus), (.app, .cancelRender), (.app, .materializeRender), (.app, .exportRender), (.cli, .pairedExecute), (.cli, .pairedImport), (.cli, .pairedRequestRender), (.cli, .pairedRenderStatus), (.cli, .pairedCancelRender), (.cli, .pairedMaterializeRender), (.cli, .pairedExportRender): true
         default: false
         }
     }
@@ -63,12 +63,42 @@ public enum CreatorAuthorityService {
         case let .listGrants(url, credential):
             let authority = try ProjectAuthority(packageURL: url)
             return .grants(try authority.pairedCLIGrants(credential: String(decoding: credential, as: UTF8.self)))
+        case let .requestRender(url, envelope, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .result(try authority.requestEpisodeRenderForAuthenticatedCreator(envelope, credential: String(decoding: credential, as: UTF8.self)))
+        case let .renderStatus(url, jobID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderStatus(try authority.renderStatusForAuthenticatedCreator(jobID: jobID, credential: String(decoding: credential, as: UTF8.self)))
+        case let .cancelRender(url, jobID, operationID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderStatus(try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: String(decoding: credential, as: UTF8.self)))
+        case let .materializeRender(url, jobID, operationID, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderMaterialization(try authority.materializeEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: String(decoding: credential, as: UTF8.self)))
+        case let .exportRender(url, jobID, operationID, destination, decision, credential):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderExport(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, destination: destination, decision: decision, credential: String(decoding: credential, as: UTF8.self)))
         case let .pairedExecute(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.execute(envelope, grantID: grantID, token: token))
         case let .pairedImport(url, sources, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .importOutcomes(try authority.importManagedSources(sources, grantID: grantID, token: token))
+        case let .pairedRequestRender(url, envelope, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .result(try authority.requestEpisodeRenderForPairedCLI(envelope, grantID: grantID, token: token))
+        case let .pairedRenderStatus(url, jobID, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderStatus(try authority.renderStatusForPairedCLI(jobID: jobID, grantID: grantID, token: token))
+        case let .pairedCancelRender(url, jobID, operationID, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderStatus(try authority.cancelEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, grantID: grantID, token: token))
+        case let .pairedMaterializeRender(url, jobID, operationID, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderMaterialization(try authority.materializeEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, grantID: grantID, token: token))
+        case let .pairedExportRender(url, jobID, operationID, destination, decision, grantID, token):
+            let authority = try ProjectAuthority(packageURL: url)
+            return .renderExport(try authority.exportEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, destination: destination, decision: decision, grantID: grantID, token: token))
         }
     }
 

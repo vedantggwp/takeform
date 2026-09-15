@@ -1,9 +1,11 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import XCTest
 @testable import TakeformAuthorityAppServiceCore
+import TakeformAppAuthorityWire
 import TakeformCore
 
 final class EpisodeCompositionTests: XCTestCase {
@@ -108,6 +110,59 @@ final class EpisodeCompositionTests: XCTestCase {
         object.removeValue(forKey: "episodeCompositions")
         let legacy = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         XCTAssertTrue(try JSONDecoder().decode(ProjectDocument.self, from: legacy).episodeCompositions.isEmpty)
+    }
+
+    func testRenderRequestIsAtomicIdempotentAndNeverClaimsMachineArtifact() throws {
+        let package = root.appendingPathComponent("Render.takeform")
+        let credential = "creator"
+        let authority = try ProjectAuthority(packageURL: package)
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        guard case let .applied(channel) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Harbor", initialRecipe: [:])), credential: credential).outcome else { return XCTFail("channel setup failed") }
+        guard case let .applied(episodes) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: channel.revision, command: .createEpisode(name: "Recap", recipeVersion: 1)), credential: credential).outcome,
+              let episode = episodes.episodes.first else { return XCTFail("episode setup failed") }
+        let source = root.appendingPathComponent("still.png")
+        try png().write(to: source)
+        guard case let .imported(asset) = try authority.importManagedSources([source], credential: credential).first else { return XCTFail("asset setup failed") }
+        let beforeComposition = try authority.open().document
+        let composition = try makeComposition(episodeID: episode.id, asset: asset)
+        guard case let .applied(committed) = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: beforeComposition.revision, command: .replaceEpisodeComposition(episodeID: episode.id, composition: composition)), credential: credential).outcome else { return XCTFail("composition setup failed") }
+        let digest = SHA256.hash(data: try composition.canonicalData()).map { String(format: "%02x", $0) }.joined()
+        let request = CommandEnvelope(expectedRevision: committed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4))
+
+        let first = try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential)
+        guard case let .renderRequested(status) = first.outcome else { return XCTFail("render request was not recorded") }
+        XCTAssertEqual(status.logicalState, .requested)
+        XCTAssertEqual(status.progress, .indeterminate)
+        XCTAssertEqual(status.availability, .unavailable)
+        XCTAssertEqual(status.requestedRevision, committed.revision)
+        XCTAssertEqual(try authority.open().document.revision, committed.revision, "logical render request must not revise portable document")
+        XCTAssertEqual(try authority.requestEpisodeRenderForAuthenticatedCreator(request, credential: credential), first, "exact command replay must return stored request")
+
+        let stale = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: Revision(committed.revision.value - 1), command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: digest, format: .mp4)), credential: credential)
+        XCTAssertEqual(stale.outcome, .conflict(currentRevision: committed.revision))
+        let mismatch = try authority.requestEpisodeRenderForAuthenticatedCreator(CommandEnvelope(expectedRevision: committed.revision, command: .requestEpisodeRender(episodeID: episode.id, compositionDigest: String(repeating: "0", count: 64), format: .mp4)), credential: credential)
+        XCTAssertEqual(mismatch.outcome, .rejected(reason: "render-composition-digest-mismatch"))
+
+        XCTAssertEqual(try authority.renderStatusForAuthenticatedCreator(jobID: status.jobID, credential: credential), status)
+        let cancelID = CommandID()
+        let cancelled = try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: cancelID, credential: credential)
+        XCTAssertEqual(cancelled.logicalState, .cancelled)
+        XCTAssertEqual(try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: cancelID, credential: credential), cancelled, "cancel operation replay must be idempotent")
+        let pairedToken = "paired-render-token"
+        let pairedGrant = try authority.issuePairedCLIGrant(credential: credential, label: "render", scopes: [.editProject], expiresAt: .distantFuture, rawToken: pairedToken)
+        guard case let .renderStatus(pairedStatus) = CreatorAuthorityService.respond(to: .pairedRenderStatus(package, status.jobID, pairedGrant.id, pairedToken), from: .cli) else { return XCTFail("paired status route failed") }
+        XCTAssertEqual(pairedStatus, cancelled)
+        guard case .failure(.creatorAuthorizationRequired) = CreatorAuthorityService.respond(to: .requestRender(package, request, Data(credential.utf8)), from: .cli) else { return XCTFail("CLI must not use app creator render route") }
+        let materialized = try authority.materializeEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: CommandID(), credential: credential)
+        XCTAssertEqual(materialized, .unavailable(cancelled))
+        let destination = root.appendingPathComponent("export.mp4")
+        try Data("existing creator output".utf8).write(to: destination)
+        let exportID = CommandID()
+        let exported = try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: destination, decision: .refuseExisting, credential: credential)
+        XCTAssertEqual(exported, .unavailable(cancelled))
+        XCTAssertEqual(try Data(contentsOf: destination), Data("existing creator output".utf8), "unavailable renderer must not clobber an explicit destination")
+        XCTAssertEqual(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: destination, decision: .refuseExisting, credential: credential), exported, "an exact export retry must replay its result")
+        XCTAssertThrowsError(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: status.jobID, operationID: exportID, destination: root.appendingPathComponent("other-export.mp4"), decision: .refuseExisting, credential: credential), "one export operation ID must not be reused for another destination")
     }
 
     func testLegacyOccurrenceDefaultsToFullCanvasOutputRect() throws {

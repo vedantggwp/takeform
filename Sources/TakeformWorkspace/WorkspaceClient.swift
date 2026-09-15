@@ -99,6 +99,7 @@ public enum WorkspacePresentation {
     public static func commandMessage(_ result: CommandResult) -> String {
         switch result.outcome {
         case .applied(let document): "Committed revision \(document.revision.value)."
+        case let .renderRequested(status): "Render request \(status.jobID.uuidString) is queued; its local renderer is currently unavailable."
         case .conflict(let revision): "This project changed first. Reload revision \(revision.value) and try again."
         case .rejected(let reason): "No change was committed: \(reason)."
         }
