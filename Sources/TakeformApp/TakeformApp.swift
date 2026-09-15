@@ -313,14 +313,19 @@ private struct SettingsView: View {
 
 private struct NativeAuthorityClient: WorkspaceClient {
     private func credential() throws -> Data { try CreatorCredentialStore.loadOrCreate() }
+    private func verifiedRequest(_ request: AppAuthorityRequest) throws -> AppAuthorityResponse {
+        let fd = try AppAuthoritySocket.connect(); defer { close(fd) }
+        guard let service = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService"), let requirement = AppAuthorityPeer.requirement(for: service), AppAuthorityPeer.matches(fd: fd, requirement: requirement) else { throw WorkspaceFailure.authorityUnavailable }
+        try AppAuthoritySocket.send(request, fd); return try AppAuthoritySocket.receive(AppAuthorityResponse.self, fd)
+    }
     private func request(_ r: AppAuthorityRequest) async throws -> AppAuthorityResponse {
-        do { return try await Task.detached { try AppAuthoritySocket.request(r) }.value }
+        do { return try await Task.detached { try verifiedRequest(r) }.value }
         catch {
             guard let here = Bundle.main.executableURL else { throw WorkspaceFailure.authorityUnavailable }
             let service = here.deletingLastPathComponent().appendingPathComponent("TakeformAuthorityAppService")
             guard FileManager.default.isExecutableFile(atPath: service.path) else { throw WorkspaceFailure.authorityUnavailable }
             let process = Process(); process.executableURL = service; process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice; try process.run()
-            for _ in 0..<100 { if let response = try? AppAuthoritySocket.request(r) { return response }; try await Task.sleep(for: .milliseconds(20)) }
+            for _ in 0..<100 { if let response = try? verifiedRequest(r) { return response }; try await Task.sleep(for: .milliseconds(20)) }
             throw WorkspaceFailure.authorityUnavailable
         }
     }
