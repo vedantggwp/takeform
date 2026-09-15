@@ -438,7 +438,7 @@ final class TakeformNativeUICapabilityTests: XCTestCase {
         guard captureFrame.width > 0, captureFrame.height > 0 else { return .null }
         let xScale = bitmapSize.width / captureFrame.width
         let yScale = bitmapSize.height / captureFrame.height
-        CGRect(
+        return CGRect(
             x: (screenRect.minX - captureFrame.minX) * xScale,
             y: (captureFrame.maxY - screenRect.maxY) * yScale,
             width: screenRect.width * xScale,
