@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NODE_ROOT="${1:?usage: $0 NODE22_ROOT RUNTIME_SOURCE}"
+RUNTIME_SOURCE="${2:?usage: $0 NODE22_ROOT RUNTIME_SOURCE}"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/takeform-renderer-doctor.XXXXXX")"
+trap 'rm -rf "$SCRATCH"' EXIT
+STALE_RUNTIME="$SCRATCH/stale-runtime"
+BUNDLE_ROOT="$SCRATCH/bundle"
+
+# Deliberately make the external runtime's former verifier reject package-only.
+# package-dev-bundle must use the checked-in verifier instead.
+ditto "$RUNTIME_SOURCE" "$STALE_RUNTIME"
+printf '%s\n' '#!/usr/bin/env node' 'process.stderr.write("stale doctor invoked\n"); process.exit(7);' > "$STALE_RUNTIME/doctor.mjs"
+
+"$ROOT_DIR/scripts/package-dev-bundle" "$BUNDLE_ROOT" \
+  --renderer-node-root "$NODE_ROOT" \
+  --renderer-runtime-source "$STALE_RUNTIME"
+"$ROOT_DIR/scripts/verify-dev-bundle" "$BUNDLE_ROOT/Takeform.app"
+BUNDLED_DOCTOR="$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime/doctor.mjs"
+"$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime/node/bin/node" "$BUNDLED_DOCTOR" \
+  --runtime "$BUNDLE_ROOT/Takeform.app/Contents/Resources/RendererRuntime" --package-only >/dev/null
+! cmp -s "$STALE_RUNTIME/doctor.mjs" "$BUNDLED_DOCTOR"
+printf '%s\n' 'package-dev-bundle renderer doctor regression: PASS'

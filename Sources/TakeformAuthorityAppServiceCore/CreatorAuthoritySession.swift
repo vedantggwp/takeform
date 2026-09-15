@@ -45,6 +45,7 @@ public enum CreatorAuthorityService {
         case let .open(url, rebind, credential):
             let authority = try ProjectAuthority(packageURL: url)
             let opened = try authority.openForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self), rebindMovedPackage: rebind)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
             return .snapshot(WorkspaceSnapshot(document: opened.document, projectionMatches: opened.projectionMatches, packageURL: url))
         case let .create(url, name, recipe, credential):
             return .snapshot(try ProjectAuthority.createChannelPackage(at: url, name: name, initialRecipe: recipe, credential: String(decoding: credential, as: UTF8.self)))
@@ -65,19 +66,39 @@ public enum CreatorAuthorityService {
             return .grants(try authority.pairedCLIGrants(credential: String(decoding: credential, as: UTF8.self)))
         case let .requestRender(url, envelope, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            return .result(try authority.requestEpisodeRenderForAuthenticatedCreator(envelope, credential: String(decoding: credential, as: UTF8.self)))
+            let creator = String(decoding: credential, as: UTF8.self)
+            _ = try authority.openForAuthenticatedCreator(credential: creator, rebindMovedPackage: false)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
+            let result = try authority.requestEpisodeRenderForAuthenticatedCreator(envelope, credential: creator)
+            if case let .renderRequested(status) = result.outcome {
+                let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: status.jobID, credential: creator)
+                _ = RenderExecutionCoordinator.shared.start(authority: authority, input: input)
+            }
+            return .result(result)
         case let .renderStatus(url, jobID, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderStatus(try authority.renderStatusForAuthenticatedCreator(jobID: jobID, credential: String(decoding: credential, as: UTF8.self)))
+            let creator = String(decoding: credential, as: UTF8.self)
+            _ = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: creator)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
+            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: creator)
+            return .renderStatus(observedRenderStatus(input))
         case let .cancelRender(url, jobID, operationID, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderStatus(try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: String(decoding: credential, as: UTF8.self)))
+            let creator = String(decoding: credential, as: UTF8.self)
+            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: creator)
+            let status = try authority.cancelEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: creator)
+            RenderExecutionCoordinator.shared.cancel(projectID: input.snapshot.projectID, jobID: jobID)
+            return .renderStatus(status)
         case let .materializeRender(url, jobID, operationID, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderMaterialization(try authority.materializeEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, credential: String(decoding: credential, as: UTF8.self)))
+            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: String(decoding: credential, as: UTF8.self))
+            return .renderMaterialization(try authority.recordRenderMaterialization(jobID: jobID, operationID: operationID, result: RenderExecutionCoordinator.shared.materialization(for: input)))
         case let .exportRender(url, jobID, operationID, destination, decision, credential):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderExport(try authority.exportEpisodeRenderForAuthenticatedCreator(jobID: jobID, operationID: operationID, destination: destination, decision: decision, credential: String(decoding: credential, as: UTF8.self)))
+            let input = try authority.renderAttemptInputForAuthenticatedCreator(jobID: jobID, credential: String(decoding: credential, as: UTF8.self))
+            if let replay = try authority.existingRenderExport(jobID: jobID, operationID: operationID, destination: destination, decision: decision) { return .renderExport(replay) }
+            let result = try RenderExecutionCoordinator.shared.export(input: input, destination: destination)
+            return .renderExport(try authority.recordRenderExport(jobID: jobID, operationID: operationID, destination: destination, decision: decision, result: result))
         case let .pairedExecute(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.execute(envelope, grantID: grantID, token: token))
@@ -86,19 +107,35 @@ public enum CreatorAuthorityService {
             return .importOutcomes(try authority.importManagedSources(sources, grantID: grantID, token: token))
         case let .pairedRequestRender(url, envelope, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
-            return .result(try authority.requestEpisodeRenderForPairedCLI(envelope, grantID: grantID, token: token))
+            _ = try authority.openForPairedRender(grantID: grantID, token: token)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
+            let result = try authority.requestEpisodeRenderForPairedCLI(envelope, grantID: grantID, token: token)
+            if case let .renderRequested(status) = result.outcome {
+                let input = try authority.renderAttemptInputForPairedCLI(jobID: status.jobID, grantID: grantID, token: token)
+                _ = RenderExecutionCoordinator.shared.start(authority: authority, input: input)
+            }
+            return .result(result)
         case let .pairedRenderStatus(url, jobID, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderStatus(try authority.renderStatusForPairedCLI(jobID: jobID, grantID: grantID, token: token))
+            _ = try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)
+            RenderExecutionCoordinator.shared.reconcile(authority: authority)
+            return .renderStatus(observedRenderStatus(try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)))
         case let .pairedCancelRender(url, jobID, operationID, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderStatus(try authority.cancelEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, grantID: grantID, token: token))
+            let input = try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)
+            let status = try authority.cancelEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, grantID: grantID, token: token)
+            RenderExecutionCoordinator.shared.cancel(projectID: input.snapshot.projectID, jobID: jobID)
+            return .renderStatus(status)
         case let .pairedMaterializeRender(url, jobID, operationID, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderMaterialization(try authority.materializeEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, grantID: grantID, token: token))
+            let input = try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)
+            return .renderMaterialization(try authority.recordRenderMaterialization(jobID: jobID, operationID: operationID, result: RenderExecutionCoordinator.shared.materialization(for: input)))
         case let .pairedExportRender(url, jobID, operationID, destination, decision, grantID, token):
             let authority = try ProjectAuthority(packageURL: url)
-            return .renderExport(try authority.exportEpisodeRenderForPairedCLI(jobID: jobID, operationID: operationID, destination: destination, decision: decision, grantID: grantID, token: token))
+            let input = try authority.renderAttemptInputForPairedCLI(jobID: jobID, grantID: grantID, token: token)
+            if let replay = try authority.existingRenderExport(jobID: jobID, operationID: operationID, destination: destination, decision: decision) { return .renderExport(replay) }
+            let result = try RenderExecutionCoordinator.shared.export(input: input, destination: destination)
+            return .renderExport(try authority.recordRenderExport(jobID: jobID, operationID: operationID, destination: destination, decision: decision, result: result))
         }
     }
 
@@ -108,6 +145,10 @@ public enum CreatorAuthorityService {
     private static func finishImport(_ id: UUID) { importLock.lock(); cancelledImports.remove(id); importLock.unlock() }
     private static func cancelImport(_ id: UUID) { importLock.lock(); cancelledImports.insert(id); importLock.unlock() }
     private static func isCancelled(_ id: UUID) -> Bool { importLock.lock(); defer { importLock.unlock() }; return cancelledImports.contains(id) }
+
+    private static func observedRenderStatus(_ input: RenderAttemptInput) -> EpisodeRenderRequestStatus {
+        EpisodeRenderRequestStatus(jobID: input.status.jobID, episodeID: input.status.episodeID, requestedRevision: input.status.requestedRevision, compositionDigest: input.status.compositionDigest, format: input.status.format, logicalState: input.status.logicalState, progress: input.status.progress, availability: RenderExecutionCoordinator.shared.availability(for: input))
+    }
 
     public static func workspaceFailure(_ error: Error) -> WorkspaceFailure {
         if let failure = error as? ManagedImport.Failure {

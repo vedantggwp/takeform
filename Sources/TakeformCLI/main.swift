@@ -7,6 +7,36 @@ import TakeformCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 
+private let usage = """
+usage: takeform <command> ...
+
+Pairing:
+  import-paired-credential <grant-id> < token-on-stdin
+  forget-paired-credential <grant-id>
+
+Paired project commands:
+  execute <package> <grant-id> <request-json>
+  import <package> <grant-id> <source>...
+
+Paired render commands (require an app-issued editProject grant):
+  render-request <package> <grant-id> <request-json>
+  render-status <package> <grant-id> <job-id>
+  render-cancel <package> <grant-id> <job-id> <operation-id>
+  render-materialize <package> <grant-id> <job-id> <operation-id>
+  render-export <package> <grant-id> <job-id> <operation-id> <destination>
+
+render-request request-json:
+  {"id":{"value":"<command-uuid>"},"expectedRevision":{"value":<revision>},"command":{"requestEpisodeRender":{"episodeID":"<episode-uuid>","compositionDigest":"<lowercase-sha256>","format":"mp4"}}}
+
+Takeform must be open with its bundled authority service available. The CLI cannot
+start that service, pair itself, or issue a grant.
+"""
+
+private func printUsage(status: Int32) -> Never {
+    fputs(usage, stderr)
+    exit(status)
+}
+
 private final class KeychainResult<Value>: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Value?
@@ -122,6 +152,8 @@ func pairedResponse(service: URL, grantID: UUID, makeRequest: (String) -> AppAut
 }
 
 switch arguments.first {
+case "help", "--help", "-h":
+    printUsage(status: 0)
 case "import-paired-credential":
     guard arguments.count == 2, let grantID = UUID(uuidString: arguments[1]), let token = readLine(), !token.isEmpty else {
         fputs("usage: takeform import-paired-credential <grant-id> < token-on-stdin\n", stderr)
@@ -263,6 +295,5 @@ case "render-export":
         FileHandle.standardOutput.write(try JSONEncoder().encode(result)); FileHandle.standardOutput.write(Data("\n".utf8))
     } catch { fputs("takeform: project authority is unavailable; open Takeform, then try again\n", stderr); exit(3) }
 default:
-    fputs("usage: takeform <import-paired-credential|forget-paired-credential|execute|import|render-request|render-status|render-cancel|render-materialize|render-export> ...\n", stderr)
-    exit(2)
+    printUsage(status: 2)
 }

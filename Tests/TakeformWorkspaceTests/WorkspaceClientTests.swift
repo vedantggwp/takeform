@@ -150,6 +150,16 @@ final class WorkspaceClientTests: XCTestCase {
         return (process.terminationStatus, output.fileHandleForReading.readDataToEndOfFile(), error.fileHandleForReading.readDataToEndOfFile())
     }
 
+    private func removeOwnedTestSocket(_ socket: URL) throws {
+        do {
+            try FileManager.default.removeItem(at: socket)
+        } catch {
+            let failure = error as NSError
+            guard (failure.domain == NSCocoaErrorDomain && failure.code == CocoaError.Code.fileNoSuchFile.rawValue) ||
+                  (failure.domain == NSPOSIXErrorDomain && failure.code == ENOENT) else { throw error }
+        }
+    }
+
     private func stopBounded(_ process: Process, exited: DispatchSemaphore) -> Bool {
         guard process.isRunning else { return true }
         process.terminate()
@@ -187,7 +197,7 @@ final class WorkspaceClientTests: XCTestCase {
     func testOwnedServiceStartsOnceAndIsReapedOnShutdown() async throws {
         let socket = URL(fileURLWithPath: "/private/tmp/takeform-owned-service-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
-        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        defer { AppAuthoritySocket.setTestingPath(nil); XCTAssertNoThrow(try removeOwnedTestSocket(socket)) }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let service = root.appendingPathComponent(".build/debug/TakeformAuthorityAppService")
         XCTAssertTrue(FileManager.default.isExecutableFile(atPath: service.path))
@@ -208,7 +218,7 @@ final class WorkspaceClientTests: XCTestCase {
     func testWrongPeerSocketIsNotReplacedOrAdopted() async throws {
         let socket = URL(fileURLWithPath: "/private/tmp/takeform-wrong-peer-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
-        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        defer { AppAuthoritySocket.setTestingPath(nil); XCTAssertNoThrow(try removeOwnedTestSocket(socket)) }
         let listener = try AppAuthoritySocket.makeListener()
         defer { listener.close() }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -223,7 +233,7 @@ final class WorkspaceClientTests: XCTestCase {
     func testReadinessTimeoutReapsOwnedChild() async throws {
         let socket = URL(fileURLWithPath: "/private/tmp/takeform-readiness-timeout-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
-        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        defer { AppAuthoritySocket.setTestingPath(nil); XCTAssertNoThrow(try removeOwnedTestSocket(socket)) }
         let client = AppAuthorityServiceClient(serviceExecutable: URL(fileURLWithPath: "/usr/bin/yes"))
         try await client.launchForTesting()
         let livePID = await client.ownedProcessID()
@@ -246,7 +256,7 @@ final class WorkspaceClientTests: XCTestCase {
         let sourceRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let socket = URL(fileURLWithPath: "/private/tmp/tf-cli-after-stop-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
-        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        defer { AppAuthoritySocket.setTestingPath(nil); XCTAssertNoThrow(try removeOwnedTestSocket(socket)) }
         let owner = AppAuthorityServiceClient(serviceExecutable: sourceRoot.appendingPathComponent(".build/debug/TakeformAuthorityAppService"))
         try await owner.startAndVerifyForTesting()
         let ownedPID = await owner.ownedProcessID()
@@ -302,7 +312,7 @@ final class WorkspaceClientTests: XCTestCase {
         }
         let socket = URL(fileURLWithPath: "/private/tmp/tf-positive-\(UUID().uuidString).sock")
         AppAuthoritySocket.setTestingPath(socket.path)
-        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        defer { AppAuthoritySocket.setTestingPath(nil); XCTAssertNoThrow(try removeOwnedTestSocket(socket)) }
         let package = root.appendingPathComponent("Paired.takeform")
         XCTAssertEqual(package.path, package.resolvingSymlinksInPath().standardizedFileURL.path)
         let authority = try ProjectAuthority(packageURL: package)
@@ -327,7 +337,8 @@ final class WorkspaceClientTests: XCTestCase {
             _ = try? runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["forget-paired-credential", readOnlyGrant.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
             try? FileManager.default.removeItem(at: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Takeform/Authority/\(initial.projectID.uuidString)"))
             try? FileManager.default.removeItem(at: root)
-            try? FileManager.default.removeItem(at: socket)
+            do { try removeOwnedTestSocket(socket) }
+            catch { XCTFail("owned test socket cleanup failed: \(error)") }
         }
         let imported = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", grant.id.uuidString], input: rawToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(imported.status, 0, String(decoding: imported.error, as: UTF8.self))
@@ -378,7 +389,10 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(renderStatus.availability, .unavailable, "CLI must not pretend an adapter published an artifact")
         let pairedStatus = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-status", package.path, grant.id.uuidString, renderStatus.jobID.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
         XCTAssertEqual(pairedStatus.status, 0, String(decoding: pairedStatus.error, as: UTF8.self))
-        XCTAssertEqual(try JSONDecoder().decode(EpisodeRenderRequestStatus.self, from: pairedStatus.output), renderStatus)
+        let recoveredStatus = try JSONDecoder().decode(EpisodeRenderRequestStatus.self, from: pairedStatus.output)
+        XCTAssertEqual(recoveredStatus.jobID, renderStatus.jobID)
+        XCTAssertEqual(recoveredStatus.logicalState, .interrupted, "a service with no retained worker must not leave a portable request appearing runnable after restart")
+        XCTAssertEqual(recoveredStatus.availability, .unavailable)
         let destination = root.appendingPathComponent("existing-export.mp4")
         try Data("do not clobber".utf8).write(to: destination)
         let pairedExport = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["render-export", package.path, grant.id.uuidString, renderStatus.jobID.uuidString, UUID().uuidString, destination.path], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
