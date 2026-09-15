@@ -124,11 +124,34 @@ struct RenderedPreviewTests {
         let job = try store.begin(key: try key(bytes: bytes))
         let staged = try cache.stageCopy(from: source)
         store.cancel(jobID: job, stagedURL: staged, cache: cache)
-        #expect(throws: RenderedPreviewFailure.staleJob) {
+        #expect(throws: RenderedPreviewFailure.self) {
             try store.publish(jobID: job, stagedURL: staged, cache: cache)
         }
         #expect(!FileManager.default.fileExists(atPath: staged.path))
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "artifacts", directoryHint: .isDirectory).appending(path: try! key(bytes: bytes).artifactFilename).path))
+    }
+
+    @Test @MainActor func failedCancellationCleanupIsAnHonestTerminalError() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "rendered-preview-cancel-failure-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let outside = FileManager.default.temporaryDirectory.appending(path: "rendered-preview-cancel-outside-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root); try? FileManager.default.removeItem(at: outside) }
+        let bytes = Data("rendered-preview".utf8)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let source = root.appending(path: "source.mp4")
+        try bytes.write(to: source)
+        let cache = try RenderArtifactCache(root: root)
+        let store = RenderedPreviewStore(currentRevision: "rev-a")
+        let job = try store.begin(key: try key(bytes: bytes))
+        let staged = try cache.stageCopy(from: source)
+        try FileManager.default.removeItem(at: staged)
+        try FileManager.default.createSymbolicLink(at: staged, withDestinationURL: outside)
+        store.cancel(jobID: job, stagedURL: staged, cache: cache)
+        guard case let .failed(message) = store.status else {
+            Issue.record("Expected failed cleanup state, got \(store.status)")
+            return
+        }
+        #expect(message.contains("could not clean"))
     }
 }
 

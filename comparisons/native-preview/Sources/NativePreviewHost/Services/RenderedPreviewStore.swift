@@ -17,7 +17,18 @@ final class RenderedPreviewStore {
     func begin(key: RenderedPreviewKey) throws -> UUID { try state.begin(key) }
     func reportProgress(jobID: UUID, value: RendererProgress) throws { try state.progress(jobID: jobID, value: value) }
     func cancel(jobID: UUID, stagedURL: URL?, cache: RenderArtifactCache?) {
-        if let stagedURL, let cache { try? cache.removeStaged(stagedURL) }
+        guard stagedURL == nil || cache != nil else {
+            state.fail(jobID: jobID, message: "Rendered preview cancellation could not clean its owned partial artifact.")
+            return
+        }
+        if let stagedURL, let cache {
+            do {
+                try cache.removeStaged(stagedURL)
+            } catch {
+                state.fail(jobID: jobID, message: "Rendered preview cancellation could not clean its owned partial artifact: \(error.localizedDescription)")
+                return
+            }
+        }
         state.cancel(jobID: jobID)
     }
     func fail(jobID: UUID, message: String) { state.fail(jobID: jobID, message: message) }
@@ -26,7 +37,11 @@ final class RenderedPreviewStore {
     @discardableResult
     func publish(jobID: UUID, stagedURL: URL, cache: RenderArtifactCache) throws -> VerifiedRenderArtifact {
         guard let job = state.job, job.id == jobID, job.key.revision == state.currentRevision, job.status.acceptsResult else {
-            try? cache.removeStaged(stagedURL)
+            do {
+                try cache.removeStaged(stagedURL)
+            } catch {
+                throw RenderedPreviewFailure.artifactUnavailable("A stale rendered result could not clean its owned partial artifact: \(error.localizedDescription)")
+            }
             throw RenderedPreviewFailure.staleJob
         }
         let artifact = try cache.publish(staged: stagedURL, key: job.key)
