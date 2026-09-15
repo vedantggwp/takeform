@@ -198,10 +198,14 @@ public final class ProjectAuthority {
     private func encode<T: Encodable>(_ value: T) throws -> String { String(decoding: try encoder.encode(value), as: UTF8.self) }
     private func decode<T: Decodable>(_ type: T.Type, _ value: String) throws -> T { try decoder.decode(type, from: Data(value.utf8)) }
     private func machineURL(for projectID: UUID) throws -> URL {
-        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw AuthorityFailure.unauthorized }
-        let url = root.appendingPathComponent("Takeform/Authority/\(projectID.uuidString)", isDirectory: true)
+        let url = try Self.machineStateURL(for: projectID)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private static func machineStateURL(for projectID: UUID) throws -> URL {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { throw AuthorityFailure.unauthorized }
+        return root.appendingPathComponent("Takeform/Authority/\(projectID.uuidString)", isDirectory: true)
     }
     private func bind(projectID: UUID, rebindMovedPackage: Bool) throws -> MachineState {
         var state = try loadMachineState(for: projectID)
@@ -233,6 +237,38 @@ public final class ProjectAuthority {
     }
     private func saveMachineState(_ state: MachineState, for projectID: UUID) throws { try encoder.encode(state).write(to: machineURL(for: projectID).appendingPathComponent("binding.json"), options: .atomic) }
     private func tokenDigest(_ token: String) -> String { SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined() }
+}
+
+extension ProjectAuthority {
+    static func createChannelPackage(at destination: URL, name: String, initialRecipe: [String: String], credential: String, afterInitialize: (() throws -> Void)? = nil) throws -> WorkspaceSnapshot {
+        let destination = destination.standardizedFileURL
+        guard !FileManager.default.fileExists(atPath: destination.path), !name.isEmpty else { throw AuthorityFailure.unauthorized }
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(destination.lastPathComponent).creating-\(UUID().uuidString)")
+        var temporaryProjectID: UUID?
+        var movedToDestination = false
+        var completed = false
+        defer {
+            if !completed {
+                try? FileManager.default.removeItem(at: temporary)
+                if movedToDestination { try? FileManager.default.removeItem(at: destination) }
+                if let temporaryProjectID, let machineStateURL = try? Self.machineStateURL(for: temporaryProjectID) {
+                    try? FileManager.default.removeItem(at: machineStateURL)
+                }
+            }
+        }
+        let authority = try ProjectAuthority(packageURL: temporary)
+        let opened = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false)
+        temporaryProjectID = opened.document.projectID
+        try afterInitialize?()
+        let result = try authority.executeForAuthenticatedCreator(CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: name, initialRecipe: initialRecipe)), credential: credential)
+        guard case let .applied(document) = result.outcome else { throw AuthorityFailure.unauthorized }
+        try FileManager.default.moveItem(at: temporary, to: destination)
+        movedToDestination = true
+        let moved = try ProjectAuthority(packageURL: destination)
+        _ = try moved.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: true)
+        completed = true
+        return WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: destination.standardizedFileURL)
+    }
 }
 
 extension ProjectAuthority {

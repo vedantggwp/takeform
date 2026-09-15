@@ -5,6 +5,7 @@ import TakeformWorkspace
 
 public enum AppAuthorityRequest: Codable, Sendable {
     case open(URL, Bool, Data)
+    case create(URL, String, [String: String], Data)
     case execute(URL, CommandEnvelope, Data)
     case pair(URL, String, Date, Data)
     case revoke(URL, UUID, Data)

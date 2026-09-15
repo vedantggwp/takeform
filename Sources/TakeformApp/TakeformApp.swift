@@ -121,10 +121,9 @@ final class WorkspaceModel: ObservableObject {
                 self.isWorking = true; self.error = nil
                 defer { self.isWorking = false }
                 do {
-                    let opened = try await self.client.open(packageURL: url, rebindMovedPackage: false)
-                    let result = try await self.client.execute(packageURL: url, envelope: CommandEnvelope(expectedRevision: opened.document.revision, command: .createChannel(name: name, initialRecipe: initialRecipe)))
-                    guard case let .applied(document) = result.outcome else { throw WorkspaceFailure.rejected("channel creation was not committed") }
-                    self.snapshot = WorkspaceSnapshot(document: document, projectionMatches: true, packageURL: url)
+                    let created = try await self.client.createChannelPackage(packageURL: url, name: name, initialRecipe: initialRecipe)
+                    let document = created.document
+                    self.snapshot = created
                     self.cliGrants = (try? await self.client.listCLIGrants(packageURL: url)) ?? []
                     self.status = "Created \(name) at revision \(document.revision.value)."
                 } catch let failure as WorkspaceFailure { self.error = failure; self.status = failure.errorDescription ?? "Channel creation failed." }
@@ -394,6 +393,7 @@ private actor NativeAuthorityClient: WorkspaceClient {
             throw WorkspaceFailure.authorityUnavailable
         }
     }
+    func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot { let r = try await request(.create(packageURL, name, initialRecipe, try credential())); if case .snapshot(let snapshot) = r { return snapshot }; if case .failure(let failure) = r { throw failure }; throw WorkspaceFailure.authorityUnavailable }
     private func clearOwnedService(_ service: Process?) { if ownedService === service { ownedService = nil } }
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot { let r=try await request(.open(packageURL,rebindMovedPackage,try credential())); if case .snapshot(let x)=r{return x}; if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult { let r=try await request(.execute(packageURL,envelope,try credential()));if case .result(let x)=r{return x};if case .failure(let e)=r{throw e};throw WorkspaceFailure.authorityUnavailable }

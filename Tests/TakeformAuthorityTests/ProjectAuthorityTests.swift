@@ -209,6 +209,29 @@ final class ProjectAuthorityTests: XCTestCase {
         XCTAssertEqual(revoked.outcome, .rejected(reason: "unauthorized"))
     }
 
+    func testAtomicChannelPackageCreationCleansOwnedFailureAndPreservesExistingDestination() throws {
+        let destination = root.appendingPathComponent("Atomic.takeform")
+        let authorityRoot = try machineURL(for: UUID()).deletingLastPathComponent()
+        let machineStateBefore = (try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? []
+        XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator") { throw NSError(domain: "test", code: 1) })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: authorityRoot.path).sorted()) ?? [], machineStateBefore)
+
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let marker = destination.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: marker)
+        XCTAssertThrowsError(try ProjectAuthority.createChannelPackage(at: destination, name: "Atomic", initialRecipe: [:], credential: "creator"))
+        XCTAssertEqual(try Data(contentsOf: marker), Data("keep".utf8))
+        try FileManager.default.removeItem(at: destination)
+
+        let response = CreatorAuthorityService.respond(to: .create(destination, "Atomic", ["font": "Serif"], Data("creator".utf8)), from: .app)
+        guard case let .snapshot(created) = response else { return XCTFail("app create route did not return a project snapshot") }
+        projectIDs.insert(created.document.projectID)
+        XCTAssertEqual(created.packageURL.standardizedFileURL.path, destination.standardizedFileURL.path)
+        XCTAssertEqual(created.document.channel?.name, "Atomic")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.appendingPathComponent(".takeform/project.sqlite").path))
+    }
+
     func testCLIRoleRouteCannotRunCreatorVerbsOrMutateAuthorityState() throws {
         let package = root.appendingPathComponent("RoleProtected.takeform")
         let authority = try ProjectAuthority(packageURL: package)

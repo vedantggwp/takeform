@@ -11,7 +11,7 @@ public enum CreatorAuthorityService {
 
     public static func allows(_ request: AppAuthorityRequest, for role: PeerRole) -> Bool {
         switch (role, request) {
-        case (.app, .open), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
+        case (.app, .open), (.app, .create), (.app, .execute), (.app, .pair), (.app, .revoke), (.app, .listGrants), (.cli, .pairedExecute): true
         default: false
         }
     }
@@ -34,6 +34,8 @@ public enum CreatorAuthorityService {
             let authority = try ProjectAuthority(packageURL: url)
             let opened = try authority.openForAuthenticatedCreator(credential: String(decoding: credential, as: UTF8.self), rebindMovedPackage: rebind)
             return .snapshot(WorkspaceSnapshot(document: opened.document, projectionMatches: opened.projectionMatches, packageURL: url))
+        case let .create(url, name, recipe, credential):
+            return .snapshot(try ProjectAuthority.createChannelPackage(at: url, name: name, initialRecipe: recipe, credential: String(decoding: credential, as: UTF8.self)))
         case let .execute(url, envelope, credential):
             let authority = try ProjectAuthority(packageURL: url)
             return .result(try authority.executeForAuthenticatedCreator(envelope, credential: String(decoding: credential, as: UTF8.self)))

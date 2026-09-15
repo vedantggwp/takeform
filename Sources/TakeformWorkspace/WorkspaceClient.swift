@@ -45,6 +45,7 @@ public struct CLIPairingSummary: Equatable, Sendable, Codable, Identifiable {
 }
 
 public protocol WorkspaceClient: Sendable {
+    func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot
     func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot
     func execute(packageURL: URL, envelope: CommandEnvelope) async throws -> CommandResult
     func pairCLI(packageURL: URL, label: String, expiresAt: Date) async throws
@@ -55,6 +56,10 @@ public protocol WorkspaceClient: Sendable {
 /// Deliberately refuses to simulate authority writes until the app-owned service is available.
 public struct UnavailableWorkspaceClient: WorkspaceClient {
     public init() {}
+
+    public func createChannelPackage(packageURL: URL, name: String, initialRecipe: [String: String]) async throws -> WorkspaceSnapshot {
+        throw WorkspaceFailure.authorityUnavailable
+    }
 
     public func open(packageURL: URL, rebindMovedPackage: Bool) async throws -> WorkspaceSnapshot {
         throw WorkspaceFailure.authorityUnavailable
