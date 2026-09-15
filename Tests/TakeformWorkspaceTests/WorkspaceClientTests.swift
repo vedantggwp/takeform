@@ -1,4 +1,6 @@
 import XCTest
+import Darwin
+import Foundation
 @testable import TakeformWorkspace
 @_spi(Testing) import TakeformAppServiceClient
 @_spi(Testing) @testable import TakeformAppAuthorityWire
@@ -6,6 +8,24 @@ import XCTest
 import TakeformCore
 
 final class WorkspaceClientTests: XCTestCase {
+    private func runBounded(_ executable: URL, arguments: [String], input: String? = nil, environment: [String: String] = [:]) throws -> (status: Int32, output: Data, error: Data) {
+        let process = Process(); let output = Pipe(); let error = Pipe(); let standardInput = Pipe()
+        let exited = DispatchSemaphore(value: 0)
+        process.executableURL = executable; process.arguments = arguments; process.standardOutput = output; process.standardError = error; process.standardInput = standardInput
+        process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, replacement in replacement }
+        process.terminationHandler = { _ in exited.signal() }
+        try process.run()
+        if let input { standardInput.fileHandleForWriting.write(Data("\(input)\n".utf8)) }
+        standardInput.fileHandleForWriting.closeFile()
+        guard exited.wait(timeout: .now() + 5) == .success else {
+            process.terminate()
+            _ = exited.wait(timeout: .now() + 1)
+            XCTFail("bounded child did not exit: \(executable.lastPathComponent)")
+            throw WorkspaceFailure.authorityUnavailable
+        }
+        return (process.terminationStatus, output.fileHandleForReading.readDataToEndOfFile(), error.fileHandleForReading.readDataToEndOfFile())
+    }
+
     func testUnavailableClientNeverSimulatesAnEdit() async {
         let client = UnavailableWorkspaceClient()
         let envelope = CommandEnvelope(expectedRevision: Revision(0), command: .createChannel(name: "North", initialRecipe: [:]))
@@ -133,5 +153,48 @@ final class WorkspaceClientTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: database), before[0])
         XCTAssertEqual(try Data(contentsOf: manifest), before[1])
         XCTAssertEqual(try Data(contentsOf: binding), before[2])
+    }
+
+    func testCopiedPairedCLIExecutesThroughVerifiedPersistentService() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("takeform-paired-positive-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let sourceRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let artifacts = root.appendingPathComponent("artifacts")
+        try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: true)
+        for name in ["TakeformApp", "takeform", "TakeformAuthorityAppService"] {
+            try FileManager.default.copyItem(at: sourceRoot.appendingPathComponent(".build/debug/\(name)"), to: artifacts.appendingPathComponent(name))
+        }
+        let socket = URL(fileURLWithPath: "/private/tmp/tf-positive-\(UUID().uuidString).sock")
+        AppAuthoritySocket.setTestingPath(socket.path)
+        defer { AppAuthoritySocket.setTestingPath(nil); try? FileManager.default.removeItem(at: socket) }
+        let package = root.appendingPathComponent("Paired.takeform")
+        let authority = try ProjectAuthority(packageURL: package)
+        let credential = "creator-\(UUID().uuidString)"
+        let initial = try authority.openForAuthenticatedCreator(credential: credential, rebindMovedPackage: false).document
+        let rawToken = "paired-\(UUID().uuidString)"
+        let grant = try authority.issuePairedCLIGrant(credential: credential, label: "process test", scopes: [.editProject], expiresAt: .distantFuture, rawToken: rawToken)
+        defer {
+            _ = try? runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["forget-paired-credential", grant.id.uuidString], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+            try? FileManager.default.removeItem(at: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Takeform/Authority/\(initial.projectID.uuidString)"))
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: socket)
+        }
+        let imported = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["import-paired-credential", grant.id.uuidString], input: rawToken, environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(imported.status, 0, String(decoding: imported.error, as: UTF8.self))
+
+        let service = Process(); service.executableURL = artifacts.appendingPathComponent("TakeformAuthorityAppService"); service.standardOutput = FileHandle.nullDevice; service.standardError = FileHandle.nullDevice; service.environment = ProcessInfo.processInfo.environment.merging(["TAKEFORM_AUTHORITY_SOCKET": socket.path]) { _, replacement in replacement }
+        try service.run()
+        defer { if service.isRunning { service.terminate(); service.waitUntilExit() } }
+        for _ in 0..<100 where !FileManager.default.fileExists(atPath: socket.path) { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socket.path))
+        try AppAuthoritySocket.verifyService(expectedService: artifacts.appendingPathComponent("TakeformAuthorityAppService"))
+
+        let command = CommandEnvelope(expectedRevision: initial.revision, command: .createChannel(name: "Paired", initialRecipe: ["fixture": "persistent-service"]))
+        let invoked = try runBounded(artifacts.appendingPathComponent("takeform"), arguments: ["execute", package.path, grant.id.uuidString, String(decoding: try JSONEncoder().encode(command), as: UTF8.self)], environment: ["TAKEFORM_AUTHORITY_SOCKET": socket.path])
+        XCTAssertEqual(invoked.status, 0, String(decoding: invoked.error, as: UTF8.self))
+        let result = try JSONDecoder().decode(CommandResult.self, from: invoked.output)
+        guard case let .applied(document) = result.outcome else { return XCTFail("paired CLI did not receive applied result") }
+        XCTAssertEqual(document.channel?.name, "Paired")
+        XCTAssertEqual(document.revision, Revision(1))
     }
 }

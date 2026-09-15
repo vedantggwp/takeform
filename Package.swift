@@ -10,7 +10,9 @@ let package = Package(
         .library(name: "TakeformWorkspace", targets: ["TakeformWorkspace"]),
         .library(name: "TakeformAppAuthorityWire", targets: ["TakeformAppAuthorityWire"]),
         .executable(name: "TakeformAuthorityAppService", targets: ["TakeformAuthorityAppService"]),
-        .executable(name: "Takeform", targets: ["TakeformApp"]),
+        // Keep the native app executable distinct from the lowercase CLI on
+        // case-insensitive volumes, where Takeform/takeform are one path.
+        .executable(name: "TakeformApp", targets: ["TakeformApp"]),
         .executable(name: "TakeformDoctor", targets: ["TakeformDoctor"]),
         .executable(name: "takeform", targets: ["TakeformCLI"]),
         .executable(name: "TakeformAuthorityService", targets: ["TakeformAuthorityService"])

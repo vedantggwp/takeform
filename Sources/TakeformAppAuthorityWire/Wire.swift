@@ -62,6 +62,16 @@ public enum AppAuthoritySocket {
 
 import Security
 public enum AppAuthorityPeer {
- public static func requirement(for binary: URL) -> String? { var code:SecStaticCode?;guard SecStaticCodeCreateWithPath(binary as CFURL,[],&code)==errSecSuccess,let code else{return nil};var info:CFDictionary?;guard SecCodeCopySigningInformation(code,SecCSFlags(rawValue:UInt32(kSecCSSigningInformation)),&info)==errSecSuccess,let d=info as? [String:Any],let id=d[kSecCodeInfoIdentifier as String] as? String,let hash=d[kSecCodeInfoUnique as String] as? Data else{return nil};return "identifier \"\(id)\" and cdhash H\"\(hash.map{String(format:"%02x",$0)}.joined())\"" }
+ public static func requirement(for binary: URL) -> String? {
+    var code: SecStaticCode?
+    guard SecStaticCodeCreateWithPath(binary as CFURL, [], &code) == errSecSuccess, let code else { return nil }
+    var info: CFDictionary?
+    guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: UInt32(kSecCSSigningInformation)), &info) == errSecSuccess,
+          let details = info as? [String: Any],
+          let identifier = details[kSecCodeInfoIdentifier as String] as? String,
+          let hashes = details[kSecCodeInfoCdHashes as String] as? [Data],
+          let cdHash = hashes.first(where: { $0.count == 20 }) else { return nil }
+    return "identifier \"\(identifier)\" and cdhash H\"\(cdHash.map { String(format: "%02x", $0) }.joined())\""
+ }
  public static func matches(fd:Int32, requirement:String)->Bool { var token=audit_token_t();var len=socklen_t(MemoryLayout<audit_token_t>.size);guard getsockopt(fd,SOL_LOCAL,LOCAL_PEERTOKEN,&token,&len)==0 else{return false};let attrs:[CFString:Any]=[kSecGuestAttributeAudit:withUnsafeBytes(of:&token){Data($0)}];var code:SecCode?;guard SecCodeCopyGuestWithAttributes(nil,attrs as CFDictionary,[],&code)==errSecSuccess,let code else{return false};var req:SecRequirement?;guard SecRequirementCreateWithString(requirement as CFString,[],&req)==errSecSuccess,let req else{return false};return SecCodeCheckValidity(code,[],req)==errSecSuccess }
 }

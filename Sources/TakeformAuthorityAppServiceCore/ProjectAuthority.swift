@@ -52,7 +52,10 @@ public final class ProjectAuthority {
     }
 
     private init(packageURL: URL, initialProjectID: UUID?, afterInitialBind: (() throws -> Void)?) throws {
-        self.packageURL = packageURL.standardizedFileURL
+        // The same selected package crosses an executable/UDS boundary. Persist
+        // one filesystem-canonical path so /tmp and /private/tmp do not look
+        // like an unapproved copied project to the service.
+        self.packageURL = packageURL.resolvingSymlinksInPath().standardizedFileURL
         self.initialProjectID = initialProjectID
         self.afterInitialBind = afterInitialBind
         guard !self.packageURL.path.contains("/.takeform/") else { throw AuthorityFailure.unauthorized }
